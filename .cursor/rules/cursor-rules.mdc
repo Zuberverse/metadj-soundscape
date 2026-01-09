@@ -1,0 +1,65 @@
+---
+description: MetaDJ Scope - Cursor IDE rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# MetaDJ Scope - Cursor Rules
+
+**Last Modified**: 2025-12-26 15:21 EST
+
+This is a lean overlay for Cursor IDE. See `CLAUDE.md` and `AGENTS.md` for complete guidance.
+
+## Project Context
+
+- **Phase**: Hackathon (Dec 22 - Jan 8)
+- **Current Approach**: Native Scope platform UI for demo; custom UI deferred
+- **Stack**: Next.js 16 + TypeScript + Tailwind 4 (scaffold only)
+
+## Quick Commands
+
+```bash
+npm run dev          # Start dev server (port 2000)
+npm run type-check   # TypeScript check
+npm run lint         # ESLint
+npm run test         # Vitest
+```
+
+## Code Standards
+
+- TypeScript strict mode
+- ESLint with zero warnings policy
+- Tailwind 4 with CSS-based config
+- React 19 with App Router
+
+## File Organization
+
+```
+src/
+├── app/           # Next.js App Router pages
+├── components/    # React components
+└── lib/
+    └── scope/     # Scope API client (isolated)
+docs/              # Project documentation
+public/            # Static assets
+```
+
+## Key Patterns
+
+1. **API Client**: All Scope API calls go through `src/lib/scope/client.ts`
+2. **Components**: Focused, single-responsibility, typed props
+3. **Env Vars**: Use `NEXT_PUBLIC_` prefix for client-side access
+
+## Editing Protocols
+
+- Run `npm run type-check` before committing
+- Update `CHANGELOG.md` for meaningful changes
+- Keep docs in sync: `README.md`, `docs/architecture.md`
+
+## Canonical References
+
+- `CLAUDE.md` - Full Claude Code instructions
+- `AGENTS.md` - Full Codex CLI instructions
+- `docs/scope.md` - Hackathon program details
+- `docs/strategy.md` - Decision log
+- `docs/architecture.md` - System design

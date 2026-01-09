@@ -1,0 +1,237 @@
+@import 'tailwindcss';
+
+@theme {
+  /*
+   * MetaDJ Soundscape - Extreme Glass-Neon System
+   * Canonical reference: MetaDJ Nexus
+   */
+
+  /* Typography - Font Family Definitions for Tailwind 4 */
+  /* Cinzel: Display font for headings/titles | Poppins: Body font for all other text */
+  --font-family-display: var(--font-cinzel), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-family-body: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Brand Colors (Primary Tier) - High Vibrance OKLCH */
+  --color-scope-purple: oklch(0.646 0.222 264.376);
+  /* Human wisdom */
+  --color-scope-cyan: oklch(0.6 0.118 184.704);
+  /* AI amplification */
+  --color-scope-magenta: oklch(0.702 0.295 328.3);
+  /* Transformation */
+
+  /* Background/Neutral - No Black Endpoints Rule */
+  --color-scope-bg: #060918;
+  /* Ultra Deep Indigo */
+  --color-scope-surface: rgba(15, 20, 45, 0.45);
+  --color-scope-elevated: rgba(25, 30, 65, 0.65);
+  --color-scope-border: rgba(255, 255, 255, 0.08);
+
+  /* Status Colors */
+  --color-scope-success: oklch(0.75 0.18 145);
+  --color-scope-warning: oklch(0.85 0.18 85);
+  --color-scope-error: oklch(0.65 0.25 25);
+
+  /* Gradients */
+  --gradient-brand: linear-gradient(135deg, var(--color-scope-purple) 0%, var(--color-scope-cyan) 50%, var(--color-scope-magenta) 100%);
+  --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+:root {
+  --background: #060918;
+  --foreground: #f8fafc;
+  --font-body: var(--font-poppins);
+  --font-display: var(--font-cinzel);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-body), sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), serif;
+  letter-spacing: 0.02em;
+}
+
+/* 
+ * Advanced Glass-Neon Utilities
+ */
+
+@utility glass {
+  background: rgba(10, 14, 31, 0.4);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@utility glass-radiant {
+  background: linear-gradient(135deg, rgba(15, 20, 45, 0.7) 0%, rgba(10, 14, 31, 0.6) 100%);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(139, 92, 246, 0.15),
+    inset 0 0 20px rgba(255, 255, 255, 0.02);
+}
+
+@utility text-pop {
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 15px rgba(168, 85, 247, 0.4)) drop-shadow(0 0 40px rgba(139, 92, 246, 0.25));
+}
+
+@utility chisel-gradient {
+  background: linear-gradient(to bottom, #ffffff 0%, #a5f3fc 50%, #06B6D4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.6));
+}
+
+@utility interactive-scale {
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  &:hover {
+    transform: scale(1.03) translateY(-4px);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+@utility transition-smooth {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Scrollbar */
+@utility custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Animations */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+
+  33% {
+    transform: translateY(-12px) rotate(1deg);
+  }
+
+  66% {
+    transform: translateY(4px) rotate(-0.5deg);
+  }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+    filter: blur(60px);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+    filter: blur(80px);
+  }
+}
+
+.glow-bg {
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  z-index: -1;
+  pointer-events: none;
+  animation: pulse-glow 15s ease-in-out infinite;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+.energy-ripple {
+  position: absolute;
+  border: 2px solid var(--color-scope-cyan);
+  border-radius: 50%;
+  animation: ripple 2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-float,
+  .glow-bg,
+  .energy-ripple {
+    animation: none !important;
+  }
+}
+
+/* Animation delays */
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Scale-in animation */
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out;
+}
