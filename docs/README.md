@@ -1,5 +1,7 @@
 # MetaDJ Soundscape Documentation
 
+**Last Modified**: 2026-01-09 18:35 EST
+
 Quick navigation for the Soundscape documentation.
 
 Public repository note: Internal strategy and operational details are intentionally omitted.

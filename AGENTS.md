@@ -2,7 +2,8 @@
 
 > Execution guide for the MetaDJ Soundscape project.
 
-**Last Modified**: 2026-01-08 EST
+**Last Modified**: 2026-01-09 19:54 EST
+*Parent: /3-projects/5-software/AGENTS.md*
 
 ## Project Context
 
