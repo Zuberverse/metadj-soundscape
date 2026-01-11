@@ -1,10 +1,16 @@
 # Tools - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-08 22:01 EST
+**Last Modified**: 2026-01-10 15:55 EST
 **Status**: Public Summary
 
 ## Purpose
 Public-facing list of tools and services used by MetaDJ Soundscape. Internal vendor comparisons and cost planning are intentionally omitted.
+
+## Canonical External References
+
+- `1-system/3-docs/external/ai/daydream/` — Daydream external docs hub
+- https://docs.daydream.live/scope/introduction — Official Scope docs
+- https://docs.runpod.io — Official RunPod docs
 
 ## Core Platform
 

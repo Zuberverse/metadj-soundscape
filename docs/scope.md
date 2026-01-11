@@ -1,6 +1,6 @@
 # Daydream Scope Track - Public Brief
 
-**Last Modified**: 2026-01-08 22:13 EST
+**Last Modified**: 2026-01-10 15:37 EST
 **Source**: Daydream Scope track program materials (public summary).
 
 ## Overview
@@ -30,16 +30,12 @@ The Scope Track is part of the Daydream Interactive AI Video Program. This brief
 
 ## RunPod Notes (Public)
 
+Canonical RunPod setup guidance lives in `1-system/3-docs/external/ai/daydream/daydream-scope.md` and the official quickstart.
+
 **Quick Reference:**
 - **Template**: https://runpod.io/console/deploy?template=daydream-scope
 - **Access**: Port 8000 (`https://your-instance-id.runpod.io:8000`)
 - **Required**: HuggingFace token with read permissions (set as `HF_TOKEN` env var)
-- **GPU**: Minimum >=24GB VRAM, recommended RTX 4090/5090, CUDA 12.8+
-- **First run**: Looping cat video, ~8 FPS expected
-
-**Key info:**
-- HuggingFace integration uses Cloudflare TURN servers for WebRTC connectivity
-- TURN server enables WebRTC in cloud environments with restrictive firewalls
 
 ## Updates and Clarifications
 - The Scope API server docs include a Quick Start and workflows section.

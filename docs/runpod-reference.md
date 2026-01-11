@@ -1,27 +1,21 @@
-# RunPod Platform Reference
+# RunPod Reference
 
-**Last Modified**: 2026-01-08 22:01 EST
-**Source**: RunPod Documentation (docs.runpod.io)
-**Status**: Public Summary
+**Last Modified**: 2026-01-10 15:37 EST
+**Status**: Project Delta
 
 ## Purpose
-Public-facing RunPod reference for running Daydream Scope. This summary avoids internal budgeting and operational details.
+Project-specific RunPod deployment notes for MetaDJ Soundscape. Canonical RunPod documentation lives in official sources.
 
----
+## Canonical External References
 
-## Quick Start (Public)
+- https://docs.runpod.io — Official RunPod docs
+- https://runpod.io/console/deploy?template=daydream-scope — Daydream Scope template
 
-1. Deploy the official Scope template:
-   - https://runpod.io/console/deploy?template=daydream-scope
-2. Create a HuggingFace token (read permissions) and set `HF_TOKEN` in the template.
-3. Choose a GPU with sufficient VRAM (24GB+ recommended).
-4. Launch the pod and access Scope at port 8000:
-   - `https://{pod-id}-8000.proxy.runpod.net`
+## Project-Specific Notes
 
----
+- Track active instance details and access URLs in `docs/tools.md`.
+- Capture cost or GPU decisions in `docs/strategy.md`.
 
-## Notes
-- RunPod costs vary by GPU and region. Stop pods when not in use.
-- Use persistent storage if you want models cached across restarts.
-- For detailed configuration, use RunPod's official docs:
-  - https://docs.runpod.io
+## Delta Log
+
+- None yet. Capture only deviations or decisions unique to MetaDJ Soundscape.

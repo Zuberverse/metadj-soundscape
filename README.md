@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-01-10 15:37 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -121,44 +121,22 @@ Copy `.env.example` to `.env.local` and configure:
 
 ## Scope Server Setup
 
-Soundscape requires a running Daydream Scope server for AI video generation. There are two primary options:
+Soundscape requires a running Daydream Scope server for AI video generation. Canonical setup instructions live in the external hub and official docs.
 
-### Option 1: RunPod (Recommended for Production)
+**Canonical External References**:
+- `1-system/3-docs/external/ai/daydream/daydream-scope.md`
+- https://docs.daydream.live/scope/introduction
+- https://runpod.io/console/deploy?template=daydream-scope
 
-1. **Create RunPod Account** — Sign up at [runpod.io](https://runpod.io)
-2. **Deploy Scope Template** — Use the official Daydream Scope template
-3. **Configure GPU** — RTX 4090 recommended for smooth real-time generation
-4. **Get Server URL** — Copy the pod's public URL (e.g., `https://xxxxx-8000.proxy.runpod.net`)
-5. **Set Environment Variable** — Add to `.env.local`:
-   ```bash
-   SCOPE_API_URL=https://your-runpod-url
-   ```
+**Project-Specific Notes**:
+- Set `SCOPE_API_URL` to your Scope server (RunPod or local).
+- Health endpoint is `/health`.
+- The app uses the `/api/scope` proxy by default; enable it in production with `SCOPE_PROXY_ENABLE=true`.
 
-### Option 2: Local Development
-
-For local development without cloud infrastructure:
-
-1. **Clone Scope** — `git clone https://github.com/daydreamlive/scope.git`
-2. **Install Dependencies** — Follow the Scope repository setup instructions
-3. **Run Scope Server** — Start with appropriate GPU configuration
-4. **Set Environment Variable** — Add to `.env.local`:
-   ```bash
-   SCOPE_API_URL=http://localhost:8000
-   ```
-
-### Verifying Scope Connection
-
-Test the connection before running Soundscape:
-
+**Quick Verification**:
 ```bash
-# Check health endpoint
 curl http://your-scope-url/health
-
-# Expected response:
-# {"status":"ok"}
 ```
-
-For detailed Scope documentation, see [Scope Docs](https://docs.daydream.live/scope/introduction).
 
 ## Commands
 
@@ -206,10 +184,11 @@ This entire application was vibe coded using Claude Code and OpenAI Codex. No tr
 
 ## Documentation
 
+- `1-system/3-docs/external/ai/daydream/` — Canonical Daydream external docs hub
 - `docs/soundscape-mechanics.md` — How Soundscape works (latent cache, noise, FPS, transitions)
 - `docs/architecture.md` — System design and WebRTC flow
-- `docs/scope-platform-reference.md` — Scope platform overview
-- `docs/api-reference.md` — Scope API reference
+- `docs/scope-platform-reference.md` — Project delta notes for Scope platform
+- `docs/api-reference.md` — Project delta API usage notes
 
 ## Resources
 
