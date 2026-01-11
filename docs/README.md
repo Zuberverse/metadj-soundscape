@@ -1,6 +1,6 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-01-10 15:37 EST
 
 Quick navigation for the Soundscape documentation.
 
@@ -17,9 +17,9 @@ Public repository note: Internal strategy and operational details are intentiona
 
 | Document | Description |
 |----------|-------------|
-| [Scope Overview](./scope.md) | Daydream Scope API basics |
-| [Scope Technical](./scope-technical.md) | Pipeline details, denoising, latent cache |
-| [API Reference](./api-reference.md) | Endpoint documentation |
+| [Scope Overview](./scope.md) | Program brief + official links (external hub is canonical) |
+| [Scope Technical](./scope-technical.md) | Project delta technical assumptions |
+| [API Reference](./api-reference.md) | Project delta API usage |
 
 ## Features
 
@@ -31,7 +31,7 @@ Public repository note: Internal strategy and operational details are intentiona
 
 | Document | Description |
 |----------|-------------|
-| [RunPod Reference](./runpod-reference.md) | GPU deployment guide |
+| [RunPod Reference](./runpod-reference.md) | Project delta deployment notes |
 | [Tools](./tools.md) | Development tools and workflows |
 | [Strategy](./strategy.md) | Project direction and scope |
 

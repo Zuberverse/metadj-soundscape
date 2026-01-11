@@ -1,10 +1,16 @@
 # Scope API Reference (Soundscape)
 
-**Last Modified**: 2026-01-08 22:01 EST
-**Status**: Active
+**Last Modified**: 2026-01-10 15:37 EST
+**Status**: Project Delta
 
 ## Purpose
 Document the Scope API surface used by MetaDJ Soundscape. This is a focused subset of the full Scope API.
+
+## Canonical External References
+
+- `1-system/3-docs/external/ai/daydream/daydream-scope.md` — External reference hub
+- https://github.com/daydreamlive/scope/tree/main/docs/api — Official API docs
+- https://docs.daydream.live/scope — Official Scope docs
 
 ---
 
