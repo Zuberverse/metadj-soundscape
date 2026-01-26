@@ -169,7 +169,7 @@ export interface ScopeParameters {
   transition?: PromptTransition;
   /**
    * Force cache reset (one-shot)
-   * @deprecated NEVER USE - causes hard visual cuts. Use smooth transitions instead.
+   * Legacy: NEVER USE - causes hard visual cuts. Use smooth transitions instead.
    * Kept in type for backwards compatibility but MappingEngine never sets this.
    */
   resetCache?: boolean;
