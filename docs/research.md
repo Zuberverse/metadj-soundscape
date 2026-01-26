@@ -8,8 +8,8 @@ Capture public technical notes and validated findings relevant to MetaDJ Soundsc
 
 ## Canonical External References
 
-- `1-system/3-docs/external/ai/daydream/daydream-scope.md` — Scope platform reference
-- `1-system/3-docs/external/ai/daydream/streamdiffusion.md` — StreamDiffusion reference
+- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` — Scope platform reference
+- `1-system/3-docs/external-tools/ai/daydream/streamdiffusion.md` — StreamDiffusion reference
 - https://docs.daydream.live/scope — Official Scope docs
 - https://docs.runpod.io — Official RunPod docs
 

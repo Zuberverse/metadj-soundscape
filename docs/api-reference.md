@@ -8,7 +8,7 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 
 ## Canonical External References
 
-- `1-system/3-docs/external/ai/daydream/daydream-scope.md` — External reference hub
+- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` — External reference hub
 - https://github.com/daydreamlive/scope/tree/main/docs/api — Official API docs
 - https://docs.daydream.live/scope — Official Scope docs
 

@@ -30,7 +30,7 @@ The Scope Track is part of the Daydream Interactive AI Video Program. This brief
 
 ## RunPod Notes (Public)
 
-Canonical RunPod setup guidance lives in `1-system/3-docs/external/ai/daydream/daydream-scope.md` and the official quickstart.
+Canonical RunPod setup guidance lives in `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` and the official quickstart.
 
 **Quick Reference:**
 - **Template**: https://runpod.io/console/deploy?template=daydream-scope
