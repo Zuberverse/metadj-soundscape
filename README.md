@@ -124,7 +124,7 @@ Copy `.env.example` to `.env.local` and configure:
 Soundscape requires a running Daydream Scope server for AI video generation. Canonical setup instructions live in the external hub and official docs.
 
 **Canonical External References**:
-- `1-system/3-docs/external/ai/daydream/daydream-scope.md`
+- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md`
 - https://docs.daydream.live/scope/introduction
 - https://runpod.io/console/deploy?template=daydream-scope
 
@@ -184,7 +184,7 @@ This entire application was vibe coded using Claude Code and OpenAI Codex. No tr
 
 ## Documentation
 
-- `1-system/3-docs/external/ai/daydream/` — Canonical Daydream external docs hub
+- `1-system/3-docs/external-tools/ai/daydream/` — Canonical Daydream external docs hub
 - `docs/soundscape-mechanics.md` — How Soundscape works (latent cache, noise, FPS, transitions)
 - `docs/architecture.md` — System design and WebRTC flow
 - `docs/scope-platform-reference.md` — Project delta notes for Scope platform

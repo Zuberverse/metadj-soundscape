@@ -8,7 +8,7 @@ Public-facing list of tools and services used by MetaDJ Soundscape. Internal ven
 
 ## Canonical External References
 
-- `1-system/3-docs/external/ai/daydream/` — Daydream external docs hub
+- `1-system/3-docs/external-tools/ai/daydream/` — Daydream external docs hub
 - https://docs.daydream.live/scope/introduction — Official Scope docs
 - https://docs.runpod.io — Official RunPod docs
 

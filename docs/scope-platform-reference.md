@@ -8,7 +8,7 @@ Project-specific notes for Daydream Scope in MetaDJ Soundscape. Canonical platfo
 
 ## Canonical External References
 
-- `1-system/3-docs/external/ai/daydream/daydream-scope.md` — External reference hub
+- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` — External reference hub
 - https://docs.daydream.live/scope — Official Scope docs
 - https://github.com/daydreamlive/scope — Source repository
 
