@@ -1,29 +1,7 @@
 # Strategy - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-08 22:01 EST
-**Status**: Public Summary
+**Last Modified**: 2026-01-27 10:53 EST
 
-## Purpose
-Provide a public-facing overview of goals and scope for MetaDJ Soundscape. Internal roadmaps, budgets, and business strategy are intentionally omitted.
+Canonical: `3-projects/5-software/strategy.md`
 
-## Public Goals
-- Ship a stable, end-to-end demo (audio input to Scope output).
-- Keep setup minimal for fast testing and review.
-- Keep the experience responsive and visually coherent during playback.
-
-## Public Scope
-- Demo track playback with audio-reactive visuals.
-- Ambient mode when audio is paused.
-- Theme presets plus custom prompt input.
-- WebRTC streaming from a Scope server.
-
-## Non-Goals (Public)
-- File upload and microphone input.
-- Multi-track mixing or collaborative sessions.
-- Production deployment guidance beyond basic setup.
-
-## Audience
-Creators, developers, and Scope Track reviewers evaluating audio-reactive AI video workflows.
-
-## Notes
-Internal planning and business details are tracked outside this public repository.
+This file is a pointer to avoid duplicate content. Edit the canonical source only.
