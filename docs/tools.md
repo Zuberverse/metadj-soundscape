@@ -1,36 +1,7 @@
 # Tools - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-10 15:55 EST
-**Status**: Public Summary
+**Last Modified**: 2026-01-27 10:53 EST
 
-## Purpose
-Public-facing list of tools and services used by MetaDJ Soundscape. Internal vendor comparisons and cost planning are intentionally omitted.
+Canonical: `3-projects/5-software/tools.md`
 
-## Canonical External References
-
-- `1-system/3-docs/external-tools/ai/daydream/` — Daydream external docs hub
-- https://docs.daydream.live/scope/introduction — Official Scope docs
-- https://docs.runpod.io — Official RunPod docs
-
-## Core Platform
-
-### Daydream Scope
-- Type: Interactive AI video generation platform
-- GitHub: https://github.com/daydreamlive/scope/
-- Docs: https://docs.daydream.live/scope/introduction
-- Role: Primary backend for real-time video generation
-
-### RunPod (Cloud GPU)
-- Type: Cloud GPU compute (optional)
-- RunPod template: https://runpod.io/console/deploy?template=daydream-scope
-- Notes: Use a GPU with sufficient VRAM (24GB+ recommended). Costs vary by region and GPU.
-
-## Development Stack
-- Next.js 16 + TypeScript + Tailwind 4
-- Meyda for audio feature extraction
-- WebRTC for low-latency video delivery
-- Vitest + jsdom for tests
-
-## Notes
-- Keep dependencies minimal and documented.
-- Follow official Scope docs for server setup and updates.
+This file is a pointer to avoid duplicate content. Edit the canonical source only.
