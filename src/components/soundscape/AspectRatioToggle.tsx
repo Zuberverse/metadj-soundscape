@@ -6,6 +6,7 @@
 "use client";
 
 import { AspectRatioConfig, ASPECT_PRESETS } from "@/lib/soundscape";
+import type { KeyboardEvent } from "react";
 
 /**
  * Props for the AspectRatioToggle component.
@@ -29,6 +30,17 @@ export function AspectRatioToggle({
 }: AspectRatioToggleProps) {
   const isWidescreen = current.mode === "16:9";
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      onChange(ASPECT_PRESETS.widescreen);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      onChange(ASPECT_PRESETS.portrait);
+    }
+  };
+
   return (
     <div className="flex items-center gap-2" role="radiogroup" aria-label="Output format">
       {/* Widescreen Option */}
@@ -36,7 +48,9 @@ export function AspectRatioToggle({
         type="button"
         role="radio"
         aria-checked={isWidescreen}
+        tabIndex={isWidescreen ? 0 : -1}
         onClick={() => onChange(ASPECT_PRESETS.widescreen)}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         className={`
           flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-300
@@ -62,7 +76,9 @@ export function AspectRatioToggle({
         type="button"
         role="radio"
         aria-checked={!isWidescreen}
+        tabIndex={!isWidescreen ? 0 : -1}
         onClick={() => onChange(ASPECT_PRESETS.portrait)}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         className={`
           flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-300

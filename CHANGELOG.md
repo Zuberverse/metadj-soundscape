@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-10 13:36 EST
+**Last Modified**: 2026-02-10 14:46 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope client regression tests covering pipeline load compatibility fallback and schema parsing.
 - Scope connection regression test to ensure the app stays in connecting state until the first video track arrives.
 - Audio analyzer regression coverage for source-to-analyzer disconnect during teardown.
+- Scope connection regression tests for video-track timeout recovery and stale async connect cancellation.
+- Audio analyzer regression coverage for zero-denominator normalization edge cases (prevents NaN/Infinity output).
 
 ### Changed
 - Initial WebRTC prompt now includes theme style modifiers for better visual consistency at connect time.
@@ -28,8 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope and Daydream reference docs refreshed to current verified state (`v0.1.0` stable published 2026-02-09; no stable `v1.0` yet).
 - Pipeline preparation no longer runs a duplicate health check before load, reducing connection latency.
 - Scope connection now transitions to `connected` only after receiving a video track; connection setup remains in `connecting` while waiting for stream frames.
+- Scope connection now enforces a first-video-track watchdog timeout and ignores stale async connect results after manual disconnect.
 - Video teardown now explicitly pauses the player and clears `srcObject` when Scope disconnects.
 - Audio analyzer teardown now disconnects source-to-analyzer links to avoid Web Audio graph accumulation across reconnects.
+- WebRTC ICE candidate delivery now queues and retries transient candidate send/flush failures.
+- Audio normalization now guards invalid configs (`0`/negative denominator cases) to keep derived metrics finite and clamped.
+- Soundscape disconnect now also pauses audio playback and analysis to keep UI and transport state in sync.
+- Added tap-to-play fallback when video autoplay is blocked by browser policies.
+- Connect CTA is now gated by Scope diagnostics readiness (disabled when Scope health is not `ok`).
+- Aspect ratio radios now support arrow-key navigation and the audio scrubber now shows a visible keyboard focus ring.
 
 ## [1.0.0] - 2026-01-08
 

@@ -307,6 +307,52 @@ describe("AudioAnalyzer", () => {
         })
       );
     });
+
+    it("handles zero normalization denominators without NaN/Infinity", async () => {
+      const analyzer = new AudioAnalyzer({
+        energyMax: 0,
+        spectralCentroidMin: 1000,
+        spectralCentroidMax: 1000,
+        spectralFlatnessMax: 0,
+      } as ConstructorParameters<typeof AudioAnalyzer>[0]);
+      const audioElement = createMockAudioElement();
+
+      await analyzer.initialize(audioElement);
+
+      const callback = vi.fn();
+      analyzer.start(callback);
+
+      if (mockMeydaCallback.current) {
+        mockMeydaCallback.current({
+          rms: 0.3,
+          spectralCentroid: 2500,
+          spectralFlatness: 0.5,
+          spectralRolloff: 2000,
+          zcr: 30,
+        });
+      }
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          derived: expect.objectContaining({
+            energy: expect.any(Number),
+            brightness: expect.any(Number),
+            texture: expect.any(Number),
+          }),
+        })
+      );
+
+      const state = callback.mock.calls.at(-1)?.[0];
+      expect(Number.isFinite(state.derived.energy)).toBe(true);
+      expect(Number.isFinite(state.derived.brightness)).toBe(true);
+      expect(Number.isFinite(state.derived.texture)).toBe(true);
+      expect(state.derived.energy).toBeGreaterThanOrEqual(0);
+      expect(state.derived.energy).toBeLessThanOrEqual(1);
+      expect(state.derived.brightness).toBeGreaterThanOrEqual(0);
+      expect(state.derived.brightness).toBeLessThanOrEqual(1);
+      expect(state.derived.texture).toBeGreaterThanOrEqual(0);
+      expect(state.derived.texture).toBeLessThanOrEqual(1);
+    });
   });
 
   describe("cleanup", () => {

@@ -275,8 +275,18 @@ export class AudioAnalyzer {
     const { energyMax, spectralCentroidMin, spectralCentroidMax, spectralFlatnessMax } =
       this.normalization;
 
+    const safeEnergyMax = energyMax > 0 ? energyMax : 1;
+    const safeCentroidRange =
+      spectralCentroidMax > spectralCentroidMin
+        ? spectralCentroidMax - spectralCentroidMin
+        : 1;
+    const safeFlatnessMax = spectralFlatnessMax > 0 ? spectralFlatnessMax : 1;
+
     // Normalize energy (RMS)
-    const energy = Math.min(1, features.rms / energyMax);
+    const normalizedEnergy = features.rms / safeEnergyMax;
+    const energy = Number.isFinite(normalizedEnergy)
+      ? Math.max(0, Math.min(1, normalizedEnergy))
+      : 0;
 
     // Track energy history for derivative and peak
     this.energyHistory.push(energy);
@@ -294,11 +304,14 @@ export class AudioAnalyzer {
     // Normalize brightness (spectral centroid)
     const centroidNorm =
       (features.spectralCentroid - spectralCentroidMin) /
-      (spectralCentroidMax - spectralCentroidMin);
-    const brightness = Math.max(0, Math.min(1, centroidNorm));
+      safeCentroidRange;
+    const brightness = Number.isFinite(centroidNorm) ? Math.max(0, Math.min(1, centroidNorm)) : 0;
 
     // Normalize texture (spectral flatness)
-    const texture = Math.min(1, features.spectralFlatness / spectralFlatnessMax);
+    const normalizedTexture = features.spectralFlatness / safeFlatnessMax;
+    const texture = Number.isFinite(normalizedTexture)
+      ? Math.max(0, Math.min(1, normalizedTexture))
+      : 0;
 
     return {
       energy,

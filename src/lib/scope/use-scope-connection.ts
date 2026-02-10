@@ -99,6 +99,8 @@ export interface UseScopeConnectionOptions {
   reconnectOnStreamStopped?: boolean;
   /** Optionally gate reconnection attempts */
   shouldReconnect?: (reason: string) => boolean;
+  /** Timeout waiting for first remote video track (ms) */
+  videoTrackTimeoutMs?: number;
 }
 
 export interface UseScopeConnectionReturn {
@@ -148,6 +150,7 @@ export function useScopeConnection(
     reconnectOnDataChannelClose = false,
     reconnectOnStreamStopped = false,
     shouldReconnect,
+    videoTrackTimeoutMs = 15000,
   } = options;
 
   // State
@@ -160,7 +163,9 @@ export function useScopeConnection(
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoTrackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => Promise<void>>(async () => {});
+  const connectAttemptRef = useRef(0);
   const isConnectingRef = useRef(false);
   const isManualDisconnectRef = useRef(false);
   const isRecoveringRef = useRef(false);
@@ -173,9 +178,17 @@ export function useScopeConnection(
     }
   }, []);
 
+  const clearVideoTrackTimeout = useCallback(() => {
+    if (videoTrackTimeoutRef.current) {
+      clearTimeout(videoTrackTimeoutRef.current);
+      videoTrackTimeoutRef.current = null;
+    }
+  }, []);
+
   // Cleanup connection resources
   const cleanup = useCallback(() => {
     clearReconnectTimer();
+    clearVideoTrackTimeout();
 
     if (dataChannelRef.current) {
       dataChannelRef.current.onopen = null;
@@ -192,11 +205,12 @@ export function useScopeConnection(
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
-  }, [clearReconnectTimer]);
+  }, [clearReconnectTimer, clearVideoTrackTimeout]);
 
   // Disconnect
   const disconnect = useCallback(
     (preserveError = false) => {
+      connectAttemptRef.current += 1;
       isManualDisconnectRef.current = true;
       isRecoveringRef.current = false;
       cleanup();
@@ -225,7 +239,7 @@ export function useScopeConnection(
       if (shouldReconnect && !shouldReconnect(reason)) {
         cleanup();
         onDisconnect?.(reason);
-        setError(createScopeError("CONNECTION_LOST", reason, true));
+        setError(createScopeError("CONNECTION_LOST", reason, false));
         setStatusMessage("Connection stopped");
         setConnectionState("failed");
         return;
@@ -237,7 +251,7 @@ export function useScopeConnection(
       setReconnectAttempts((prev) => {
         const next = prev + 1;
         if (next > maxReconnectAttempts) {
-          setError(createScopeError("CONNECTION_LOST", `${reason}. Max retries exceeded.`, true));
+          setError(createScopeError("CONNECTION_LOST", `${reason}. Max retries exceeded.`, false));
           setConnectionState("failed");
           setStatusMessage("Connection failed");
           isRecoveringRef.current = false;
@@ -264,10 +278,16 @@ export function useScopeConnection(
     if (isConnectingRef.current) {
       return;
     }
+    const connectAttemptId = connectAttemptRef.current + 1;
+    connectAttemptRef.current = connectAttemptId;
+    const isCurrentAttempt = () =>
+      connectAttemptRef.current === connectAttemptId && !isManualDisconnectRef.current;
+
     isManualDisconnectRef.current = false;
     isRecoveringRef.current = false;
     isConnectingRef.current = true;
     clearReconnectTimer();
+    clearVideoTrackTimeout();
     setConnectionState("connecting");
     setError(null);
 
@@ -277,6 +297,9 @@ export function useScopeConnection(
       // Step 1: Health check
       setStatusMessage("Checking server...");
       const health = await scopeClient.checkHealth();
+      if (!isCurrentAttempt()) {
+        return;
+      }
       if (health.status !== "ok") {
         throw createScopeError("HEALTH_CHECK_FAILED", "Scope server is not healthy. Is the pod running?");
       }
@@ -300,6 +323,9 @@ export function useScopeConnection(
           loadParams: loadParams ?? {},
           onStatus: setStatusMessage,
         });
+        if (!isCurrentAttempt()) {
+          return;
+        }
       } catch (pipelineError) {
         throw createScopeError(
           "PIPELINE_LOAD_FAILED",
@@ -318,6 +344,9 @@ export function useScopeConnection(
           setupPeerConnection?.(connection);
         },
         onTrack: (event) => {
+          if (!isCurrentAttempt()) {
+            return;
+          }
           if (event.track.kind !== "video") {
             return;
           }
@@ -325,6 +354,7 @@ export function useScopeConnection(
           const stream = event.streams[0] ?? new MediaStream([event.track]);
           if (stream) {
             hasReceivedVideoTrack = true;
+            clearVideoTrackTimeout();
             onStream?.(stream);
             setStatusMessage("Connected");
             setConnectionState("connected");
@@ -377,14 +407,38 @@ export function useScopeConnection(
         } satisfies ScopeDataChannelConfig,
       });
 
+      if (!isCurrentAttempt()) {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
+        if (dataChannel && dataChannel.readyState !== "closed") {
+          dataChannel.onopen = null;
+          dataChannel.onclose = null;
+          dataChannel.onmessage = null;
+          dataChannel.close();
+        }
+        pc.close();
+        return;
+      }
+
       peerConnectionRef.current = pc;
       dataChannelRef.current = dataChannel ?? null;
       setReconnectAttempts(0);
 
       if (!hasReceivedVideoTrack) {
         setStatusMessage("Waiting for video stream...");
+        clearVideoTrackTimeout();
+        videoTrackTimeoutRef.current = setTimeout(() => {
+          if (!isCurrentAttempt()) {
+            return;
+          }
+          handleConnectionLost("Timed out waiting for video stream");
+        }, videoTrackTimeoutMs);
       }
     } catch (err) {
+      if (!isCurrentAttempt()) {
+        return;
+      }
       const scopeError =
         err && typeof err === "object" && "code" in err
           ? (err as ScopeError)
@@ -398,7 +452,9 @@ export function useScopeConnection(
       cleanup();
       onDisconnect?.(scopeError.message);
     } finally {
-      isConnectingRef.current = false;
+      if (connectAttemptRef.current === connectAttemptId) {
+        isConnectingRef.current = false;
+      }
     }
   }, [
     scopeClient,
@@ -416,8 +472,10 @@ export function useScopeConnection(
     disconnect,
     cleanup,
     clearReconnectTimer,
+    clearVideoTrackTimeout,
     reconnectOnDataChannelClose,
     reconnectOnStreamStopped,
+    videoTrackTimeoutMs,
   ]);
 
   useEffect(() => {
@@ -426,6 +484,7 @@ export function useScopeConnection(
 
   useEffect(() => {
     return () => {
+      connectAttemptRef.current += 1;
       cleanup();
       isConnectingRef.current = false;
     };

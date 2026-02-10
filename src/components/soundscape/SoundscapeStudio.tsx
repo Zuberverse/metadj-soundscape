@@ -66,6 +66,7 @@ export function SoundscapeStudio({
   // Scope connection state
   const [scopeStream, setScopeStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [showControlsInternal, setShowControlsInternal] = useState(true);
@@ -153,20 +154,24 @@ export function SoundscapeStudio({
   // Track if audio is ready
   const [audioReady, setAudioReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoAutoplayBlocked, setVideoAutoplayBlocked] = useState(false);
 
   // Handle audio element connection
   const handleAudioElement = useCallback(
     async (element: HTMLAudioElement | null) => {
+      audioElementRef.current = element;
       if (element) {
         try {
           await connectAudio(element);
           setAudioReady(true);
         } catch (error) {
           console.error("Failed to connect audio:", error);
+          setAudioReady(false);
         }
       } else {
         disconnectAudio();
         setAudioReady(false);
+        setIsPlaying(false);
       }
     },
     [connectAudio, disconnectAudio]
@@ -257,12 +262,23 @@ export function SoundscapeStudio({
 
     if (scopeStream) {
       videoElement.srcObject = scopeStream;
-      videoElement.play().catch((err) => {
-        console.warn("[Soundscape] Video autoplay blocked:", err.message);
-      });
+      const playPromise = videoElement.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise
+          .then(() => {
+            setVideoAutoplayBlocked(false);
+          })
+          .catch((err) => {
+            setVideoAutoplayBlocked(true);
+            console.warn("[Soundscape] Video autoplay blocked:", err.message);
+          });
+      } else {
+        setVideoAutoplayBlocked(false);
+      }
       return;
     }
 
+    setVideoAutoplayBlocked(false);
     if (videoElement.srcObject) {
       videoElement.pause();
       videoElement.srcObject = null;
@@ -378,11 +394,21 @@ export function SoundscapeStudio({
     };
   }, [currentTheme]);
 
+  const stopPlaybackForDisconnect = useCallback(() => {
+    stop();
+    stopAmbient();
+    setIsPlaying(false);
+    const audioElement = audioElementRef.current;
+    if (audioElement) {
+      audioElement.pause();
+    }
+  }, [stop, stopAmbient]);
+
   const handleScopeDisconnect = useCallback(() => {
+    stopPlaybackForDisconnect();
     setScopeStream(null);
     setDataChannel(null);
-    stopAmbient();
-  }, [setDataChannel, stopAmbient]);
+  }, [setDataChannel, stopPlaybackForDisconnect]);
 
   const {
     connectionState,
@@ -424,6 +450,11 @@ export function SoundscapeStudio({
   });
 
   const isConnecting = connectionState === "connecting" || connectionState === "reconnecting";
+  const canConnect =
+    !isConnecting &&
+    !isDiagnosticsLoading &&
+    scopeHealth?.status === "ok" &&
+    !diagnosticsError;
   // Use user-friendly error messages for display
   const scopeErrorTitle = error?.userFriendly?.title ?? null;
   const scopeErrorDescription = error?.userFriendly?.description ?? null;
@@ -444,15 +475,12 @@ export function SoundscapeStudio({
 
   // Disconnect from Scope
   const handleDisconnectScope = useCallback((userInitiated = false) => {
-    stopAmbient();
-    setDataChannel(null);
-    setScopeStream(null);
     disconnect(true);
     if (userInitiated) {
       clearError();
     }
     console.log("[Soundscape] Disconnected from Scope", userInitiated ? "(user)" : "(connection lost)");
-  }, [clearError, disconnect, setDataChannel, stopAmbient]);
+  }, [clearError, disconnect]);
 
   // Register disconnect handler with parent for header button
   useEffect(() => {
@@ -466,6 +494,20 @@ export function SoundscapeStudio({
     await refreshScopeDiagnostics();
     await connect();
   }, [clearError, refreshScopeDiagnostics, connect]);
+
+  const handleResumeVideoPlayback = useCallback(async () => {
+    const videoElement = videoRef.current;
+    if (!videoElement) {
+      return;
+    }
+
+    try {
+      await videoElement.play();
+      setVideoAutoplayBlocked(false);
+    } catch (error) {
+      console.warn("[Soundscape] Video playback retry failed:", error);
+    }
+  }, []);
 
   const dropPercentage =
     videoStats.totalFrames && videoStats.totalFrames > 0 && videoStats.droppedFrames !== null
@@ -539,6 +581,18 @@ export function SoundscapeStudio({
                   } : undefined}
                 />
               </div>
+
+              {videoAutoplayBlocked && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleResumeVideoPlayback();
+                  }}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl glass bg-black/65 border border-white/20 text-xs uppercase tracking-wider text-white/85 hover:bg-black/75 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+                >
+                  Tap to start video
+                </button>
+              )}
             </div>
           </div>
         ) : isConnecting ? (
@@ -556,6 +610,7 @@ export function SoundscapeStudio({
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                   className="drop-shadow-[0_0_16px_rgba(6,182,212,0.5)] animate-pulse"
+                  aria-hidden="true"
                 >
                   <path d="M28 22V52" stroke="url(#initNoteGradient)" strokeWidth="3.5" strokeLinecap="round" />
                   <path d="M52 18V48" stroke="url(#initNoteGradient)" strokeWidth="3.5" strokeLinecap="round" />
@@ -604,6 +659,7 @@ export function SoundscapeStudio({
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                   className="drop-shadow-[0_0_20px_rgba(6,182,212,0.5)]"
+                  aria-hidden="true"
                 >
                   {/* Left note stem */}
                   <path
@@ -676,12 +732,12 @@ export function SoundscapeStudio({
                   </defs>
                 </svg>
               </div>
-              <h1
+              <h2
                 className="text-2xl text-white mb-3 tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent"
                 style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
               >
                 Soundscape
-              </h1>
+              </h2>
               <p className="text-white/50 mb-6 text-sm leading-relaxed">
                 Generate real-time AI visuals from your audio with Daydream Scope
               </p>
@@ -826,7 +882,7 @@ export function SoundscapeStudio({
                 onClick={() => {
                   void handleConnectScope();
                 }}
-                disabled={isConnecting || isDiagnosticsLoading}
+                disabled={!canConnect}
                 className="px-10 py-4 glass bg-scope-cyan/20 hover:bg-scope-cyan/30 text-scope-cyan border border-scope-cyan/40 rounded-2xl text-sm uppercase tracking-[0.15em] transition-all duration-500 hover:scale-105 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
               >

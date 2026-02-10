@@ -275,11 +275,11 @@ export function AudioPlayer({
               value={currentTime}
               onChange={handleSeek}
               disabled={disabled}
-              className="absolute inset-0 w-full h-full bg-white/5 rounded-full appearance-none cursor-pointer accent-scope-cyan z-20 opacity-0"
+              className="peer absolute inset-0 w-full h-full bg-white/5 rounded-full appearance-none cursor-pointer accent-scope-cyan z-20 opacity-0"
               aria-label="Seek audio"
             />
             {/* Visual Progress Track */}
-            <div className="absolute inset-0 bg-white/5 rounded-full z-0 overflow-hidden">
+            <div className="absolute inset-0 bg-white/5 rounded-full z-0 overflow-hidden peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan/70 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-black">
               <div
                 className="h-full bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100"
                 style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
@@ -287,7 +287,7 @@ export function AudioPlayer({
             </div>
             {/* Knob mimic */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none group-hover:scale-125"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none group-hover:scale-125 peer-focus-visible:scale-125"
               style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 8px)` }}
             />
           </div>

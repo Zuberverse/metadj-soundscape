@@ -95,13 +95,16 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     return createCustomTheme(initialTheme);
   }, [initialTheme]);
 
+  const effectiveUpdateRate = Number.isFinite(updateRate) && updateRate > 0 ? updateRate : 30;
+  const effectiveUiUpdateRate = Number.isFinite(uiUpdateRate) && uiUpdateRate > 0 ? uiUpdateRate : 10;
+
   // Core refs
   const analyzerRef = useRef<AudioAnalyzer | null>(null);
   const mappingEngineRef = useRef<MappingEngine | null>(null);
   const parameterSenderRef = useRef<ParameterSender | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const lastUiUpdateRef = useRef(0);
-  const uiUpdateIntervalMs = 1000 / uiUpdateRate;
+  const uiUpdateIntervalMs = 1000 / effectiveUiUpdateRate;
 
   // Ambient mode refs
   const ambientIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -290,7 +293,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         }
 
         // Create parameter sender
-        parameterSenderRef.current = new ParameterSender(updateRate);
+        parameterSenderRef.current = new ParameterSender(effectiveUpdateRate);
 
         // Connect data channel if already available (Scope connected before audio)
         if (dataChannelRef.current && dataChannelRef.current.readyState === "open") {
@@ -307,7 +310,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         throw error;
       }
     },
-    [updateRate, log] // Removed currentTheme - we use currentThemeRef instead
+    [effectiveUpdateRate, log] // Removed currentTheme - we use currentThemeRef instead
   );
 
   const disconnectAudio = useCallback(() => {
@@ -438,7 +441,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
     // Initialize parameter sender if needed and connect data channel
     if (!parameterSenderRef.current) {
-      parameterSenderRef.current = new ParameterSender(updateRate);
+      parameterSenderRef.current = new ParameterSender(effectiveUpdateRate);
     }
     parameterSenderRef.current.setDataChannel(dataChannelRef.current);
 
@@ -499,7 +502,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     }, 60000); // Very long interval since it does nothing
 
     setState((prev) => ({ ...prev, playback: "playing" }));
-  }, [updateRate, log]);
+  }, [effectiveUpdateRate, log]);
 
   const stopAmbient = useCallback(() => {
     if (ambientIntervalRef.current) {

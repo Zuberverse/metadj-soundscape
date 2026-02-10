@@ -37,8 +37,52 @@ export async function createScopeWebRtcSession(
 
   const pc = new RTCPeerConnection({ iceServers: iceConfig.iceServers });
   const pendingCandidates: IceCandidatePayload[] = [];
+  const retryCandidates: IceCandidatePayload[] = [];
   let sessionId: string | null = null;
   let dataChannel: RTCDataChannel | undefined;
+  let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let isRetryFlushInProgress = false;
+
+  const clearRetryTimeout = () => {
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+      retryTimeoutId = null;
+    }
+  };
+
+  const handleConnectionCleanup = () => {
+    if (
+      pc.connectionState === "closed" ||
+      pc.connectionState === "failed" ||
+      pc.connectionState === "disconnected"
+    ) {
+      clearRetryTimeout();
+    }
+  };
+  pc.addEventListener("connectionstatechange", handleConnectionCleanup);
+
+  const scheduleRetryFlush = () => {
+    if (retryTimeoutId || !sessionId || retryCandidates.length === 0) {
+      return;
+    }
+    retryTimeoutId = setTimeout(async () => {
+      retryTimeoutId = null;
+      if (!sessionId || retryCandidates.length === 0 || isRetryFlushInProgress) {
+        return;
+      }
+
+      isRetryFlushInProgress = true;
+      const batch = retryCandidates.splice(0, retryCandidates.length);
+      const ok = await scopeClient.addIceCandidates(sessionId, batch);
+      isRetryFlushInProgress = false;
+
+      if (!ok) {
+        retryCandidates.unshift(...batch);
+        console.warn("[Scope] Failed to flush retry ICE candidates");
+        scheduleRetryFlush();
+      }
+    }, 400);
+  };
 
   try {
     pc.onicecandidate = async (event) => {
@@ -53,7 +97,11 @@ export async function createScopeWebRtcSession(
       if (sessionId) {
         const ok = await scopeClient.addIceCandidates(sessionId, [payload]);
         if (!ok) {
-          console.warn("[Scope] Failed to send ICE candidate");
+          retryCandidates.push(payload);
+          console.warn("[Scope] Failed to send ICE candidate (queued for retry)");
+          scheduleRetryFlush();
+        } else if (retryCandidates.length > 0) {
+          scheduleRetryFlush();
         }
       } else {
         pendingCandidates.push(payload);
@@ -118,15 +166,19 @@ export async function createScopeWebRtcSession(
     sessionId = answer.sessionId;
 
     if (pendingCandidates.length > 0) {
-      const ok = await scopeClient.addIceCandidates(sessionId, pendingCandidates);
+      const pendingBatch = pendingCandidates.splice(0, pendingCandidates.length);
+      const ok = await scopeClient.addIceCandidates(sessionId, pendingBatch);
       if (!ok) {
-        console.warn("[Scope] Failed to flush pending ICE candidates");
+        retryCandidates.push(...pendingBatch);
+        console.warn("[Scope] Failed to flush pending ICE candidates (queued for retry)");
+        scheduleRetryFlush();
       }
-      pendingCandidates.length = 0;
     }
 
     return { pc, dataChannel, sessionId };
   } catch (error) {
+    clearRetryTimeout();
+    pc.removeEventListener("connectionstatechange", handleConnectionCleanup);
     pc.onicecandidate = null;
     pc.ontrack = null;
     pc.onconnectionstatechange = null;
