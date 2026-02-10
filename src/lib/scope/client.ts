@@ -7,6 +7,7 @@ import type {
   HealthResponse,
   IceCandidatePayload,
   IceServersResponse,
+  PipelineDescriptor,
   PipelineLoadParams,
   PipelineSchemasResponse,
   PipelineStatusResponse,
@@ -83,31 +84,57 @@ export class ScopeClient {
   }
 
   /**
+   * Fetch pipeline schema map from Scope.
+   */
+  private async fetchPipelineSchemaMap(): Promise<Record<string, Record<string, unknown>> | null> {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/pipelines/schemas`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get pipelines: ${response.status}`);
+    }
+
+    const data: PipelineSchemasResponse | Record<string, unknown> | string[] = await response.json();
+
+    if (Array.isArray(data)) {
+      return Object.fromEntries(
+        data
+          .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+          .map((id) => [id, {}])
+      );
+    }
+
+    if (!data || typeof data !== "object") {
+      return {};
+    }
+
+    const root = data as Record<string, unknown>;
+    const candidate =
+      root.schemas && typeof root.schemas === "object" && !Array.isArray(root.schemas)
+        ? (root.schemas as Record<string, unknown>)
+        : root;
+
+    const normalized: Record<string, Record<string, unknown>> = {};
+    for (const [id, schema] of Object.entries(candidate)) {
+      if (!id.trim()) continue;
+      normalized[id] =
+        schema && typeof schema === "object" && !Array.isArray(schema)
+          ? (schema as Record<string, unknown>)
+          : {};
+    }
+
+    return normalized;
+  }
+
+  /**
    * Get available pipelines (schema keys)
    */
   async getPipelines(): Promise<string[]> {
     try {
-      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/pipelines/schemas`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get pipelines: ${response.status}`);
-      }
-
-      const data: PipelineSchemasResponse | Record<string, unknown> | string[] = await response.json();
-
-      if (Array.isArray(data)) {
-        return data.filter((item): item is string => typeof item === "string");
-      }
-
-      const schemas =
-        typeof data === "object" && data && "schemas" in data && typeof data.schemas === "object"
-          ? (data.schemas as Record<string, unknown>)
-          : (data as Record<string, unknown>);
-
-      return Object.keys(schemas || {});
+      const schemas = await this.fetchPipelineSchemaMap();
+      return Object.keys(schemas ?? {});
     } catch (error) {
       console.error("[Scope] Failed to get pipelines:", error);
       return [];
@@ -115,11 +142,87 @@ export class ScopeClient {
   }
 
   /**
+   * Get normalized pipeline descriptors from schema metadata.
+   */
+  async getPipelineDescriptors(): Promise<PipelineDescriptor[]> {
+    try {
+      const schemas = await this.fetchPipelineSchemaMap();
+      if (!schemas) return [];
+
+      const parseUsage = (value: unknown): string[] => {
+        if (Array.isArray(value)) {
+          return value.filter((item): item is string => typeof item === "string");
+        }
+        if (typeof value === "string" && value.trim()) {
+          return [value];
+        }
+        return [];
+      };
+
+      const parseBoolean = (value: unknown): boolean | undefined => {
+        if (typeof value === "boolean") return value;
+        return undefined;
+      };
+
+      const parseNumber = (value: unknown): number | null | undefined => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value;
+        }
+        if (typeof value === "string" && value.trim().length > 0) {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return undefined;
+      };
+
+      const parseSource = (value: unknown): "builtin" | "plugin" | "unknown" => {
+        if (value === "builtin" || value === "plugin") {
+          return value;
+        }
+        return "unknown";
+      };
+
+      return Object.entries(schemas).map(([id, schema]) => ({
+        id,
+        name:
+          (typeof schema.pipeline_name === "string" && schema.pipeline_name) ||
+          (typeof schema.name === "string" && schema.name) ||
+          id,
+        description:
+          (typeof schema.pipeline_description === "string" && schema.pipeline_description) ||
+          (typeof schema.description === "string" && schema.description) ||
+          undefined,
+        version:
+          (typeof schema.pipeline_version === "string" && schema.pipeline_version) ||
+          (typeof schema.version === "string" && schema.version) ||
+          undefined,
+        usage: parseUsage(schema.usage),
+        supportsVace: parseBoolean(schema.supports_vace),
+        supportsLora: parseBoolean(schema.supports_lora),
+        estimatedVramGb: parseNumber(schema.estimated_vram_gb),
+        source: parseSource(schema.source),
+      }));
+    } catch (error) {
+      console.error("[Scope] Failed to get pipeline descriptors:", error);
+      return [];
+    }
+  }
+
+  /**
    * Load a pipeline on the server
    */
-  async loadPipeline(pipelineId: string, loadParams?: PipelineLoadParams): Promise<boolean> {
+  async loadPipeline(pipelineId: string | string[], loadParams?: PipelineLoadParams): Promise<boolean> {
     try {
-      const body: Record<string, unknown> = { pipeline_ids: [pipelineId] };
+      const pipelineIds = Array.isArray(pipelineId) ? pipelineId : [pipelineId];
+      const normalizedPipelineIds = Array.from(
+        new Set(pipelineIds.map((id) => id.trim()).filter((id) => id.length > 0))
+      );
+
+      if (normalizedPipelineIds.length === 0) {
+        throw new Error("No pipeline IDs provided");
+      }
+
+      const body: Record<string, unknown> = { pipeline_ids: normalizedPipelineIds };
       if (loadParams && Object.keys(loadParams).length > 0) {
         body.load_params = loadParams;
       }
@@ -135,8 +238,12 @@ export class ScopeClient {
       );
 
       // Compatibility fallback for older Scope servers that still expect `pipeline_id`.
-      if (!response.ok && (response.status === 400 || response.status === 422)) {
-        const legacyBody: Record<string, unknown> = { pipeline_id: pipelineId };
+      if (
+        !response.ok &&
+        normalizedPipelineIds.length === 1 &&
+        (response.status === 400 || response.status === 422)
+      ) {
+        const legacyBody: Record<string, unknown> = { pipeline_id: normalizedPipelineIds[0] };
         if (loadParams && Object.keys(loadParams).length > 0) {
           legacyBody.load_params = loadParams;
         }

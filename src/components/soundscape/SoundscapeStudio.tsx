@@ -9,7 +9,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useSoundscape, DEFAULT_ASPECT_RATIO, DENOISING_STEPS } from "@/lib/soundscape";
 import type { AspectRatioConfig } from "@/lib/soundscape";
 import { getScopeClient, useScopeConnection } from "@/lib/scope";
-import type { HealthResponse, PipelineStatusResponse } from "@/lib/scope";
+import type { HealthResponse, PipelineDescriptor, PipelineStatusResponse } from "@/lib/scope";
 import { AudioPlayer } from "./AudioPlayer";
 import { ThemeSelector } from "./ThemeSelector";
 import { AspectRatioToggle } from "./AspectRatioToggle";
@@ -17,6 +17,13 @@ import { AnalysisMeter } from "./AnalysisMeter";
 
 // Default pipeline for Soundscape (longlive = stylized, smooth transitions)
 const DEFAULT_PIPELINE = "longlive";
+const NO_PREPROCESSOR = "__none__";
+const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
+  id: DEFAULT_PIPELINE,
+  name: "LongLive",
+  usage: [],
+  source: "unknown",
+};
 
 // Reconnection configuration
 const MAX_RECONNECT_ATTEMPTS = 3;
@@ -78,7 +85,10 @@ export function SoundscapeStudio({
   // Aspect ratio state (16:9 widescreen by default)
   const [aspectRatio, setAspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
   const [selectedPipeline, setSelectedPipeline] = useState(DEFAULT_PIPELINE);
-  const [availablePipelines, setAvailablePipelines] = useState<string[]>([DEFAULT_PIPELINE]);
+  const [selectedPreprocessor, setSelectedPreprocessor] = useState(NO_PREPROCESSOR);
+  const [availablePipelines, setAvailablePipelines] = useState<PipelineDescriptor[]>([
+    DEFAULT_PIPELINE_DESCRIPTOR,
+  ]);
   const [scopeHealth, setScopeHealth] = useState<HealthResponse | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
@@ -91,6 +101,35 @@ export function SoundscapeStudio({
     droppedFrames: null,
   });
   const scopeClient = useMemo(() => getScopeClient(), []);
+
+  const isPreprocessorPipeline = useCallback((pipeline: PipelineDescriptor) => {
+    return pipeline.usage.some((usage) => usage.toLowerCase() === "preprocessor");
+  }, []);
+
+  const mainPipelineOptions = useMemo(
+    () => availablePipelines.filter((pipeline) => !isPreprocessorPipeline(pipeline)),
+    [availablePipelines, isPreprocessorPipeline]
+  );
+
+  const preprocessorOptions = useMemo(
+    () => availablePipelines.filter((pipeline) => isPreprocessorPipeline(pipeline)),
+    [availablePipelines, isPreprocessorPipeline]
+  );
+
+  const selectedPipelineDescriptor = useMemo(() => {
+    return (
+      mainPipelineOptions.find((pipeline) => pipeline.id === selectedPipeline) ??
+      availablePipelines.find((pipeline) => pipeline.id === selectedPipeline) ??
+      DEFAULT_PIPELINE_DESCRIPTOR
+    );
+  }, [mainPipelineOptions, availablePipelines, selectedPipeline]);
+
+  const activePipelineChain = useMemo(() => {
+    if (selectedPreprocessor !== NO_PREPROCESSOR) {
+      return `${selectedPreprocessor} → ${selectedPipeline}`;
+    }
+    return selectedPipeline;
+  }, [selectedPreprocessor, selectedPipeline]);
 
   // Soundscape hook
   const {
@@ -162,29 +201,43 @@ export function SoundscapeStudio({
       if (health.status !== "ok") {
         setPipelineStatus(null);
         setDiagnosticsError("Scope server unavailable. Verify SCOPE_API_URL and server health.");
-        setAvailablePipelines([DEFAULT_PIPELINE]);
+        setAvailablePipelines([DEFAULT_PIPELINE_DESCRIPTOR]);
         return;
       }
 
       const [pipelines, status] = await Promise.all([
-        scopeClient.getPipelines(),
+        scopeClient.getPipelineDescriptors(),
         scopeClient.getPipelineStatus(),
       ]);
 
       setPipelineStatus(status);
 
       if (pipelines.length > 0) {
-        const sorted = [...pipelines].sort();
+        const sorted = [...pipelines].sort((a, b) => a.name.localeCompare(b.name));
+        const mainPipelines = sorted.filter((pipeline) => !isPreprocessorPipeline(pipeline));
+        const preprocessors = sorted.filter((pipeline) => isPreprocessorPipeline(pipeline));
+
         setAvailablePipelines(sorted);
         setSelectedPipeline((current) => {
-          if (sorted.includes(current)) return current;
-          if (sorted.includes(DEFAULT_PIPELINE)) return DEFAULT_PIPELINE;
-          return sorted[0];
+          const currentExists = mainPipelines.some((pipeline) => pipeline.id === current);
+          if (currentExists) return current;
+          if (mainPipelines.some((pipeline) => pipeline.id === DEFAULT_PIPELINE)) {
+            return DEFAULT_PIPELINE;
+          }
+          return mainPipelines[0]?.id ?? DEFAULT_PIPELINE;
+        });
+        setSelectedPreprocessor((current) => {
+          if (current === NO_PREPROCESSOR) return current;
+          if (preprocessors.some((pipeline) => pipeline.id === current)) {
+            return current;
+          }
+          return NO_PREPROCESSOR;
         });
       } else {
         setDiagnosticsError("Connected to Scope, but no pipeline schemas were returned.");
-        setAvailablePipelines([DEFAULT_PIPELINE]);
+        setAvailablePipelines([DEFAULT_PIPELINE_DESCRIPTOR]);
         setSelectedPipeline((current) => current || DEFAULT_PIPELINE);
+        setSelectedPreprocessor(NO_PREPROCESSOR);
       }
     } catch (error) {
       setDiagnosticsError(
@@ -193,15 +246,26 @@ export function SoundscapeStudio({
     } finally {
       setIsDiagnosticsLoading(false);
     }
-  }, [scopeClient]);
+  }, [scopeClient, isPreprocessorPipeline]);
 
   // Connect video stream to element
   useEffect(() => {
-    if (videoRef.current && scopeStream) {
-      videoRef.current.srcObject = scopeStream;
-      videoRef.current.play().catch((err) => {
+    const videoElement = videoRef.current;
+    if (!videoElement) {
+      return;
+    }
+
+    if (scopeStream) {
+      videoElement.srcObject = scopeStream;
+      videoElement.play().catch((err) => {
         console.warn("[Soundscape] Video autoplay blocked:", err.message);
       });
+      return;
+    }
+
+    if (videoElement.srcObject) {
+      videoElement.pause();
+      videoElement.srcObject = null;
     }
   }, [scopeStream]);
 
@@ -214,11 +278,19 @@ export function SoundscapeStudio({
     if (storedPipeline) {
       setSelectedPipeline(storedPipeline);
     }
+    const storedPreprocessor = window.localStorage.getItem("soundscape.preprocessor");
+    if (storedPreprocessor) {
+      setSelectedPreprocessor(storedPreprocessor);
+    }
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("soundscape.pipeline", selectedPipeline);
   }, [selectedPipeline]);
+
+  useEffect(() => {
+    window.localStorage.setItem("soundscape.preprocessor", selectedPreprocessor);
+  }, [selectedPreprocessor]);
 
   useEffect(() => {
     if (!scopeStream) {
@@ -283,6 +355,13 @@ export function SoundscapeStudio({
     return params;
   }, [aspectRatio, selectedPipeline]);
 
+  const pipelineIdsForConnect = useMemo(() => {
+    if (selectedPreprocessor !== NO_PREPROCESSOR) {
+      return [selectedPreprocessor, selectedPipeline];
+    }
+    return [selectedPipeline];
+  }, [selectedPreprocessor, selectedPipeline]);
+
   const initialParameters = useMemo(() => {
     if (!currentTheme) return undefined;
     const basePrompt = [
@@ -317,6 +396,7 @@ export function SoundscapeStudio({
     clearError,
   } = useScopeConnection({
     scopeClient,
+    pipelineIds: pipelineIdsForConnect,
     pipelineId: selectedPipeline,
     loadParams,
     initialParameters,
@@ -406,7 +486,7 @@ export function SoundscapeStudio({
                 Stream Live
               </div>
               <div className="mt-1 text-[10px] text-white/70 font-medium truncate">
-                Pipeline: <span className="text-white">{selectedPipeline}</span>
+                Pipeline: <span className="text-white">{activePipelineChain}</span>
               </div>
               <div className="text-[10px] text-white/70 tabular-nums">
                 Video:{" "}
@@ -659,12 +739,76 @@ export function SoundscapeStudio({
                     onChange={(event) => setSelectedPipeline(event.target.value)}
                     className="w-full px-3 py-2 rounded-xl glass bg-black/40 border border-white/15 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {availablePipelines.map((pipeline) => (
-                      <option key={pipeline} value={pipeline} className="bg-scope-bg">
-                        {pipeline}
+                    {mainPipelineOptions.map((pipeline) => (
+                      <option key={pipeline.id} value={pipeline.id} className="bg-scope-bg">
+                        {pipeline.name}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {preprocessorOptions.length > 0 && (
+                  <div className="mt-3">
+                    <label
+                      htmlFor="preprocessor-select"
+                      className="block text-[10px] text-white/45 uppercase tracking-wide mb-1"
+                    >
+                      Preprocessor
+                    </label>
+                    <select
+                      id="preprocessor-select"
+                      value={selectedPreprocessor}
+                      disabled={isConnecting}
+                      onChange={(event) => setSelectedPreprocessor(event.target.value)}
+                      className="w-full px-3 py-2 rounded-xl glass bg-black/40 border border-white/15 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value={NO_PREPROCESSOR} className="bg-scope-bg">
+                        None
+                      </option>
+                      {preprocessorOptions.map((pipeline) => (
+                        <option key={pipeline.id} value={pipeline.id} className="bg-scope-bg">
+                          {pipeline.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-1.5">
+                  <p className="text-[10px] text-white/45 uppercase tracking-wide">Selected Pipeline Details</p>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-white/55">Name</span>
+                    <span className="text-white/85">{selectedPipelineDescriptor.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-white/55">Estimated VRAM</span>
+                    <span className="text-white/85">
+                      {typeof selectedPipelineDescriptor.estimatedVramGb === "number"
+                        ? `${selectedPipelineDescriptor.estimatedVramGb} GB`
+                        : "n/a"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-white/55">Source</span>
+                    <span className="text-white/85 capitalize">{selectedPipelineDescriptor.source}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    {selectedPipelineDescriptor.supportsVace === true && (
+                      <span className="rounded-md border border-scope-cyan/40 bg-scope-cyan/10 px-1.5 py-0.5 text-[9px] text-scope-cyan">
+                        VACE
+                      </span>
+                    )}
+                    {selectedPipelineDescriptor.supportsLora === true && (
+                      <span className="rounded-md border border-scope-purple/40 bg-scope-purple/10 px-1.5 py-0.5 text-[9px] text-scope-purple">
+                        LoRA
+                      </span>
+                    )}
+                    {selectedPipelineDescriptor.usage.length > 0 && (
+                      <span className="rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[9px] text-white/70">
+                        {selectedPipelineDescriptor.usage.join(", ")}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {diagnosticsError && (
@@ -686,7 +830,7 @@ export function SoundscapeStudio({
                 className="px-10 py-4 glass bg-scope-cyan/20 hover:bg-scope-cyan/30 text-scope-cyan border border-scope-cyan/40 rounded-2xl text-sm uppercase tracking-[0.15em] transition-all duration-500 hover:scale-105 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
               >
-                {isConnecting ? "Connecting..." : `Connect • ${selectedPipeline}`}
+                {isConnecting ? "Connecting..." : `Connect • ${activePipelineChain}`}
               </button>
               {scopeErrorTitle && (
                 <div className="mt-6 glass bg-red-500/10 border border-red-500/30 rounded-xl p-4 relative" role="alert">
@@ -773,7 +917,7 @@ export function SoundscapeStudio({
             <div className="w-full xl:w-auto xl:min-w-[320px] space-y-2">
               <div className="flex items-center justify-between text-[10px]">
                 <span className="text-white/45 uppercase tracking-wide">Active Pipeline</span>
-                <span className="text-white/80 font-medium">{selectedPipeline}</span>
+                <span className="text-white/80 font-medium">{activePipelineChain}</span>
               </div>
               <AnalysisMeter
                 analysis={soundscapeState.analysis}

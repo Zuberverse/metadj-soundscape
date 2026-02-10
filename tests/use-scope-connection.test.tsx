@@ -27,6 +27,7 @@ type FakePeerConnection = {
 };
 
 let lastPeerConnection: FakePeerConnection | null = null;
+let lastTrackHandler: ((event: RTCTrackEvent) => void) | undefined;
 let connectHarness: (() => Promise<void>) | null = null;
 
 function createFakePeerConnection(): FakePeerConnection {
@@ -49,7 +50,7 @@ function renderHarness(scopeClient: ScopeClient) {
   const root = createRoot(container);
 
   function Harness() {
-    const { connect, connectionState } = useScopeConnection({
+    const { connect, connectionState, error } = useScopeConnection({
       scopeClient,
       pipelineId: "longlive",
       loadParams: {},
@@ -65,7 +66,11 @@ function renderHarness(scopeClient: ScopeClient) {
     }, [connect]);
 
     return (
-      <div data-testid="state" data-connection={connectionState} />
+      <div
+        data-testid="state"
+        data-connection={connectionState}
+        data-error-code={error?.code ?? ""}
+      />
     );
   }
 
@@ -85,6 +90,7 @@ function renderHarness(scopeClient: ScopeClient) {
 afterEach(() => {
   document.body.innerHTML = "";
   lastPeerConnection = null;
+  lastTrackHandler = undefined;
   connectHarness = null;
   vi.clearAllMocks();
   vi.useRealTimers();
@@ -96,6 +102,7 @@ describe("useScopeConnection", () => {
     createScopeWebRtcSessionMock.mockImplementation(async (options) => {
       const pc = createFakePeerConnection();
       lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
 
       if (options.setupPeerConnection) {
         options.setupPeerConnection(pc as unknown as RTCPeerConnection);
@@ -164,6 +171,80 @@ describe("useScopeConnection", () => {
     });
 
     expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
+  it("waits for a video track before setting connected state", async () => {
+    createScopeWebRtcSessionMock.mockImplementation(async (options) => {
+      const pc = createFakePeerConnection();
+      lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
+
+      if (options.setupPeerConnection) {
+        options.setupPeerConnection(pc as unknown as RTCPeerConnection);
+      }
+
+      return {
+        pc: pc as unknown as RTCPeerConnection,
+        dataChannel: undefined,
+        sessionId: "session",
+      };
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { container, unmount } = renderHarness(scopeClient);
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness();
+    });
+
+    const state = container.querySelector('[data-testid="state"]');
+    expect(state?.getAttribute("data-connection")).toBe("connecting");
+
+    await act(async () => {
+      lastTrackHandler?.({
+        track: { kind: "video" } as MediaStreamTrack,
+        streams: [{} as MediaStream],
+      } as unknown as RTCTrackEvent);
+    });
+
+    expect(state?.getAttribute("data-connection")).toBe("connected");
+
+    unmount();
+  });
+
+  it("maps pipeline load failures to PIPELINE_LOAD_FAILED", async () => {
+    prepareScopePipelineMock.mockRejectedValueOnce(new Error("pipeline unavailable"));
+    createScopeWebRtcSessionMock.mockResolvedValue({
+      pc: createFakePeerConnection() as unknown as RTCPeerConnection,
+      dataChannel: undefined,
+      sessionId: "unused",
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { container, unmount } = renderHarness(scopeClient);
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness();
+    });
+
+    const state = container.querySelector('[data-testid="state"]');
+    expect(state?.getAttribute("data-connection")).toBe("failed");
+    expect(state?.getAttribute("data-error-code")).toBe("PIPELINE_LOAD_FAILED");
+    expect(createScopeWebRtcSessionMock).not.toHaveBeenCalled();
 
     unmount();
   });

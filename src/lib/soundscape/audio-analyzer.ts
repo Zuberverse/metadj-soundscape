@@ -140,8 +140,15 @@ export class AudioAnalyzer {
       this.meyda = null;
     }
 
-    // Disconnect analyzer node but keep the source -> destination connection
-    // The source node stays connected in the registry for reuse
+    if (this.sourceNode && this.analyzerNode) {
+      try {
+        this.sourceNode.disconnect(this.analyzerNode);
+      } catch {
+        // No-op: source may already be disconnected from this analyzer.
+      }
+    }
+
+    // Disconnect analyzer graph while preserving reusable source/context references.
     if (this.analyzerNode) {
       this.analyzerNode.disconnect();
       this.analyzerNode = null;

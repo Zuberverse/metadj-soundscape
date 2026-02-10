@@ -12,7 +12,7 @@
     "start": "next start -H 0.0.0.0 -p ${PORT:-3500}",
     "lint": "eslint --max-warnings=0 .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "check:scope": "node scripts/check-scope-api.mjs",
     "test:watch": "vitest watch"
   },

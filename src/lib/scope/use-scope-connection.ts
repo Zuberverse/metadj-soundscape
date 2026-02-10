@@ -69,8 +69,10 @@ export type ConnectionState =
 export interface UseScopeConnectionOptions {
   /** Scope client instance */
   scopeClient: ScopeClient;
-  /** Pipeline ID to load */
-  pipelineId: string;
+  /** Primary pipeline ID to load (used when pipelineIds is not provided) */
+  pipelineId?: string;
+  /** Optional pipeline chain (e.g. [preprocessor, main-pipeline]) */
+  pipelineIds?: string[];
   /** Pipeline load parameters */
   loadParams?: PipelineLoadParams;
   /** Max reconnection attempts */
@@ -132,6 +134,7 @@ export function useScopeConnection(
   const {
     scopeClient,
     pipelineId,
+    pipelineIds,
     loadParams,
     maxReconnectAttempts = 3,
     reconnectBaseDelay = 2000,
@@ -269,6 +272,8 @@ export function useScopeConnection(
     setError(null);
 
     try {
+      let hasReceivedVideoTrack = false;
+
       // Step 1: Health check
       setStatusMessage("Checking server...");
       const health = await scopeClient.checkHealth();
@@ -277,12 +282,30 @@ export function useScopeConnection(
       }
 
       // Step 2: Load pipeline
-      await prepareScopePipeline({
-        scopeClient,
-        pipelineId,
-        loadParams: loadParams ?? {},
-        onStatus: setStatusMessage,
-      });
+      const requestedPipelineIds =
+        pipelineIds && pipelineIds.length > 0
+          ? pipelineIds
+          : pipelineId
+            ? [pipelineId]
+            : [];
+
+      if (requestedPipelineIds.length === 0) {
+        throw createScopeError("PIPELINE_LOAD_FAILED", "No pipeline selected");
+      }
+
+      try {
+        await prepareScopePipeline({
+          scopeClient,
+          pipelineIds: requestedPipelineIds,
+          loadParams: loadParams ?? {},
+          onStatus: setStatusMessage,
+        });
+      } catch (pipelineError) {
+        throw createScopeError(
+          "PIPELINE_LOAD_FAILED",
+          pipelineError instanceof Error ? pipelineError.message : "Pipeline failed to load"
+        );
+      }
 
       // Step 3: Create WebRTC session
       setStatusMessage("Creating connection...");
@@ -295,10 +318,17 @@ export function useScopeConnection(
           setupPeerConnection?.(connection);
         },
         onTrack: (event) => {
-          if (event.track.kind === "video" && event.streams[0]) {
-            onStream?.(event.streams[0]);
+          if (event.track.kind !== "video") {
+            return;
+          }
+
+          const stream = event.streams[0] ?? new MediaStream([event.track]);
+          if (stream) {
+            hasReceivedVideoTrack = true;
+            onStream?.(stream);
             setStatusMessage("Connected");
             setConnectionState("connected");
+            setReconnectAttempts(0);
           }
         },
         onConnectionStateChange: (connection) => {
@@ -350,8 +380,10 @@ export function useScopeConnection(
       peerConnectionRef.current = pc;
       dataChannelRef.current = dataChannel ?? null;
       setReconnectAttempts(0);
-      setConnectionState("connected");
-      setStatusMessage("Connected");
+
+      if (!hasReceivedVideoTrack) {
+        setStatusMessage("Waiting for video stream...");
+      }
     } catch (err) {
       const scopeError =
         err && typeof err === "object" && "code" in err
@@ -371,6 +403,7 @@ export function useScopeConnection(
   }, [
     scopeClient,
     pipelineId,
+    pipelineIds,
     loadParams,
     initialParameters,
     setupPeerConnection,

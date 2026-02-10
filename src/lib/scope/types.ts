@@ -52,6 +52,20 @@ export interface PipelineSchemasResponse {
   schemas?: Record<string, unknown>;
 }
 
+export type PipelineSource = "builtin" | "plugin" | "unknown";
+
+export interface PipelineDescriptor {
+  id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  usage: string[];
+  supportsVace?: boolean;
+  supportsLora?: boolean;
+  estimatedVramGb?: number | null;
+  source: PipelineSource;
+}
+
 export interface IceServersResponse {
   iceServers: RTCIceServer[];
 }

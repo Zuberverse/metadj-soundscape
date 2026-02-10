@@ -14,8 +14,16 @@ class MockAudioContext {
   state: AudioContextState = "running";
   destination = {};
 
-  createMediaElementSource = vi.fn(() => new MockMediaElementSourceNode());
-  createAnalyser = vi.fn(() => new MockAnalyserNode());
+  createMediaElementSource = vi.fn(() => {
+    const source = new MockMediaElementSourceNode();
+    lastSourceNode = source;
+    return source;
+  });
+  createAnalyser = vi.fn(() => {
+    const analyzer = new MockAnalyserNode();
+    lastAnalyserNode = analyzer;
+    return analyzer;
+  });
   resume = vi.fn(async () => {
     this.state = "running";
   });
@@ -34,6 +42,9 @@ class MockAnalyserNode {
   connect = vi.fn();
   disconnect = vi.fn();
 }
+
+let lastSourceNode: MockMediaElementSourceNode | null = null;
+let lastAnalyserNode: MockAnalyserNode | null = null;
 
 // Mock HTMLAudioElement
 function createMockAudioElement(): HTMLAudioElement {
@@ -84,6 +95,8 @@ beforeEach(() => {
   // Reset mocks
   vi.clearAllMocks();
   mockMeydaCallback.current = null;
+  lastSourceNode = null;
+  lastAnalyserNode = null;
 });
 
 afterEach(() => {
@@ -306,6 +319,7 @@ describe("AudioAnalyzer", () => {
       analyzer.destroy();
 
       expect(mockMeydaAnalyzer.stop).toHaveBeenCalled();
+      expect(lastSourceNode?.disconnect).toHaveBeenCalledWith(lastAnalyserNode);
     });
   });
 

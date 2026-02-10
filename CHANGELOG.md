@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-10 12:04 EST
+**Last Modified**: 2026-02-10 13:36 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Live stream telemetry overlay (active pipeline, resolution, dropped-frame percentage when available).
 - Compact audio analysis meters added directly into the bottom controls dock.
 - Scope client regression tests covering pipeline load compatibility fallback and schema parsing.
+- Scope connection regression test to ensure the app stays in connecting state until the first video track arrives.
+- Audio analyzer regression coverage for source-to-analyzer disconnect during teardown.
 
 ### Changed
 - Initial WebRTC prompt now includes theme style modifiers for better visual consistency at connect time.
@@ -25,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy allowlist expanded for current Scope endpoints (`hardware`, `models`, `assets`, `lora`, `plugins`) with stricter segment-boundary matching.
 - Scope and Daydream reference docs refreshed to current verified state (`v0.1.0` stable published 2026-02-09; no stable `v1.0` yet).
 - Pipeline preparation no longer runs a duplicate health check before load, reducing connection latency.
+- Scope connection now transitions to `connected` only after receiving a video track; connection setup remains in `connecting` while waiting for stream frames.
+- Video teardown now explicitly pauses the player and clears `srcObject` when Scope disconnects.
+- Audio analyzer teardown now disconnects source-to-analyzer links to avoid Web Audio graph accumulation across reconnects.
 
 ## [1.0.0] - 2026-01-08
 
