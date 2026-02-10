@@ -1,6 +1,6 @@
 # Scope API Reference (Soundscape)
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-02-10 11:51 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -9,7 +9,7 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 ## Canonical External References
 
 - `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` — External reference hub
-- https://github.com/daydreamlive/scope/tree/main/docs/api — Official API docs
+- https://docs.daydream.live/scope/reference/api/index — Official API reference
 - https://docs.daydream.live/scope — Official Scope docs
 
 ---
@@ -43,7 +43,7 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 **Request**:
 ```json
 {
-  "pipeline_id": "longlive",
+  "pipeline_ids": ["longlive"],
   "load_params": {
     "width": 576,
     "height": 320,
@@ -54,7 +54,8 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 
 **Notes**:
 - `width`/`height` must be divisible by 64.
-- Soundscape uses `vace_enabled: false` for text-to-video mode.
+- Soundscape uses `vace_enabled: false` for text-to-video mode on `longlive`.
+- `pipeline_ids` is the canonical request shape in current Scope docs.
 
 ---
 
@@ -118,11 +119,25 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 **Request**:
 ```json
 {
-  "candidate": "...",
-  "sdpMid": "0",
-  "sdpMLineIndex": 0
+  "candidates": [
+    {
+      "candidate": "...",
+      "sdpMid": "0",
+      "sdpMLineIndex": 0
+    }
+  ]
 }
 ```
+
+---
+
+## Additional Endpoints (Not used in MVP path)
+
+- `GET /api/v1/models/status`
+- `POST /api/v1/models/download`
+- `GET|POST /api/v1/assets`
+- `GET /api/v1/assets/{path}`
+- `GET /api/v1/lora/list`
 
 ---
 

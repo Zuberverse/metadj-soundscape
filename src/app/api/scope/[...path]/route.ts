@@ -30,9 +30,15 @@ const PROXY_ENABLED = process.env.NODE_ENV !== "production" || process.env.SCOPE
 // Prevents arbitrary endpoint access through the proxy
 const PATH_ALLOWLIST = [
   "health",           // Health check (root-level)
+  "api/v1/hardware",  // Hardware info
   "api/v1/pipeline",  // Pipeline management
   "api/v1/pipelines", // Pipeline schemas
+  "api/v1/models",    // Model status/download endpoints
   "api/v1/webrtc",    // WebRTC signaling
+  "api/v1/assets",    // Asset upload/list/serve endpoints
+  "api/v1/lora",      // LoRA management endpoints
+  "api/v1/plugins",   // Plugin API (if enabled server-side)
+  "plugins",          // Plugin API routes exposed at root
   "api/v1/prompts",   // Prompt operations
   "api/v1/session",   // Session management
 ];
@@ -40,7 +46,7 @@ const PATH_ALLOWLIST = [
 function isPathAllowed(path: string): boolean {
   // Normalize: remove leading/trailing slashes, prevent path traversal
   const normalized = path.replace(/^\/+|\/+$/g, "").replace(/\.\./g, "");
-  return PATH_ALLOWLIST.some((allowed) => normalized.startsWith(allowed));
+  return PATH_ALLOWLIST.some((allowed) => normalized === allowed || normalized.startsWith(`${allowed}/`));
 }
 
 // Timeout configuration (in milliseconds)

@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-02-10 12:04 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -9,9 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Scope diagnostics panel on the connection screen (health, scope version, pipeline status, last check timestamp, manual refresh).
+- Dynamic pipeline selection from live Scope schemas before connect.
+- Live stream telemetry overlay (active pipeline, resolution, dropped-frame percentage when available).
+- Compact audio analysis meters added directly into the bottom controls dock.
+- Scope client regression tests covering pipeline load compatibility fallback and schema parsing.
+
 ### Changed
 - Initial WebRTC prompt now includes theme style modifiers for better visual consistency at connect time.
 - Public docs trimmed for release readiness (Scope brief sanitized; transition timing examples aligned).
+- Scope integration now sends canonical `pipeline_ids` for `/api/v1/pipeline/load` with compatibility fallback to legacy `pipeline_id`.
+- Scope pipeline status typing expanded to include `not_loaded`.
+- WebRTC ICE candidate send/flush failures now emit warnings instead of failing silently.
+- Proxy allowlist expanded for current Scope endpoints (`hardware`, `models`, `assets`, `lora`, `plugins`) with stricter segment-boundary matching.
+- Scope and Daydream reference docs refreshed to current verified state (`v0.1.0` stable published 2026-02-09; no stable `v1.0` yet).
+- Pipeline preparation no longer runs a duplicate health check before load, reducing connection latency.
 
 ## [1.0.0] - 2026-01-08
 

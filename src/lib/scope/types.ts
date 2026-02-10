@@ -41,7 +41,7 @@ export interface HealthResponse {
 }
 
 // Pipeline status values returned by Scope API
-export type PipelineStatus = "idle" | "loading" | "loaded" | "error" | "unloading";
+export type PipelineStatus = "not_loaded" | "loading" | "loaded" | "error" | "idle" | "unloading";
 
 export interface PipelineStatusResponse {
   status: PipelineStatus;

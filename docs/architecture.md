@@ -1,6 +1,6 @@
 # Architecture - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-02-10 12:04 EST
 **Status**: Active
 
 ## Purpose
@@ -36,7 +36,10 @@ Full-screen immersive experience optimized for video viewing:
 - Subtle ambient background (soft cyan/purple glow)
 - Branded header with gradient title
 - Connection indicator with "Live/Offline" status
-- Minimal footer
+- Scope diagnostics panel before connect (health, version, pipeline state, refresh)
+- Dynamic pipeline selector populated from Scope schemas
+- Live telemetry overlay while streaming (pipeline, resolution, dropped-frame ratio)
+- Bottom dock with compact audio + engine analysis meters
 
 **Soundscape (current)**: Custom Next.js UI for in-browser audio analysis and parameter mapping. Modes: ambient (no audio) and demo track playback (looped).
 
@@ -81,7 +84,7 @@ const {
   clearError,       // Dismiss error
 } = useScopeConnection({
   scopeClient: getScopeClient(),
-  pipelineId: "longlive",
+  pipelineId: selectedPipeline,
   loadParams: { width: 576, height: 320, vace_enabled: false },
   onStream: (stream) => setVideoStream(stream),
   onDataChannelOpen: (channel) => setDataChannel(channel),
@@ -127,7 +130,7 @@ const {
 ## Soundscape WebRTC Flow
 
 1. Health check: `GET /health` (root-level, NOT `/api/v1/health`)
-2. Load pipeline: `POST /api/v1/pipeline/load` with `load_params`:
+2. Load pipeline: `POST /api/v1/pipeline/load` with `pipeline_ids: ["longlive"]` and `load_params`:
    - `vace_enabled: false` (critical for T2V mode without reference images)
    - `width`/`height` based on aspect ratio
 3. Wait for pipeline status `"loaded"`: `GET /api/v1/pipeline/status`
@@ -146,7 +149,7 @@ const {
 | Requirement | Details |
 |-------------|---------|
 | Health endpoint | `/health` (root-level, unique among all endpoints) |
-| Pipeline load | Must set `vace_enabled: false` for text-to-video mode |
+| Pipeline load | Canonical request shape is `pipeline_ids`; Soundscape includes a legacy fallback for older servers |
 | Video transceiver | Use `pc.addTransceiver("video")` WITHOUT `{ direction: "recvonly" }` |
 | Initial params | Include `paused: false` to ensure generation starts immediately |
 | Data channel params | Include `paused: false` in ongoing updates |
@@ -206,7 +209,7 @@ const {
 ```bash
 curl -X POST "https://YOUR-POD-8000.proxy.runpod.net/api/v1/pipeline/load" \
   -H "Content-Type: application/json" \
-  -d '{"pipeline_id": "longlive", "load_params": {"vace_enabled": false}}'
+  -d '{"pipeline_ids": ["longlive"], "load_params": {"vace_enabled": false}}'
 ```
 
 ### Debugging Tips
@@ -246,7 +249,7 @@ image-rendering: crisp-edges;
 ```
 
 ### Theme System
-- 5 preset themes: Cosmic Voyage, Neon Foundry, Digital Forest, Synthwave Highway, Crystal Sanctuary
+- 12 preset themes including Cosmic Voyage, Neon Foundry, Digital Forest, Synthwave Highway, Crystal Sanctuary, Ocean Depths, Cyber City, Aurora Dreams, 8-Bit Adventure, Volcanic Forge, Quantum Realm, and Neon Tokyo
 - All themes display in compact dock with glass-styled pills
 - Active theme highlighted with purple glow accent
 

@@ -1,6 +1,6 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-02-10 11:51 EST
 
 Quick navigation for the Soundscape documentation.
 
@@ -17,7 +17,7 @@ Public repository note: Internal strategy and operational details are intentiona
 
 | Document | Description |
 |----------|-------------|
-| [Scope Overview](./scope.md) | Program brief + official links (external hub is canonical) |
+| [Scope Overview](./scope.md) | Scope context + official links (external hub is canonical) |
 | [Scope Technical](./scope-technical.md) | Project delta technical assumptions |
 | [API Reference](./api-reference.md) | Project delta API usage |
 
@@ -40,4 +40,4 @@ Public repository note: Internal strategy and operational details are intentiona
 | Document | Description |
 |----------|-------------|
 | [Research Notes](./research.md) | Technical investigations and findings |
-| [Scope Track Overview](./scope-track-overview.md) | Hackathon context |
+| [Scope Track Overview](./scope-track-overview.md) | Historical hackathon context |

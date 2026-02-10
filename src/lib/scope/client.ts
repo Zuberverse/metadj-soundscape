@@ -119,12 +119,12 @@ export class ScopeClient {
    */
   async loadPipeline(pipelineId: string, loadParams?: PipelineLoadParams): Promise<boolean> {
     try {
-      const body: Record<string, unknown> = { pipeline_id: pipelineId };
+      const body: Record<string, unknown> = { pipeline_ids: [pipelineId] };
       if (loadParams && Object.keys(loadParams).length > 0) {
         body.load_params = loadParams;
       }
 
-      const response = await this.fetchWithTimeout(
+      let response = await this.fetchWithTimeout(
         `${this.baseUrl}/api/v1/pipeline/load`,
         {
           method: "POST",
@@ -133,6 +133,24 @@ export class ScopeClient {
         },
         60000 // Pipeline loading can take longer on cold starts
       );
+
+      // Compatibility fallback for older Scope servers that still expect `pipeline_id`.
+      if (!response.ok && (response.status === 400 || response.status === 422)) {
+        const legacyBody: Record<string, unknown> = { pipeline_id: pipelineId };
+        if (loadParams && Object.keys(loadParams).length > 0) {
+          legacyBody.load_params = loadParams;
+        }
+
+        response = await this.fetchWithTimeout(
+          `${this.baseUrl}/api/v1/pipeline/load`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(legacyBody),
+          },
+          60000
+        );
+      }
 
       return response.ok;
     } catch (error) {

@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-02-10 12:04 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -16,6 +16,10 @@ Soundscape extracts audio features—energy, brightness, beats—and streams the
 - **WebRTC Streaming** — Low-latency video delivery from GPU server
 - **Infinite Loop Playback** — Demo track plays continuously for seamless visual generation
 - **Ambient Mode** — Generates visuals without audio when playback is paused
+- **Scope Diagnostics Panel** — Live health, version, pipeline status, and manual readiness checks
+- **Dynamic Pipeline Selection** — Pull pipeline IDs from Scope and choose before connect
+- **Live Telemetry Overlay** — Active pipeline, stream resolution, and dropped-frame visibility
+- **Docked Analysis Meters** — Compact audio/engine signal feedback while performing
 
 ## Demo
 
@@ -80,11 +84,11 @@ open http://localhost:3500
 
 ### Usage
 
-1. Click "Connect to Scope" (requires Scope server running)
-2. Select output format (16:9 or 9:16)
-3. Hit Play to start the demo track
-4. Watch audio-reactive visuals generate in real-time
-5. Switch themes to explore different visual styles
+1. Open Scope readiness and run a refresh check
+2. Select output format (16:9 or 9:16) and pipeline
+3. Click connect (requires Scope server running)
+4. Hit Play to start the demo track
+5. Watch audio-reactive visuals + live telemetry, then switch themes
 
 ## How It Works
 
@@ -125,8 +129,12 @@ Soundscape requires a running Daydream Scope server for AI video generation. Can
 
 **Canonical External References**:
 - `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md`
-- https://docs.daydream.live/scope/introduction
+- https://docs.daydream.live/scope
 - https://runpod.io/console/deploy?template=daydream-scope
+
+**Current Scope Release Snapshot (Verified 2026-02-10)**:
+- Latest stable: `v0.1.0` (published 2026-02-09)
+- No `v1.0` stable release published yet
 
 **Project-Specific Notes**:
 - Set `SCOPE_API_URL` to your Scope server (RunPod or local).
@@ -167,13 +175,13 @@ src/
 | Issue | Fix |
 |-------|-----|
 | "Server not healthy" | Health endpoint is `/health` (root-level) |
-| Connected but no frames | Pipeline must load with `vace_enabled: false` |
+| Connected but no frames | Pipeline must load correctly before WebRTC starts (check `/api/v1/pipeline/status`) |
 | Generation doesn't start | Include `paused: false` in initial parameters |
 | Pipeline stuck loading | Close other Scope UI tabs (conflicts with pipeline) |
 
-## Hackathon Context
+## Historical Context
 
-Built for the **Daydream 2025 Interactive AI Video Program (Scope Track)**:
+Originally built for the **Daydream 2025 Interactive AI Video Program (Scope Track)**:
 - **Program**: Two-week sprint (Dec 22 - Jan 8)
 - **Focus**: Real-time interactive AI video generation
 - **Platform**: Daydream Scope (StreamDiffusion-based)
@@ -193,7 +201,7 @@ This entire application was vibe coded using Claude Code and OpenAI Codex. No tr
 ## Resources
 
 - [Scope GitHub](https://github.com/daydreamlive/scope/)
-- [Scope Docs](https://docs.daydream.live/scope/introduction)
+- [Scope Docs](https://docs.daydream.live/scope)
 - [RunPod Docs](https://docs.runpod.io)
 
 ## License

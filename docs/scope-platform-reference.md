@@ -1,6 +1,6 @@
 # Daydream Scope Platform Reference
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-02-10 11:51 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -16,7 +16,8 @@ Project-specific notes for Daydream Scope in MetaDJ Soundscape. Canonical platfo
 
 - Soundscape streams audio-reactive parameters over WebRTC data channels (see `docs/soundscape-mechanics.md`).
 - Pipeline selection and constraints live in `docs/strategy.md` and `docs/scope-technical.md`.
+- Current docs alignment: load requests use `pipeline_ids`; ICE patch uses `candidates` arrays.
 
 ## Delta Log
 
-- None yet. Capture only MetaDJ Soundscape-specific deviations from official docs.
+- 2026-02-10: Synced to Scope `v0.1.0` docs/release state (no `v1.0` stable published).

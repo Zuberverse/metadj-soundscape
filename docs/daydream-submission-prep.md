@@ -1,9 +1,11 @@
 # MetaDJ Soundscape — Daydream Submission Prep
 
-**Last Modified**: 2026-01-09 18:35 EST
-**Status**: Draft
+**Last Modified**: 2026-02-10 11:51 EST
+**Status**: Historical Draft Reference
 
 ---
+
+This document is preserved as submission-process history. For active technical guidance, use `docs/scope.md`, `docs/api-reference.md`, and `docs/architecture.md`.
 
 ## Submission Structure (Based on Frost Bytes Example)
 

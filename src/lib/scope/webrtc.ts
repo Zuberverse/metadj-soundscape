@@ -51,7 +51,10 @@ export async function createScopeWebRtcSession(
       };
 
       if (sessionId) {
-        await scopeClient.addIceCandidates(sessionId, [payload]);
+        const ok = await scopeClient.addIceCandidates(sessionId, [payload]);
+        if (!ok) {
+          console.warn("[Scope] Failed to send ICE candidate");
+        }
       } else {
         pendingCandidates.push(payload);
       }
@@ -115,7 +118,10 @@ export async function createScopeWebRtcSession(
     sessionId = answer.sessionId;
 
     if (pendingCandidates.length > 0) {
-      await scopeClient.addIceCandidates(sessionId, pendingCandidates);
+      const ok = await scopeClient.addIceCandidates(sessionId, pendingCandidates);
+      if (!ok) {
+        console.warn("[Scope] Failed to flush pending ICE candidates");
+      }
       pendingCandidates.length = 0;
     }
 

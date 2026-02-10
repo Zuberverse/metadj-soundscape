@@ -1,7 +1,8 @@
 # MetaDJ Soundscape
 
 **Scope Track Project | Daydream Interactive AI Video Program**
-**Last Modified**: 2026-01-08 13:46 EST
+**Last Modified**: 2026-02-10 11:51 EST
+**Status**: Historical Reference
 
 MetaDJ Soundscape generates AI visuals that respond to music in real-time. Pick a theme, hit play, and watch the visuals evolve as the music plays. The demo track loops infinitely for seamless audio-reactive generation.
 
@@ -22,3 +23,8 @@ Audio analysis runs in the browser and streams to Scope via WebRTC. A high-VRAM 
 ---
 
 *Daydream Scope Track Hackathon | December 2024 – January 2025*
+
+Operational docs now live in:
+- `docs/scope.md`
+- `docs/api-reference.md`
+- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md`

@@ -1,6 +1,6 @@
 # Research - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-02-10 11:51 EST
 **Status**: Public Summary
 
 ## Purpose
@@ -21,14 +21,17 @@ Capture public technical notes and validated findings relevant to MetaDJ Soundsc
 - `/health` — Health check
 - `/api/v1/pipeline/load` — Pipeline load
 - `/api/v1/webrtc/offer` — WebRTC offer flow
+- `/api/v1/webrtc/offer/{session_id}` — Trickle ICE candidates
 
 ### Deployment Notes
 - Soundscape uses the Daydream Scope template on RunPod when cloud hosting is needed.
 - HF token required for TURN access; capture instance URLs in `docs/tools.md`.
 
 ### Pipeline Notes
+- Canonical load request uses `pipeline_ids` (array).
 - `longlive` is preferred for smooth prompt transitions in audio-reactive visuals.
 - `streamdiffusionv2` remains a fallback candidate to validate for 16:9 output.
+- Scope latest stable is `v0.1.0` (published 2026-02-09).
 
 ---
 

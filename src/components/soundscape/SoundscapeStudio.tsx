@@ -9,9 +9,11 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useSoundscape, DEFAULT_ASPECT_RATIO, DENOISING_STEPS } from "@/lib/soundscape";
 import type { AspectRatioConfig } from "@/lib/soundscape";
 import { getScopeClient, useScopeConnection } from "@/lib/scope";
+import type { HealthResponse, PipelineStatusResponse } from "@/lib/scope";
 import { AudioPlayer } from "./AudioPlayer";
 import { ThemeSelector } from "./ThemeSelector";
 import { AspectRatioToggle } from "./AspectRatioToggle";
+import { AnalysisMeter } from "./AnalysisMeter";
 
 // Default pipeline for Soundscape (longlive = stylized, smooth transitions)
 const DEFAULT_PIPELINE = "longlive";
@@ -19,6 +21,13 @@ const DEFAULT_PIPELINE = "longlive";
 // Reconnection configuration
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_MS = 2000;
+
+interface VideoStats {
+  width: number;
+  height: number;
+  totalFrames: number | null;
+  droppedFrames: number | null;
+}
 
 /**
  * Props for the SoundscapeStudio component.
@@ -68,9 +77,25 @@ export function SoundscapeStudio({
 
   // Aspect ratio state (16:9 widescreen by default)
   const [aspectRatio, setAspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
+  const [selectedPipeline, setSelectedPipeline] = useState(DEFAULT_PIPELINE);
+  const [availablePipelines, setAvailablePipelines] = useState<string[]>([DEFAULT_PIPELINE]);
+  const [scopeHealth, setScopeHealth] = useState<HealthResponse | null>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [lastScopeCheckAt, setLastScopeCheckAt] = useState<number | null>(null);
+  const [videoStats, setVideoStats] = useState<VideoStats>({
+    width: 0,
+    height: 0,
+    totalFrames: null,
+    droppedFrames: null,
+  });
+  const scopeClient = useMemo(() => getScopeClient(), []);
 
   // Soundscape hook
   const {
+    state: soundscapeState,
+    parameters: soundscapeParameters,
     presetThemes,
     connectAudio,
     disconnectAudio,
@@ -125,6 +150,51 @@ export function SoundscapeStudio({
     [audioReady, start, stop, startAmbient, stopAmbient, scopeStream]
   );
 
+  const refreshScopeDiagnostics = useCallback(async () => {
+    setIsDiagnosticsLoading(true);
+    setDiagnosticsError(null);
+
+    try {
+      const health = await scopeClient.checkHealth();
+      setScopeHealth(health);
+      setLastScopeCheckAt(Date.now());
+
+      if (health.status !== "ok") {
+        setPipelineStatus(null);
+        setDiagnosticsError("Scope server unavailable. Verify SCOPE_API_URL and server health.");
+        setAvailablePipelines([DEFAULT_PIPELINE]);
+        return;
+      }
+
+      const [pipelines, status] = await Promise.all([
+        scopeClient.getPipelines(),
+        scopeClient.getPipelineStatus(),
+      ]);
+
+      setPipelineStatus(status);
+
+      if (pipelines.length > 0) {
+        const sorted = [...pipelines].sort();
+        setAvailablePipelines(sorted);
+        setSelectedPipeline((current) => {
+          if (sorted.includes(current)) return current;
+          if (sorted.includes(DEFAULT_PIPELINE)) return DEFAULT_PIPELINE;
+          return sorted[0];
+        });
+      } else {
+        setDiagnosticsError("Connected to Scope, but no pipeline schemas were returned.");
+        setAvailablePipelines([DEFAULT_PIPELINE]);
+        setSelectedPipeline((current) => current || DEFAULT_PIPELINE);
+      }
+    } catch (error) {
+      setDiagnosticsError(
+        error instanceof Error ? error.message : "Failed to refresh Scope diagnostics"
+      );
+    } finally {
+      setIsDiagnosticsLoading(false);
+    }
+  }, [scopeClient]);
+
   // Connect video stream to element
   useEffect(() => {
     if (videoRef.current && scopeStream) {
@@ -133,6 +203,68 @@ export function SoundscapeStudio({
         console.warn("[Soundscape] Video autoplay blocked:", err.message);
       });
     }
+  }, [scopeStream]);
+
+  useEffect(() => {
+    void refreshScopeDiagnostics();
+  }, [refreshScopeDiagnostics]);
+
+  useEffect(() => {
+    const storedPipeline = window.localStorage.getItem("soundscape.pipeline");
+    if (storedPipeline) {
+      setSelectedPipeline(storedPipeline);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("soundscape.pipeline", selectedPipeline);
+  }, [selectedPipeline]);
+
+  useEffect(() => {
+    if (!scopeStream) {
+      setVideoStats({
+        width: 0,
+        height: 0,
+        totalFrames: null,
+        droppedFrames: null,
+      });
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const qualityApiVideo = video as HTMLVideoElement & {
+        getVideoPlaybackQuality?: () => {
+          totalVideoFrames?: number;
+          droppedVideoFrames?: number;
+        };
+        webkitDecodedFrameCount?: number;
+        webkitDroppedFrameCount?: number;
+      };
+
+      let totalFrames: number | null = null;
+      let droppedFrames: number | null = null;
+
+      if (typeof qualityApiVideo.getVideoPlaybackQuality === "function") {
+        const quality = qualityApiVideo.getVideoPlaybackQuality();
+        totalFrames = quality.totalVideoFrames ?? null;
+        droppedFrames = quality.droppedVideoFrames ?? null;
+      } else if (typeof qualityApiVideo.webkitDecodedFrameCount === "number") {
+        totalFrames = qualityApiVideo.webkitDecodedFrameCount;
+        droppedFrames = qualityApiVideo.webkitDroppedFrameCount ?? 0;
+      }
+
+      setVideoStats({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        totalFrames,
+        droppedFrames,
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
   }, [scopeStream]);
 
   // Notify parent of connection changes
@@ -145,11 +277,11 @@ export function SoundscapeStudio({
       width: aspectRatio.resolution.width,
       height: aspectRatio.resolution.height,
     };
-    if (DEFAULT_PIPELINE === "longlive") {
+    if (selectedPipeline === "longlive") {
       params.vace_enabled = false;
     }
     return params;
-  }, [aspectRatio]);
+  }, [aspectRatio, selectedPipeline]);
 
   const initialParameters = useMemo(() => {
     if (!currentTheme) return undefined;
@@ -184,8 +316,8 @@ export function SoundscapeStudio({
     retry,
     clearError,
   } = useScopeConnection({
-    scopeClient: getScopeClient(),
-    pipelineId: DEFAULT_PIPELINE,
+    scopeClient,
+    pipelineId: selectedPipeline,
     loadParams,
     initialParameters,
     maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
@@ -218,6 +350,13 @@ export function SoundscapeStudio({
   const scopeErrorSuggestion = error?.userFriendly?.suggestion ?? null;
 
   useEffect(() => {
+    if (!error) return;
+    if (error.code === "HEALTH_CHECK_FAILED" || error.code === "PIPELINE_LOAD_FAILED") {
+      void refreshScopeDiagnostics();
+    }
+  }, [error, refreshScopeDiagnostics]);
+
+  useEffect(() => {
     if (process.env.NODE_ENV === "development" && peerConnection) {
       (window as unknown as { debugPeerConnection: RTCPeerConnection }).debugPeerConnection = peerConnection;
     }
@@ -242,10 +381,16 @@ export function SoundscapeStudio({
     }
   }, [onRegisterDisconnect, handleDisconnectScope]);
 
-  const handleConnectScope = useCallback(() => {
+  const handleConnectScope = useCallback(async () => {
     clearError();
-    connect();
-  }, [clearError, connect]);
+    await refreshScopeDiagnostics();
+    await connect();
+  }, [clearError, refreshScopeDiagnostics, connect]);
+
+  const dropPercentage =
+    videoStats.totalFrames && videoStats.totalFrames > 0 && videoStats.droppedFrames !== null
+      ? (videoStats.droppedFrames / videoStats.totalFrames) * 100
+      : null;
 
   return (
     <div className="h-full flex flex-col">
@@ -254,6 +399,28 @@ export function SoundscapeStudio({
         {scopeStream ? (
           /* Video with padding and magical frame - adapts to aspect ratio */
           <div className="absolute inset-0 p-4 pt-14 pb-14 flex items-center justify-center">
+            {/* Live scope telemetry */}
+            <div className="absolute top-16 left-4 md:left-6 glass bg-black/55 border border-white/15 rounded-xl px-3 py-2 z-20 max-w-[75vw]">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-scope-cyan/80">
+                <span className="inline-block w-2 h-2 rounded-full bg-scope-cyan animate-pulse" />
+                Stream Live
+              </div>
+              <div className="mt-1 text-[10px] text-white/70 font-medium truncate">
+                Pipeline: <span className="text-white">{selectedPipeline}</span>
+              </div>
+              <div className="text-[10px] text-white/70 tabular-nums">
+                Video:{" "}
+                {videoStats.width > 0 && videoStats.height > 0
+                  ? `${videoStats.width}×${videoStats.height}`
+                  : "waiting for frames"}
+              </div>
+              {dropPercentage !== null && (
+                <div className="text-[10px] text-white/70 tabular-nums">
+                  Dropped Frames: {dropPercentage.toFixed(1)}%
+                </div>
+              )}
+            </div>
+
             {/* Magical fantastical frame - sized to video aspect ratio */}
             <div
               className="relative"
@@ -451,13 +618,75 @@ export function SoundscapeStudio({
                 </div>
               </div>
 
+              {/* Scope Diagnostics + Pipeline Selection */}
+              <div className="mb-6 glass bg-black/35 border border-white/10 rounded-2xl p-4 text-left">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] text-white/35 uppercase tracking-widest">Scope Readiness</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshScopeDiagnostics();
+                    }}
+                    disabled={isDiagnosticsLoading || isConnecting}
+                    className="px-2 py-1 text-[9px] uppercase tracking-widest rounded-lg glass bg-white/8 text-white/60 border border-white/15 hover:bg-white/12 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+                  >
+                    {isDiagnosticsLoading ? "Checking..." : "Refresh"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                  <span className="text-white/45 uppercase tracking-wide">Server</span>
+                  <span className={scopeHealth?.status === "ok" ? "text-scope-cyan font-medium" : "text-red-300 font-medium"}>
+                    {scopeHealth?.status === "ok" ? "Online" : "Offline"}
+                  </span>
+                  <span className="text-white/45 uppercase tracking-wide">Pipeline State</span>
+                  <span className="text-white/80">{pipelineStatus?.status ?? "unknown"}</span>
+                  <span className="text-white/45 uppercase tracking-wide">Scope Version</span>
+                  <span className="text-white/80">{scopeHealth?.version ?? "n/a"}</span>
+                </div>
+
+                <div className="mt-3">
+                  <label
+                    htmlFor="pipeline-select"
+                    className="block text-[10px] text-white/45 uppercase tracking-wide mb-1"
+                  >
+                    Pipeline
+                  </label>
+                  <select
+                    id="pipeline-select"
+                    value={selectedPipeline}
+                    disabled={isConnecting}
+                    onChange={(event) => setSelectedPipeline(event.target.value)}
+                    className="w-full px-3 py-2 rounded-xl glass bg-black/40 border border-white/15 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {availablePipelines.map((pipeline) => (
+                      <option key={pipeline} value={pipeline} className="bg-scope-bg">
+                        {pipeline}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {diagnosticsError && (
+                  <p className="mt-2 text-[10px] text-red-300">{diagnosticsError}</p>
+                )}
+                {lastScopeCheckAt && (
+                  <p className="mt-2 text-[10px] text-white/35">
+                    Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+
               <button
                 type="button"
-                onClick={() => handleConnectScope()}
-                className="px-10 py-4 glass bg-scope-cyan/20 hover:bg-scope-cyan/30 text-scope-cyan border border-scope-cyan/40 rounded-2xl text-sm uppercase tracking-[0.15em] transition-all duration-500 hover:scale-105 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                onClick={() => {
+                  void handleConnectScope();
+                }}
+                disabled={isConnecting || isDiagnosticsLoading}
+                className="px-10 py-4 glass bg-scope-cyan/20 hover:bg-scope-cyan/30 text-scope-cyan border border-scope-cyan/40 rounded-2xl text-sm uppercase tracking-[0.15em] transition-all duration-500 hover:scale-105 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
               >
-                Connect to Scope
+                {isConnecting ? "Connecting..." : `Connect • ${selectedPipeline}`}
               </button>
               {scopeErrorTitle && (
                 <div className="mt-6 glass bg-red-500/10 border border-red-500/30 rounded-xl p-4 relative" role="alert">
@@ -512,9 +741,9 @@ export function SoundscapeStudio({
       {/* COMPACT CONTROLS DOCK - Bottom */}
       {showControls && (
         <div id="soundscape-controls" className="flex-none glass-radiant border-t border-scope-purple/20">
-          <div className="flex items-center gap-6 px-4 py-3">
+          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:gap-6">
             {/* Music Source */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 md:min-w-[280px]">
               <h3 className="font-display text-[10px] uppercase tracking-[0.15em] text-scope-cyan/60">Music</h3>
               <AudioPlayer
                 onAudioElement={handleAudioElement}
@@ -524,7 +753,7 @@ export function SoundscapeStudio({
             </div>
 
             {/* Divider */}
-            <div className="w-px h-8 bg-white/10" aria-hidden="true" />
+            <div className="hidden md:block w-px h-8 bg-white/10" aria-hidden="true" />
 
             {/* Theme Selector */}
             <div className="flex-1 flex items-center gap-3">
@@ -533,6 +762,22 @@ export function SoundscapeStudio({
                 themes={presetThemes}
                 currentTheme={currentTheme}
                 onThemeChange={setTheme}
+                compact
+              />
+            </div>
+
+            {/* Divider */}
+            <div className="hidden xl:block w-px h-8 bg-white/10" aria-hidden="true" />
+
+            {/* Analysis + active pipeline */}
+            <div className="w-full xl:w-auto xl:min-w-[320px] space-y-2">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-white/45 uppercase tracking-wide">Active Pipeline</span>
+                <span className="text-white/80 font-medium">{selectedPipeline}</span>
+              </div>
+              <AnalysisMeter
+                analysis={soundscapeState.analysis}
+                parameters={soundscapeParameters}
                 compact
               />
             </div>

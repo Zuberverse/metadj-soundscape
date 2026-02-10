@@ -1,42 +1,34 @@
-# Daydream Scope Track - Public Brief
+# Daydream Scope Overview (Soundscape)
 
-**Last Modified**: 2026-01-10 15:37 EST
-**Source**: Daydream Scope track program materials (public summary).
+**Last Modified**: 2026-02-10 11:51 EST
+**Status**: Active Reference + Historical Context
 
 ## Overview
-The Scope Track is part of the Daydream Interactive AI Video Program. This brief summarizes the public-facing context and links used to support MetaDJ Soundscape.
 
-## Public Notes
-- The program includes workshops, office hours, and demo checkpoints.
-- Refer to official program communications for schedules and logistics.
-- Internal coordination details, prizes, and contact instructions are intentionally omitted.
+This file captures the Scope context relevant to MetaDJ Soundscape and points to canonical docs. It separates active integration references from the original Scope Track context.
 
-## Resources and Links
+## Active References (Use These First)
 
-### Official Docs
-- Scope GitHub: https://github.com/daydreamlive/scope/
-- Scope docs: https://docs.daydream.live/scope/introduction
-- RunPod quickstart: https://docs.daydream.live/scope/getting-started/quickstart#cloud-deployment-runpod
-- RunPod video tutorial: (embedded in quickstart page - "How to Run Daydream Scope in the Cloud")
-- Scope FAQ: https://www.notion.so/livepeer/Interactive-Video-Hacker-Program-Scope-FAQ-2d20a348568780b3bb81f8f38086caa1
-
-### API References
-- Scope API server docs (Quick Start + workflows): https://github.com/daydreamlive/scope/blob/main/docs/server.md
-- Scope API + core library walkthrough (Notion): https://www.notion.so/livepeer/Scope-Server-API-and-Core-Library-2b20a348568780b791f4e0d8b33d85b7
-
-### Deployment
+- Scope docs root: https://docs.daydream.live/scope
+- Scope quickstart: https://docs.daydream.live/scope/getting-started/quickstart
+- Scope API index: https://docs.daydream.live/scope/reference/api/index
+- Scope environment variables: https://docs.daydream.live/scope/reference/environment-variables
+- Scope GitHub: https://github.com/daydreamlive/scope
+- Scope releases: https://github.com/daydreamlive/scope/releases
 - RunPod template: https://runpod.io/console/deploy?template=daydream-scope
-- HuggingFace tokens: https://huggingface.co/settings/tokens
 
-## RunPod Notes (Public)
+## Verified Release State (2026-02-10)
 
-Canonical RunPod setup guidance lives in `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md` and the official quickstart.
+- Latest stable Scope release: `v0.1.0` (published 2026-02-09).
+- No stable `v1.0` release is published as of this date.
 
-**Quick Reference:**
-- **Template**: https://runpod.io/console/deploy?template=daydream-scope
-- **Access**: Port 8000 (`https://your-instance-id.runpod.io:8000`)
-- **Required**: HuggingFace token with read permissions (set as `HF_TOKEN` env var)
+## Soundscape Integration Notes
 
-## Updates and Clarifications
-- The Scope API server docs include a Quick Start and workflows section.
-- The `/docs` endpoint on the API server should reflect current Swagger UI info.
+- Health endpoint: `GET /health`.
+- Pipeline load endpoint: `POST /api/v1/pipeline/load` using `pipeline_ids`.
+- WebRTC signaling: `/api/v1/webrtc/ice-servers`, `/api/v1/webrtc/offer`, `/api/v1/webrtc/offer/{session_id}`.
+- Soundscape defaults to `longlive` pipeline with `vace_enabled: false`.
+
+## Historical Scope Track Context
+
+Soundscape originated in the Daydream Scope Track program. That context remains useful for provenance and narrative, but operational integration should follow active references above.
