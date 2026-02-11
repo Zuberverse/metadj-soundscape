@@ -5,8 +5,12 @@
 
 import type {
   HealthResponse,
+  HardwareInfoResponse,
   IceCandidatePayload,
   IceServersResponse,
+  LoraListResponse,
+  ScopePluginDescriptor,
+  ModelStatusResponse,
   PipelineDescriptor,
   PipelineLoadParams,
   PipelineSchemasResponse,
@@ -284,6 +288,164 @@ export class ScopeClient {
     } catch (error) {
       console.error("[Scope] Failed to get pipeline status:", error);
       return null;
+    }
+  }
+
+  /**
+   * Get hardware details (GPU/VRAM/Spout capabilities).
+   */
+  async getHardwareInfo(): Promise<HardwareInfoResponse | null> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/hardware/info`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get hardware info: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error("[Scope] Failed to get hardware info:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get model readiness status, optionally for a specific pipeline.
+   */
+  async getModelStatus(pipelineId?: string): Promise<ModelStatusResponse | null> {
+    try {
+      const query = pipelineId ? `?pipeline_id=${encodeURIComponent(pipelineId)}` : "";
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/models/status${query}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get model status: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error("[Scope] Failed to get model status:", error);
+      return null;
+    }
+  }
+
+  /**
+   * List available LoRA files.
+   */
+  async getLoraList(): Promise<string[]> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/lora/list`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get lora list: ${response.status}`);
+      }
+
+      const data: LoraListResponse | unknown = await response.json();
+      if (!data || typeof data !== "object") {
+        return [];
+      }
+
+      const source = (data as LoraListResponse).loras ?? (data as LoraListResponse).items ?? [];
+      if (!Array.isArray(source)) {
+        return [];
+      }
+
+      return source
+        .map((entry) => {
+          if (typeof entry === "string") return entry;
+          if (!entry || typeof entry !== "object") return "";
+          const candidate = entry.name ?? entry.path;
+          return typeof candidate === "string" ? candidate : "";
+        })
+        .filter((entry) => entry.trim().length > 0);
+    } catch (error) {
+      console.error("[Scope] Failed to get lora list:", error);
+      return [];
+    }
+  }
+
+  /**
+   * List registered plugins (if plugin server enabled).
+   */
+  async getPlugins(): Promise<ScopePluginDescriptor[]> {
+    const toDescriptor = (
+      id: string,
+      name: string,
+      record?: Record<string, unknown>
+    ): ScopePluginDescriptor => {
+      const descriptor: ScopePluginDescriptor = { id, name };
+      if (!record) return descriptor;
+      if (typeof record.version === "string") descriptor.version = record.version;
+      if (typeof record.enabled === "boolean") descriptor.enabled = record.enabled;
+      if (typeof record.source === "string") descriptor.source = record.source;
+      return descriptor;
+    };
+
+    const normalizePlugins = (data: unknown): ScopePluginDescriptor[] => {
+      if (Array.isArray(data)) {
+        const normalized: ScopePluginDescriptor[] = [];
+        data.forEach((entry, index) => {
+          if (!entry || typeof entry !== "object") return;
+          const record = entry as Record<string, unknown>;
+          const idCandidate = record.id ?? record.name ?? `plugin-${index + 1}`;
+          const nameCandidate = record.name ?? record.id ?? `Plugin ${index + 1}`;
+          normalized.push(toDescriptor(String(idCandidate), String(nameCandidate), record));
+        });
+        return normalized;
+      }
+
+      if (!data || typeof data !== "object") {
+        return [];
+      }
+
+      const root = data as Record<string, unknown>;
+      const entries = root.plugins ?? root.items ?? root.data;
+      if (Array.isArray(entries)) {
+        return normalizePlugins(entries);
+      }
+
+      if (entries && typeof entries === "object") {
+        return Object.entries(entries as Record<string, unknown>).map(([id, value]) => {
+          if (value && typeof value === "object") {
+            const record = value as Record<string, unknown>;
+            return toDescriptor(id, typeof record.name === "string" ? record.name : id, record);
+          }
+          return toDescriptor(id, id, { source: "plugin" });
+        });
+      }
+
+      return [];
+    };
+
+    const fetchPluginEndpoint = async (path: string): Promise<ScopePluginDescriptor[]> => {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/${path}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) {
+        return [];
+      }
+      const data = await response.json();
+      return normalizePlugins(data);
+    };
+
+    try {
+      const fromApi = await fetchPluginEndpoint("api/v1/plugins");
+      if (fromApi.length > 0) {
+        return fromApi;
+      }
+      return fetchPluginEndpoint("plugins");
+    } catch (error) {
+      console.error("[Scope] Failed to get plugins:", error);
+      return [];
     }
   }
 

@@ -128,4 +128,63 @@ describe("ScopeClient", () => {
       estimatedVramGb: 8,
     });
   });
+
+  it("normalizes LoRA list responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          loras: [
+            "style-one.safetensors",
+            { name: "style-two.safetensors" },
+            { path: "style-three.safetensors" },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ScopeClient("/api/scope");
+
+    const loras = await client.getLoraList();
+    expect(loras).toEqual([
+      "style-one.safetensors",
+      "style-two.safetensors",
+      "style-three.safetensors",
+    ]);
+  });
+
+  it("falls back to /plugins when /api/v1/plugins is unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            plugins: [{ id: "video-depth-anything", name: "Video Depth", enabled: true }],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ScopeClient("/api/scope");
+
+    const plugins = await client.getPlugins();
+    expect(plugins).toEqual([
+      {
+        id: "video-depth-anything",
+        name: "Video Depth",
+        enabled: true,
+        source: undefined,
+        version: undefined,
+      },
+    ]);
+  });
 });

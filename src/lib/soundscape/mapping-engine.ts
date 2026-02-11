@@ -32,10 +32,14 @@ import type {
   MappingCurve,
   PromptEntry,
   NormalizationConfig,
+  PromptAccent,
+  ReactivityProfileId,
 } from "./types";
 import {
   DENOISING_STEPS,
+  DEFAULT_REACTIVITY_PROFILE_ID,
   PARAMETER_SMOOTHING_FACTOR,
+  REACTIVITY_PROFILES,
   DEFAULT_PROMPT_TRANSITION_STEPS,
   THEME_CHANGE_TRANSITION_STEPS,
   THEME_CHANGE_COOLDOWN_MS,
@@ -55,6 +59,24 @@ const INTENSITY_DESCRIPTORS: Record<string, string> = {
   medium: "dynamic energy, flowing motion",
   high: "intense power, surging force",
   peak: "maximum intensity, transcendent energy",
+} as const;
+
+const BRIGHTNESS_DESCRIPTORS: Record<string, string> = {
+  dark: "deep shadows, moody contrast",
+  balanced: "balanced luminance, cinematic exposure",
+  radiant: "radiant highlights, luminous details",
+} as const;
+
+const TEXTURE_DESCRIPTORS: Record<string, string> = {
+  smooth: "silky gradients, clean edges",
+  granular: "textured grain, atmospheric noise",
+  crystalline: "crystalline detail, prismatic artifacts",
+} as const;
+
+const TEMPO_DESCRIPTORS: Record<string, string> = {
+  drift: "slow evolving camera drift",
+  drive: "rhythmic forward momentum",
+  blitz: "high-velocity kinetic cadence",
 } as const;
 
 // NOTE: Temporal variations REMOVED - user requested no prompt looping
@@ -85,6 +107,13 @@ export class MappingEngine {
   private normalization: NormalizationConfig;
   private lastParams: ScopeParameters | null = null;
   private smoothingFactor = PARAMETER_SMOOTHING_FACTOR;
+  private denoisingSteps: number[] = [...DENOISING_STEPS];
+  private promptOverlay: PromptAccent | null = null;
+  private reactivityProfile: ReactivityProfileId = DEFAULT_REACTIVITY_PROFILE_ID;
+  private beatNoiseMultiplier =
+    REACTIVITY_PROFILES[DEFAULT_REACTIVITY_PROFILE_ID].beatNoiseMultiplier;
+  private energySpikeThreshold =
+    REACTIVITY_PROFILES[DEFAULT_REACTIVITY_PROFILE_ID].energySpikeThreshold;
 
   // Beat handling
   private lastBeatTriggerTime = 0;
@@ -93,6 +122,9 @@ export class MappingEngine {
 
   // Intensity tracking - only changes when energy level actually changes
   private lastIntensityLevel: "low" | "medium" | "high" | "peak" = "low";
+  private lastBrightnessBand: "dark" | "balanced" | "radiant" = "balanced";
+  private lastTextureBand: "smooth" | "granular" | "crystalline" = "smooth";
+  private lastTempoBand: "drift" | "drive" | "blitz" = "drift";
   private energySpikeVariationIndex = 0;
   // NOTE: Temporal variations REMOVED - prompts are static per energy level
 
@@ -125,6 +157,7 @@ export class MappingEngine {
   ) {
     this.theme = theme;
     this.normalization = normalization;
+    this.setReactivityProfile(DEFAULT_REACTIVITY_PROFILE_ID);
   }
 
   /**
@@ -151,6 +184,9 @@ export class MappingEngine {
 
       // Reset intensity tracking to start fresh
       this.lastIntensityLevel = "low";
+      this.lastBrightnessBand = "balanced";
+      this.lastTextureBand = "smooth";
+      this.lastTempoBand = "drift";
       this.lastPromptText = null; // Force fresh prompt
       this.lastLoggedTheme = null; // Force next log
 
@@ -169,6 +205,42 @@ export class MappingEngine {
    */
   getCurrentThemeId(): string {
     return this.theme.id;
+  }
+
+  /**
+   * Override denoising schedule at runtime.
+   */
+  setDenoisingSteps(steps: number[]): void {
+    const normalized = Array.from(
+      new Set(steps.map((step) => Math.round(step)).filter((step) => step > 0))
+    );
+    this.denoisingSteps = normalized.length > 0 ? normalized : [...DENOISING_STEPS];
+  }
+
+  /**
+   * Add or clear an accent prompt entry layered on top of theme prompts.
+   */
+  setPromptOverlay(overlay: PromptAccent | null): void {
+    if (!overlay || !overlay.text.trim()) {
+      this.promptOverlay = null;
+      return;
+    }
+
+    this.promptOverlay = {
+      text: overlay.text.trim(),
+      weight: Math.max(0.05, Math.min(1, overlay.weight)),
+    };
+  }
+
+  /**
+   * Control the responsiveness profile for visuals.
+   */
+  setReactivityProfile(profile: ReactivityProfileId): void {
+    const resolved = REACTIVITY_PROFILES[profile] ?? REACTIVITY_PROFILES[DEFAULT_REACTIVITY_PROFILE_ID];
+    this.reactivityProfile = profile;
+    this.smoothingFactor = resolved.smoothingFactor;
+    this.beatNoiseMultiplier = resolved.beatNoiseMultiplier;
+    this.energySpikeThreshold = resolved.energySpikeThreshold;
   }
 
   /**
@@ -253,7 +325,7 @@ export class MappingEngine {
     );
 
     // Fixed denoising steps from shared constants (4-step schedule)
-    const denoisingSteps = [...DENOISING_STEPS];
+    const denoisingSteps = [...this.denoisingSteps];
 
     // Handle beat effects
     const beatEffect = this.handleBeatEffects(beat, derived);
@@ -262,7 +334,7 @@ export class MappingEngine {
     }
 
     // Build prompts with intensity descriptors (NO beat modifiers - beats only affect noise)
-    const prompts = this.buildPrompts(derived, beatEffect.promptOverride);
+    const prompts = this.buildPrompts(derived, beat, beatEffect.promptOverride);
 
     // Determine if we need a smooth transition for prompt changes
     // Priority: theme transition > beat effect transition > regular prompt change transition
@@ -440,7 +512,7 @@ export class MappingEngine {
     // Always apply a base noise boost on beats (regardless of configured action)
     // This makes beats universally more impactful
     if (beat.isBeat) {
-      result.noiseBoost = 0.08; // Base beat response
+      result.noiseBoost = 0.08 * this.beatNoiseMultiplier; // Base beat response
     }
 
     if (!beatMapping.enabled || !beat.isBeat) {
@@ -464,20 +536,29 @@ export class MappingEngine {
     switch (beatMapping.action) {
       case "pulse_noise":
         // Standard noise pulse
-        result.noiseBoost = Math.max(result.noiseBoost, beatMapping.intensity * 0.25);
+        result.noiseBoost = Math.max(
+          result.noiseBoost,
+          beatMapping.intensity * 0.25 * this.beatNoiseMultiplier
+        );
         break;
 
       case "cache_reset":
         // CHANGED: No longer resets cache (causes hard cuts)
         // Instead, treat as strong noise pulse
-        result.noiseBoost = Math.max(result.noiseBoost, beatMapping.intensity * 0.35);
+        result.noiseBoost = Math.max(
+          result.noiseBoost,
+          beatMapping.intensity * 0.35 * this.beatNoiseMultiplier
+        );
         break;
 
       case "prompt_cycle":
       case "transition_trigger":
         // CHANGED: No longer changes prompts on beats (causes churn)
         // Instead, treat as moderate noise pulse
-        result.noiseBoost = Math.max(result.noiseBoost, beatMapping.intensity * 0.30);
+        result.noiseBoost = Math.max(
+          result.noiseBoost,
+          beatMapping.intensity * 0.30 * this.beatNoiseMultiplier
+        );
         break;
     }
 
@@ -498,7 +579,7 @@ export class MappingEngine {
     }
   ): typeof result {
     // Energy spike detection threshold
-    const energySpikeThreshold = 0.08; // Balanced: responsive but not too sensitive
+    const energySpikeThreshold = this.energySpikeThreshold;
 
     // Check cooldowns to prevent transition stacking
     const now = Date.now();
@@ -522,9 +603,12 @@ export class MappingEngine {
       this.theme.promptVariations?.trigger === "energy_spike" &&
       derived.energyDerivative > energySpikeThreshold
     ) {
-      this.lastEnergySpikeTime = now; // Update cooldown timestamp
-
       const variations = this.theme.promptVariations.prompts;
+      if (!Array.isArray(variations) || variations.length === 0) {
+        return result;
+      }
+
+      this.lastEnergySpikeTime = now; // Update cooldown timestamp
       // Deterministic cycling instead of random to avoid abrupt visual jumps
       this.energySpikeVariationIndex =
         (this.energySpikeVariationIndex + 1) % variations.length;
@@ -560,7 +644,7 @@ export class MappingEngine {
       this.markTransitionActive(blendDuration);
 
       // Also boost noise on energy spikes
-      result.noiseBoost = Math.max(result.noiseBoost, spikeIntensity * 0.15);
+      result.noiseBoost = Math.max(result.noiseBoost, spikeIntensity * 0.15 * this.beatNoiseMultiplier);
     }
 
     return result;
@@ -611,24 +695,76 @@ export class MappingEngine {
    */
   private buildPrompts(
     derived: AnalysisState["derived"],
+    beat: AnalysisState["beat"],
     promptOverride: string | null
   ): PromptEntry[] {
     const basePrompt = this.buildBasePrompt();
     const intensityDescriptor = this.getIntensityDescriptor(derived.energy);
+    const brightnessDescriptor = this.getBrightnessDescriptor(derived.brightness);
+    const textureDescriptor = this.getTextureDescriptor(derived.texture);
+    const tempoDescriptor = this.getTempoDescriptor(beat);
 
-    // Build the reactive prompt with intensity descriptor
-    const reactivePrompt = `${basePrompt}, ${intensityDescriptor}`;
+    // Build the reactive prompt with controlled descriptor bands.
+    const reactivePrompt = `${basePrompt}, ${intensityDescriptor}, ${brightnessDescriptor}, ${textureDescriptor}, ${tempoDescriptor}`;
 
     if (promptOverride) {
-      // Blend override with reactive base
-      return [
+      // Blend override with reactive base and optional accent layer.
+      const entries: PromptEntry[] = [
         { text: promptOverride, weight: 0.4 },
         { text: reactivePrompt, weight: 0.6 },
       ];
+      if (this.promptOverlay) {
+        entries.push(this.promptOverlay);
+      }
+      return entries;
     }
 
-    // Return the reactive prompt with intensity modifier
-    return [{ text: reactivePrompt, weight: 1.0 }];
+    const entries: PromptEntry[] = [{ text: reactivePrompt, weight: 1.0 }];
+    if (this.promptOverlay) {
+      entries.push(this.promptOverlay);
+    }
+    return entries;
+  }
+
+  private getBrightnessDescriptor(brightness: number): string {
+    let band: "dark" | "balanced" | "radiant" = this.lastBrightnessBand;
+    if (brightness < 0.3) {
+      band = "dark";
+    } else if (brightness > 0.7) {
+      band = "radiant";
+    } else {
+      band = "balanced";
+    }
+    this.lastBrightnessBand = band;
+    return BRIGHTNESS_DESCRIPTORS[band];
+  }
+
+  private getTextureDescriptor(texture: number): string {
+    let band: "smooth" | "granular" | "crystalline" = this.lastTextureBand;
+    if (texture < 0.33) {
+      band = "smooth";
+    } else if (texture > 0.72) {
+      band = "crystalline";
+    } else {
+      band = "granular";
+    }
+    this.lastTextureBand = band;
+    return TEXTURE_DESCRIPTORS[band];
+  }
+
+  private getTempoDescriptor(beat: AnalysisState["beat"]): string {
+    let band: "drift" | "drive" | "blitz" = this.lastTempoBand;
+    if (beat.bpm && beat.confidence > 0.45) {
+      if (beat.bpm < 92) {
+        band = "drift";
+      } else if (beat.bpm < 132) {
+        band = "drive";
+      } else {
+        band = "blitz";
+      }
+    }
+    this.lastTempoBand = band;
+    return TEMPO_DESCRIPTORS[band];
   }
 
   // ============================================================================

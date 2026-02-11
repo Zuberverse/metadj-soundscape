@@ -40,6 +40,33 @@ export interface HealthResponse {
   vram?: string;
 }
 
+export interface HardwareInfoResponse {
+  gpu_name?: string;
+  gpu?: string;
+  total_vram_mb?: number;
+  free_vram_mb?: number;
+  spout_available?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ModelStatusResponse {
+  [key: string]: unknown;
+}
+
+export interface LoraListResponse {
+  loras?: Array<string | { name?: string; path?: string }>;
+  items?: Array<string | { name?: string; path?: string }>;
+  [key: string]: unknown;
+}
+
+export interface ScopePluginDescriptor {
+  id: string;
+  name: string;
+  version?: string;
+  enabled?: boolean;
+  source?: string;
+}
+
 // Pipeline status values returned by Scope API
 export type PipelineStatus = "not_loaded" | "loading" | "loaded" | "error" | "idle" | "unloading";
 

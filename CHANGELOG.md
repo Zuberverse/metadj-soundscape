@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-10 14:46 EST
+**Last Modified**: 2026-02-10 20:09 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -14,11 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dynamic pipeline selection from live Scope schemas before connect.
 - Live stream telemetry overlay (active pipeline, resolution, dropped-frame percentage when available).
 - Compact audio analysis meters added directly into the bottom controls dock.
+- Scope capability discovery in diagnostics (GPU/VRAM summary, model readiness, LoRA count, plugin count).
+- Generation controls panel with denoising profile, reactivity profile, prompt accent text/weight, and preset accents.
+- Persistent local preferences for pipeline, preprocessor, denoising profile, reactivity profile, and prompt accent settings.
 - Scope client regression tests covering pipeline load compatibility fallback and schema parsing.
 - Scope connection regression test to ensure the app stays in connecting state until the first video track arrives.
 - Audio analyzer regression coverage for source-to-analyzer disconnect during teardown.
 - Scope connection regression tests for video-track timeout recovery and stale async connect cancellation.
 - Audio analyzer regression coverage for zero-denominator normalization edge cases (prevents NaN/Infinity output).
+- Scope client regression coverage for LoRA list normalization and plugin endpoint fallback.
+- Soundscape hook regression coverage for generation control updates and prompt accent composition.
+- Mapping engine regression coverage for empty energy-spike prompt-variation lists.
+- Audio analyzer regression coverage for same-element analyzer reuse and low-energy noise beat suppression.
 
 ### Changed
 - Initial WebRTC prompt now includes theme style modifiers for better visual consistency at connect time.
@@ -37,8 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audio normalization now guards invalid configs (`0`/negative denominator cases) to keep derived metrics finite and clamped.
 - Soundscape disconnect now also pauses audio playback and analysis to keep UI and transport state in sync.
 - Added tap-to-play fallback when video autoplay is blocked by browser policies.
-- Connect CTA is now gated by Scope diagnostics readiness (disabled when Scope health is not `ok`).
+- Connect CTA gating now prioritizes core readiness (Scope health + pipeline selection), while diagnostics failures are surfaced as warnings instead of hard blocks.
 - Aspect ratio radios now support arrow-key navigation and the audio scrubber now shows a visible keyboard focus ring.
+- Scope client includes typed hardware/model/plugin capability endpoints with plugin fallback (`/api/v1/plugins` → `/plugins`).
+- Mapping engine supports runtime control of denoising schedules, prompt overlay accents, and reactivity profiles.
+- Mapping engine now guards against empty energy-spike prompt variation arrays to avoid invalid transition payloads.
+- Audio analyzer now enforces a single active analyzer chain per audio element and adds beat-floor gating for low-noise stability.
+- Adaptive energy normalization updates now apply after the current frame calculation to preserve expected instantaneous normalization behavior.
+- Dock/mobile UX and a11y upgraded: hide-controls action added, compact control targets expanded to 44px, theme selection uses radiogroup semantics, and analysis meters expose ARIA progressbars.
 
 ## [1.0.0] - 2026-01-08
 

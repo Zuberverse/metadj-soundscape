@@ -20,6 +20,16 @@
  */
 export const DENOISING_STEPS = [1000, 750, 500, 250] as const;
 
+export const DENOISING_PROFILES = {
+  speed: [1000, 500, 250],
+  balanced: [1000, 750, 500, 250],
+  quality: [1000, 850, 700, 550, 400, 250],
+} as const;
+
+export type DenoisingProfileId = keyof typeof DENOISING_PROFILES;
+
+export const DEFAULT_DENOISING_PROFILE_ID: DenoisingProfileId = "balanced";
+
 /**
  * Alternative schedules (for reference/future use):
  * - 3-step: [1000, 500, 250] → ~20-25 FPS
@@ -88,6 +98,28 @@ export const RECONNECT_BASE_DELAY_MS = 2000;
  * Lower = smoother transitions, higher = more responsive.
  */
 export const PARAMETER_SMOOTHING_FACTOR = 0.15;
+
+export const REACTIVITY_PROFILES = {
+  cinematic: {
+    smoothingFactor: 0.08,
+    beatNoiseMultiplier: 0.85,
+    energySpikeThreshold: 0.11,
+  },
+  balanced: {
+    smoothingFactor: PARAMETER_SMOOTHING_FACTOR,
+    beatNoiseMultiplier: 1.0,
+    energySpikeThreshold: 0.08,
+  },
+  kinetic: {
+    smoothingFactor: 0.28,
+    beatNoiseMultiplier: 1.25,
+    energySpikeThreshold: 0.06,
+  },
+} as const;
+
+export type ReactivityProfileId = keyof typeof REACTIVITY_PROFILES;
+
+export const DEFAULT_REACTIVITY_PROFILE_ID: ReactivityProfileId = "balanced";
 
 /**
  * Default transition frames for prompt changes (music mode).

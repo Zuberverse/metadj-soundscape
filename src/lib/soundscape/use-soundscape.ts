@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioAnalyzer } from "./audio-analyzer";
 import { MappingEngine, ParameterSender } from "./mapping-engine";
 import { PRESET_THEMES, THEMES_BY_ID, createCustomTheme } from "./themes";
@@ -15,11 +15,17 @@ import type {
   ScopeParameters,
   SoundscapeState,
   CustomThemeInput,
+  DenoisingProfileId,
+  ReactivityProfileId,
+  PromptAccent,
+  PromptEntry,
 } from "./types";
 import {
-  DENOISING_STEPS,
   AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+  DEFAULT_DENOISING_PROFILE_ID,
+  DEFAULT_REACTIVITY_PROFILE_ID,
   DEFAULT_THEME_ID,
+  DENOISING_PROFILES,
 } from "./constants";
 
 // ============================================================================
@@ -28,6 +34,11 @@ import {
 
 /** Get the default theme object */
 const getDefaultTheme = (): Theme => THEMES_BY_ID[DEFAULT_THEME_ID];
+
+const clampPromptAccentWeight = (weight: number): number => {
+  if (!Number.isFinite(weight)) return 0.25;
+  return Math.max(0.05, Math.min(1, weight));
+};
 
 // ============================================================================
 // Hook Interface
@@ -73,6 +84,22 @@ export interface UseSoundscapeReturn {
   setTheme: (themeIdOrInput: string | CustomThemeInput) => void;
   /** Get current theme */
   currentTheme: Theme;
+  /** Active denoising profile */
+  denoisingProfileId: DenoisingProfileId;
+  /** Active reactivity profile */
+  reactivityProfileId: ReactivityProfileId;
+  /** Prompt accent layer */
+  promptAccent: PromptAccent;
+  /** Current denoising schedule */
+  activeDenoisingSteps: number[];
+  /** Apply denoising profile */
+  setDenoisingProfile: (profileId: DenoisingProfileId) => void;
+  /** Apply reactivity profile */
+  setReactivityProfile: (profileId: ReactivityProfileId) => void;
+  /** Set prompt accent layer */
+  setPromptAccent: (text: string, weight?: number) => void;
+  /** Compose prompt entries with optional accent layer */
+  composePromptEntries: (basePrompt: string) => PromptEntry[];
 }
 
 // ============================================================================
@@ -114,6 +141,14 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   // State - initialize theme synchronously
   const [currentTheme, setCurrentTheme] = useState<Theme>(() => getInitialTheme());
+  const [denoisingProfileId, setDenoisingProfileId] =
+    useState<DenoisingProfileId>(DEFAULT_DENOISING_PROFILE_ID);
+  const [reactivityProfileId, setReactivityProfileId] =
+    useState<ReactivityProfileId>(DEFAULT_REACTIVITY_PROFILE_ID);
+  const [promptAccent, setPromptAccentState] = useState<PromptAccent>({
+    text: "",
+    weight: 0.25,
+  });
 
   // CRITICAL: Use a ref to track the CURRENT theme for closures
   // This prevents stale closure issues where callbacks capture old theme state
@@ -135,6 +170,38 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   const [parameters, setParameters] = useState<ScopeParameters | null>(null);
   const parametersRef = useRef<ScopeParameters | null>(null);
+  const activeDenoisingSteps = useMemo(
+    () =>
+      [...(DENOISING_PROFILES[denoisingProfileId] ?? DENOISING_PROFILES[DEFAULT_DENOISING_PROFILE_ID])],
+    [denoisingProfileId]
+  );
+
+  const composePromptEntries = useCallback(
+    (basePrompt: string): PromptEntry[] => {
+      const entries: PromptEntry[] = [{ text: basePrompt, weight: 1.0 }];
+      if (promptAccent.text.trim()) {
+        entries.push({
+          text: promptAccent.text.trim(),
+          weight: clampPromptAccentWeight(promptAccent.weight),
+        });
+      }
+      return entries;
+    },
+    [promptAccent]
+  );
+
+  const applyEngineControls = useCallback(
+    (engine: MappingEngine) => {
+      engine.setDenoisingSteps(activeDenoisingSteps);
+      engine.setReactivityProfile(reactivityProfileId);
+      engine.setPromptOverlay(
+        promptAccent.text.trim()
+          ? { text: promptAccent.text.trim(), weight: clampPromptAccentWeight(promptAccent.weight) }
+          : null
+      );
+    },
+    [activeDenoisingSteps, reactivityProfileId, promptAccent]
+  );
 
   // Debug logger
   const log = useCallback(
@@ -145,6 +212,24 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     },
     [debug]
   );
+
+  const setDenoisingProfile = useCallback((profileId: DenoisingProfileId) => {
+    if (!DENOISING_PROFILES[profileId]) {
+      return;
+    }
+    setDenoisingProfileId(profileId);
+  }, []);
+
+  const setReactivityProfile = useCallback((profileId: ReactivityProfileId) => {
+    setReactivityProfileId(profileId);
+  }, []);
+
+  const setPromptAccent = useCallback((text: string, weight = 0.25) => {
+    setPromptAccentState({
+      text: text.trim(),
+      weight: clampPromptAccentWeight(weight),
+    });
+  }, []);
 
   // ============================================================================
   // Theme Management
@@ -199,12 +284,12 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       if (dataChannelRef.current?.readyState === "open") {
         // Build new theme prompt
         const newBasePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
-        const newPrompts = [{ text: newBasePrompt, weight: 1.0 }];
+        const newPrompts = composePromptEntries(newBasePrompt);
 
         // Send with transition for smooth crossfade
         const themeChangeParams = {
           prompts: newPrompts,
-          denoising_step_list: [...DENOISING_STEPS],
+          denoising_step_list: [...activeDenoisingSteps],
           noise_scale: 0.5,
           transition: {
             target_prompts: newPrompts,
@@ -231,7 +316,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         // Update UI state
         const scopeParams: ScopeParameters = {
           prompts: newPrompts,
-          denoisingSteps: [...DENOISING_STEPS],
+          denoisingSteps: [...activeDenoisingSteps],
           noiseScale: 0.5,
           transition: {
             target_prompts: newPrompts,
@@ -247,7 +332,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
       setState((prev) => ({ ...prev, activeTheme: theme }));
     },
-    [resolveTheme, log]
+    [resolveTheme, composePromptEntries, activeDenoisingSteps, log]
   );
 
   // Note: Theme is initialized synchronously in useState above
@@ -286,9 +371,11 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         if (mappingEngineRef.current) {
           // Engine exists - update to current theme
           mappingEngineRef.current.setTheme(theme);
+          applyEngineControls(mappingEngineRef.current);
           log("Reusing mapping engine with theme:", theme.name);
         } else {
           mappingEngineRef.current = new MappingEngine(theme);
+          applyEngineControls(mappingEngineRef.current);
           log("Created mapping engine with theme:", theme.name);
         }
 
@@ -310,7 +397,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         throw error;
       }
     },
-    [effectiveUpdateRate, log] // Removed currentTheme - we use currentThemeRef instead
+    [effectiveUpdateRate, applyEngineControls, log] // Removed currentTheme - we use currentThemeRef instead
   );
 
   const disconnectAudio = useCallback(() => {
@@ -343,6 +430,12 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     },
     [log]
   );
+
+  useEffect(() => {
+    if (mappingEngineRef.current) {
+      applyEngineControls(mappingEngineRef.current);
+    }
+  }, [applyEngineControls]);
 
   // ============================================================================
   // Analysis Control
@@ -432,10 +525,12 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     // Initialize mapping engine if needed (without audio analyzer)
     if (!mappingEngineRef.current) {
       mappingEngineRef.current = new MappingEngine(theme);
+      applyEngineControls(mappingEngineRef.current);
       log("Created mapping engine for ambient with theme:", theme.name);
     } else {
       // Ensure engine has the current theme
       mappingEngineRef.current.setTheme(theme);
+      applyEngineControls(mappingEngineRef.current);
       log("Updated existing mapping engine to theme:", theme.name);
     }
 
@@ -457,11 +552,11 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
     // Build and send initial ambient parameters
     const basePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
-    const prompts = [{ text: basePrompt, weight: 1.0 }];
+    const prompts = composePromptEntries(basePrompt);
 
     const params = {
       prompts,
-      denoising_step_list: [...DENOISING_STEPS],
+      denoising_step_list: [...activeDenoisingSteps],
       noise_scale: 0.5,
       transition: {
         target_prompts: prompts,
@@ -483,7 +578,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     // Update React state for UI
     const scopeParams: ScopeParameters = {
       prompts,
-      denoisingSteps: [...DENOISING_STEPS],
+      denoisingSteps: [...activeDenoisingSteps],
       noiseScale: 0.5,
       transition: {
         target_prompts: prompts,
@@ -502,7 +597,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     }, 60000); // Very long interval since it does nothing
 
     setState((prev) => ({ ...prev, playback: "playing" }));
-  }, [effectiveUpdateRate, log]);
+  }, [effectiveUpdateRate, applyEngineControls, composePromptEntries, activeDenoisingSteps, log]);
 
   const stopAmbient = useCallback(() => {
     if (ambientIntervalRef.current) {
@@ -540,6 +635,14 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     stopAmbient,
     setTheme,
     currentTheme,
+    denoisingProfileId,
+    reactivityProfileId,
+    promptAccent,
+    activeDenoisingSteps,
+    setDenoisingProfile,
+    setReactivityProfile,
+    setPromptAccent,
+    composePromptEntries,
   };
 }
 

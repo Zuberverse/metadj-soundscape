@@ -52,6 +52,9 @@ export type {
   ReactivityPreset,
   BeatResponse,
   CustomThemeInput,
+  DenoisingProfileId,
+  ReactivityProfileId,
+  PromptAccent,
 
   // Scope Parameters
   ScopeParameters,
@@ -80,6 +83,8 @@ export {
 // Re-export configuration constants
 export {
   DENOISING_STEPS,
+  DENOISING_PROFILES,
+  DEFAULT_DENOISING_PROFILE_ID,
   PARAMETER_UPDATE_RATE_HZ,
   UI_UPDATE_RATE_HZ,
   AUDIO_ANALYSIS_RATE_HZ,
@@ -88,6 +93,8 @@ export {
   MAX_RECONNECT_ATTEMPTS,
   RECONNECT_BASE_DELAY_MS,
   PARAMETER_SMOOTHING_FACTOR,
+  REACTIVITY_PROFILES,
+  DEFAULT_REACTIVITY_PROFILE_ID,
   DEFAULT_PROMPT_TRANSITION_STEPS,
   THEME_CHANGE_TRANSITION_STEPS,
   ENERGY_SPIKE_COOLDOWN_MS,

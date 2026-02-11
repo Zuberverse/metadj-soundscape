@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MappingEngine } from "./mapping-engine";
 import { COSMIC_VOYAGE, NEON_FOUNDRY } from "./themes";
 import { DENOISING_STEPS } from "./constants";
-import type { AnalysisState } from "./types";
+import type { AnalysisState, Theme } from "./types";
 
 const makeAnalysis = (energy: number, isBeat = false): AnalysisState => ({
   features: {
@@ -55,5 +55,30 @@ describe("MappingEngine", () => {
     expect(paramsWithBeat.noiseScale).toBeGreaterThan(paramsNoBeat.noiseScale);
     // Should NOT reset cache (pulse_noise preserves continuity)
     expect(paramsWithBeat.resetCache).toBeFalsy();
+  });
+
+  it("skips energy-spike transitions when prompt variation list is empty", () => {
+    const themeWithEmptyVariations: Theme = {
+      ...NEON_FOUNDRY,
+      promptVariations: {
+        trigger: "energy_spike",
+        prompts: [],
+        blendDuration: 6,
+      },
+    };
+    const engine = new MappingEngine(themeWithEmptyVariations);
+
+    const params = engine.computeParameters({
+      ...makeAnalysis(0.8, false),
+      derived: {
+        energy: 0.8,
+        brightness: 0.5,
+        texture: 0.5,
+        energyDerivative: 0.2,
+        peakEnergy: 0.8,
+      },
+    });
+
+    expect(params.transition).toBeUndefined();
   });
 });

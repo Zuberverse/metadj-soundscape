@@ -35,14 +35,22 @@ interface MeterBarProps {
 
 function MeterBar({ label, value, color, showValue = true }: MeterBarProps) {
   const percentage = Math.round(value * 100);
+  const meterId = label.toLowerCase().replace(/\s+/g, "-");
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest px-1">
-        <span className="text-white/40">{label}</span>
-        {showValue && <span className="text-white/60 text-pop">{percentage}%</span>}
+      <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest px-1" id={`${meterId}-label`}>
+        <span className="text-white/60">{label}</span>
+        {showValue && <span className="text-white/75 text-pop">{percentage}%</span>}
       </div>
-      <div className="h-1.5 glass bg-black/40 rounded-full overflow-hidden border border-white/5">
+      <div
+        className="h-1.5 glass bg-black/40 rounded-full overflow-hidden border border-white/5"
+        role="progressbar"
+        aria-labelledby={`${meterId}-label`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percentage}
+      >
         <div
           className="h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
           style={{
@@ -59,6 +67,8 @@ function MeterBar({ label, value, color, showValue = true }: MeterBarProps) {
 export function AnalysisMeter({ analysis, parameters, compact = false }: AnalysisMeterProps) {
   const derived = analysis?.derived;
   const beat = analysis?.beat;
+  const compactEnergy = Math.round((derived?.energy ?? 0) * 100);
+  const compactBrightness = Math.round((derived?.brightness ?? 0) * 100);
 
   // Compact mode for dock
   if (compact) {
@@ -68,32 +78,48 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-scope-purple/70 font-medium uppercase">E</span>
-            <div className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10">
+            <div
+              className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10"
+              role="progressbar"
+              aria-label="Energy level"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={compactEnergy}
+            >
               <div
                 className="h-full bg-scope-purple rounded-full transition-all duration-150"
                 style={{
-                  width: `${Math.round((derived?.energy ?? 0) * 100)}%`,
+                  width: `${compactEnergy}%`,
                   boxShadow: derived?.energy && derived.energy > 0.3 ? '0 0 8px rgba(139,92,246,0.5)' : 'none'
                 }}
               />
             </div>
+            <span className="sr-only">Energy {compactEnergy}%</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-scope-cyan/70 font-medium uppercase">B</span>
-            <div className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10">
+            <div
+              className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10"
+              role="progressbar"
+              aria-label="Brightness level"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={compactBrightness}
+            >
               <div
                 className="h-full bg-scope-cyan rounded-full transition-all duration-150"
                 style={{
-                  width: `${Math.round((derived?.brightness ?? 0) * 100)}%`,
+                  width: `${compactBrightness}%`,
                   boxShadow: derived?.brightness && derived.brightness > 0.3 ? '0 0 8px rgba(6,182,212,0.5)' : 'none'
                 }}
               />
             </div>
+            <span className="sr-only">Brightness {compactBrightness}%</span>
           </div>
         </div>
 
         {/* BPM */}
-        <div className="flex items-center gap-2 glass bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+        <div className="flex items-center gap-2 glass bg-white/5 px-3 py-1.5 rounded-lg border border-white/10" role="status" aria-live="polite">
           <div className={`w-2 h-2 rounded-full transition-all duration-150 ${beat?.isBeat ? "bg-scope-magenta shadow-[0_0_8px_rgba(236,72,153,0.6)]" : "bg-white/20"}`} />
           <span className="text-sm text-white/80 font-semibold tabular-nums">{beat?.bpm ?? "--"}</span>
           <span className="text-[9px] text-white/40 uppercase">bpm</span>
@@ -106,7 +132,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
     <div className="space-y-8">
       {/* Audio Analysis Section */}
       <div className="space-y-6">
-        <h4 className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] px-1">
+        <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
           Spectral Data
         </h4>
         <div className="space-y-6">
@@ -130,7 +156,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
       {/* Beat Detection Section */}
       <div className="space-y-6">
-        <h4 className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] px-1">
+        <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
           Temporal Sync
         </h4>
         <div className="flex items-center gap-6 glass bg-white/5 p-5 rounded-[2rem] border border-white/5 group">
@@ -156,10 +182,10 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
               <span className="text-3xl font-bold text-white tracking-tighter text-pop">
                 {beat?.bpm ?? "--"}
               </span>
-              <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">BPM</span>
+              <span className="text-[10px] font-black text-white/45 uppercase tracking-widest">BPM</span>
             </div>
             {beat?.confidence !== undefined && beat.confidence > 0 && (
-              <div className="text-[9px] font-bold text-white/10 uppercase tracking-widest">
+              <div className="text-[9px] font-bold text-white/45 uppercase tracking-widest">
                 Accuracy: {Math.round(beat.confidence * 100)}%
               </div>
             )}
@@ -170,7 +196,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
       {/* Scope Parameters Section */}
       {parameters && (
         <div className="space-y-6">
-          <h4 className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] px-1">
+          <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
             Engine Config
           </h4>
           <div className="space-y-6">
@@ -183,8 +209,8 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
           {/* Denoising Steps */}
           <div className="pt-2 px-1 flex justify-between items-center">
-            <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Denoising Latency</span>
-            <span className="text-[10px] font-bold text-white/40 tabular-nums tracking-tighter">
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/50">Denoising Latency</span>
+            <span className="text-[10px] font-bold text-white/65 tabular-nums tracking-tighter">
               [{parameters.denoisingSteps.join(", ")}]
             </span>
           </div>
@@ -194,7 +220,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
       {/* No Data State */}
       {!analysis && (
         <div className="text-center py-12 glass bg-white/5 rounded-[2rem] border border-white/5 border-dashed">
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/10">Awaiting Signal Ingest</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Awaiting Signal Ingest</p>
         </div>
       )}
     </div>

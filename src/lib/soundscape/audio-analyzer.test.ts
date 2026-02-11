@@ -17,11 +17,13 @@ class MockAudioContext {
   createMediaElementSource = vi.fn(() => {
     const source = new MockMediaElementSourceNode();
     lastSourceNode = source;
+    createdSourceNodes.push(source);
     return source;
   });
   createAnalyser = vi.fn(() => {
     const analyzer = new MockAnalyserNode();
     lastAnalyserNode = analyzer;
+    createdAnalyserNodes.push(analyzer);
     return analyzer;
   });
   resume = vi.fn(async () => {
@@ -45,6 +47,8 @@ class MockAnalyserNode {
 
 let lastSourceNode: MockMediaElementSourceNode | null = null;
 let lastAnalyserNode: MockAnalyserNode | null = null;
+let createdSourceNodes: MockMediaElementSourceNode[] = [];
+let createdAnalyserNodes: MockAnalyserNode[] = [];
 
 // Mock HTMLAudioElement
 function createMockAudioElement(): HTMLAudioElement {
@@ -97,6 +101,8 @@ beforeEach(() => {
   mockMeydaCallback.current = null;
   lastSourceNode = null;
   lastAnalyserNode = null;
+  createdSourceNodes = [];
+  createdAnalyserNodes = [];
 });
 
 afterEach(() => {
@@ -133,6 +139,27 @@ describe("AudioAnalyzer", () => {
 
       // Analyzer should accept config (internal state)
       expect(analyzer).toBeDefined();
+    });
+
+    it("disconnects prior analyzer chain when reusing the same audio element", async () => {
+      const audioElement = createMockAudioElement();
+      const firstAnalyzer = new AudioAnalyzer();
+      const secondAnalyzer = new AudioAnalyzer();
+
+      await firstAnalyzer.initialize(audioElement);
+
+      expect(createdSourceNodes).toHaveLength(1);
+      expect(createdAnalyserNodes).toHaveLength(1);
+
+      const sharedSource = createdSourceNodes[0];
+      const firstAnalyserNode = createdAnalyserNodes[0];
+
+      await secondAnalyzer.initialize(audioElement);
+
+      expect(createdSourceNodes).toHaveLength(1);
+      expect(createdAnalyserNodes).toHaveLength(2);
+      expect(sharedSource.disconnect).toHaveBeenCalledWith(firstAnalyserNode);
+      expect(firstAnalyserNode.disconnect).toHaveBeenCalled();
     });
   });
 
@@ -468,6 +495,35 @@ describe("BeatDetector (via AudioAnalyzer)", () => {
         }),
       })
     );
+  });
+
+  it("does not trigger beats from low-energy noise fluctuations", async () => {
+    const analyzer = new AudioAnalyzer();
+    const audioElement = createMockAudioElement();
+
+    await analyzer.initialize(audioElement);
+
+    const callback = vi.fn();
+    analyzer.start(callback);
+
+    const lowEnergyFrames = [0.004, 0.006, 0.008, 0.01, 0.012, 0.009, 0.007, 0.011];
+    for (let i = 0; i < 40; i++) {
+      const rms = lowEnergyFrames[i % lowEnergyFrames.length];
+      if (mockMeydaCallback.current) {
+        mockMeydaCallback.current({
+          rms,
+          spectralCentroid: 1000,
+          spectralFlatness: 0.2,
+          spectralRolloff: 2000,
+          zcr: 30,
+        });
+      }
+    }
+
+    const detectedAnyBeat = callback.mock.calls.some(
+      (call) => (call[0] as { beat?: { isBeat?: boolean } }).beat?.isBeat
+    );
+    expect(detectedAnyBeat).toBe(false);
   });
 
   it("respects minimum beat interval", async () => {

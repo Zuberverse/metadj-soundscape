@@ -6,7 +6,13 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useSoundscape, DEFAULT_ASPECT_RATIO, DENOISING_STEPS } from "@/lib/soundscape";
+import {
+  useSoundscape,
+  DEFAULT_ASPECT_RATIO,
+  DENOISING_PROFILES,
+  type DenoisingProfileId,
+  type ReactivityProfileId,
+} from "@/lib/soundscape";
 import type { AspectRatioConfig } from "@/lib/soundscape";
 import { getScopeClient, useScopeConnection } from "@/lib/scope";
 import type { HealthResponse, PipelineDescriptor, PipelineStatusResponse } from "@/lib/scope";
@@ -18,6 +24,12 @@ import { AnalysisMeter } from "./AnalysisMeter";
 // Default pipeline for Soundscape (longlive = stylized, smooth transitions)
 const DEFAULT_PIPELINE = "longlive";
 const NO_PREPROCESSOR = "__none__";
+const PROMPT_ACCENT_PRESETS = [
+  "volumetric god rays",
+  "cinematic bokeh",
+  "prismatic particles",
+  "holographic fog",
+];
 const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
   id: DEFAULT_PIPELINE,
   name: "LongLive",
@@ -34,6 +46,15 @@ interface VideoStats {
   height: number;
   totalFrames: number | null;
   droppedFrames: number | null;
+}
+
+interface ScopeCapabilities {
+  hardwareSummary: string;
+  freeVramGb: number | null;
+  totalVramGb: number | null;
+  modelReady: boolean | null;
+  loraCount: number;
+  pluginCount: number;
 }
 
 /**
@@ -101,6 +122,14 @@ export function SoundscapeStudio({
     totalFrames: null,
     droppedFrames: null,
   });
+  const [scopeCapabilities, setScopeCapabilities] = useState<ScopeCapabilities>({
+    hardwareSummary: "Unknown",
+    freeVramGb: null,
+    totalVramGb: null,
+    modelReady: null,
+    loraCount: 0,
+    pluginCount: 0,
+  });
   const scopeClient = useMemo(() => getScopeClient(), []);
 
   const isPreprocessorPipeline = useCallback((pipeline: PipelineDescriptor) => {
@@ -146,6 +175,14 @@ export function SoundscapeStudio({
     currentTheme,
     startAmbient,
     stopAmbient,
+    denoisingProfileId,
+    reactivityProfileId,
+    promptAccent,
+    activeDenoisingSteps,
+    setDenoisingProfile,
+    setReactivityProfile,
+    setPromptAccent,
+    composePromptEntries,
   } = useSoundscape({
     initialTheme: "neon-foundry", // Start with Foundry instead of Cosmic to avoid default flash
     debug: process.env.NODE_ENV === "development",
@@ -194,6 +231,45 @@ export function SoundscapeStudio({
     [audioReady, start, stop, startAmbient, stopAmbient, scopeStream]
   );
 
+  const handleDenoisingProfileChange = useCallback(
+    (value: string) => {
+      if (value in DENOISING_PROFILES) {
+        setDenoisingProfile(value as DenoisingProfileId);
+      }
+    },
+    [setDenoisingProfile]
+  );
+
+  const handleReactivityProfileChange = useCallback(
+    (value: string) => {
+      setReactivityProfile(value as ReactivityProfileId);
+    },
+    [setReactivityProfile]
+  );
+
+  const handlePromptAccentTextChange = useCallback(
+    (value: string) => {
+      setPromptAccent(value, promptAccent.weight);
+    },
+    [setPromptAccent, promptAccent.weight]
+  );
+
+  const handlePromptAccentWeightChange = useCallback(
+    (weight: number) => {
+      setPromptAccent(promptAccent.text, weight);
+    },
+    [setPromptAccent, promptAccent.text]
+  );
+
+  const handleApplyPromptAccentPreset = useCallback(
+    (preset: string) => {
+      const current = promptAccent.text.trim();
+      const next = current ? `${current}, ${preset}` : preset;
+      setPromptAccent(next, promptAccent.weight);
+    },
+    [promptAccent.text, promptAccent.weight, setPromptAccent]
+  );
+
   const refreshScopeDiagnostics = useCallback(async () => {
     setIsDiagnosticsLoading(true);
     setDiagnosticsError(null);
@@ -207,15 +283,64 @@ export function SoundscapeStudio({
         setPipelineStatus(null);
         setDiagnosticsError("Scope server unavailable. Verify SCOPE_API_URL and server health.");
         setAvailablePipelines([DEFAULT_PIPELINE_DESCRIPTOR]);
+        setScopeCapabilities({
+          hardwareSummary: "Unknown",
+          freeVramGb: null,
+          totalVramGb: null,
+          modelReady: null,
+          loraCount: 0,
+          pluginCount: 0,
+        });
         return;
       }
 
-      const [pipelines, status] = await Promise.all([
+      const [pipelines, status, hardwareInfo, modelStatus, loras, plugins] = await Promise.all([
         scopeClient.getPipelineDescriptors(),
         scopeClient.getPipelineStatus(),
+        scopeClient.getHardwareInfo(),
+        scopeClient.getModelStatus(selectedPipeline),
+        scopeClient.getLoraList(),
+        scopeClient.getPlugins(),
       ]);
 
       setPipelineStatus(status);
+      const totalVramMb =
+        typeof hardwareInfo?.total_vram_mb === "number" ? hardwareInfo.total_vram_mb : null;
+      const freeVramMb =
+        typeof hardwareInfo?.free_vram_mb === "number" ? hardwareInfo.free_vram_mb : null;
+      const gpuName =
+        (typeof hardwareInfo?.gpu_name === "string" && hardwareInfo.gpu_name) ||
+        (typeof hardwareInfo?.gpu === "string" && hardwareInfo.gpu) ||
+        health.gpu ||
+        "Unknown GPU";
+
+      const modelReady = (() => {
+        if (!modelStatus || typeof modelStatus !== "object") return null;
+        const record = modelStatus as Record<string, unknown>;
+        if (typeof record.ready === "boolean") return record.ready;
+        if (typeof record.downloaded === "boolean") return record.downloaded;
+        if (typeof record.status === "string") {
+          return ["ready", "downloaded", "ok"].includes(record.status.toLowerCase());
+        }
+        if (record[selectedPipeline] && typeof record[selectedPipeline] === "object") {
+          const selected = record[selectedPipeline] as Record<string, unknown>;
+          if (typeof selected.ready === "boolean") return selected.ready;
+          if (typeof selected.downloaded === "boolean") return selected.downloaded;
+          if (typeof selected.status === "string") {
+            return ["ready", "downloaded", "ok"].includes(selected.status.toLowerCase());
+          }
+        }
+        return null;
+      })();
+
+      setScopeCapabilities({
+        hardwareSummary: gpuName,
+        freeVramGb: freeVramMb !== null ? freeVramMb / 1024 : null,
+        totalVramGb: totalVramMb !== null ? totalVramMb / 1024 : null,
+        modelReady,
+        loraCount: loras.length,
+        pluginCount: plugins.length,
+      });
 
       if (pipelines.length > 0) {
         const sorted = [...pipelines].sort((a, b) => a.name.localeCompare(b.name));
@@ -251,7 +376,7 @@ export function SoundscapeStudio({
     } finally {
       setIsDiagnosticsLoading(false);
     }
-  }, [scopeClient, isPreprocessorPipeline]);
+  }, [scopeClient, isPreprocessorPipeline, selectedPipeline]);
 
   // Connect video stream to element
   useEffect(() => {
@@ -298,7 +423,20 @@ export function SoundscapeStudio({
     if (storedPreprocessor) {
       setSelectedPreprocessor(storedPreprocessor);
     }
-  }, []);
+    const storedDenoisingProfile = window.localStorage.getItem("soundscape.denoisingProfile");
+    if (storedDenoisingProfile && storedDenoisingProfile in DENOISING_PROFILES) {
+      setDenoisingProfile(storedDenoisingProfile as DenoisingProfileId);
+    }
+    const storedReactivity = window.localStorage.getItem("soundscape.reactivityProfile");
+    if (storedReactivity) {
+      setReactivityProfile(storedReactivity as ReactivityProfileId);
+    }
+    const storedAccentText = window.localStorage.getItem("soundscape.promptAccent.text") ?? "";
+    const storedAccentWeight = Number(window.localStorage.getItem("soundscape.promptAccent.weight") ?? "0.25");
+    if (storedAccentText || Number.isFinite(storedAccentWeight)) {
+      setPromptAccent(storedAccentText, Number.isFinite(storedAccentWeight) ? storedAccentWeight : 0.25);
+    }
+  }, [setDenoisingProfile, setPromptAccent, setReactivityProfile]);
 
   useEffect(() => {
     window.localStorage.setItem("soundscape.pipeline", selectedPipeline);
@@ -307,6 +445,19 @@ export function SoundscapeStudio({
   useEffect(() => {
     window.localStorage.setItem("soundscape.preprocessor", selectedPreprocessor);
   }, [selectedPreprocessor]);
+
+  useEffect(() => {
+    window.localStorage.setItem("soundscape.denoisingProfile", denoisingProfileId);
+  }, [denoisingProfileId]);
+
+  useEffect(() => {
+    window.localStorage.setItem("soundscape.reactivityProfile", reactivityProfileId);
+  }, [reactivityProfileId]);
+
+  useEffect(() => {
+    window.localStorage.setItem("soundscape.promptAccent.text", promptAccent.text);
+    window.localStorage.setItem("soundscape.promptAccent.weight", String(promptAccent.weight));
+  }, [promptAccent]);
 
   useEffect(() => {
     if (!scopeStream) {
@@ -386,13 +537,13 @@ export function SoundscapeStudio({
       "calm atmosphere, gentle flow",
     ].join(", ");
     return {
-      prompts: [{ text: basePrompt, weight: 1.0 }],
+      prompts: composePromptEntries(basePrompt),
       noise_scale: currentTheme.ranges.noiseScale.min,
-      denoising_step_list: [...DENOISING_STEPS],
+      denoising_step_list: [...activeDenoisingSteps],
       manage_cache: true,
       paused: false,
     };
-  }, [currentTheme]);
+  }, [activeDenoisingSteps, composePromptEntries, currentTheme]);
 
   const stopPlaybackForDisconnect = useCallback(() => {
     stop();
@@ -450,11 +601,12 @@ export function SoundscapeStudio({
   });
 
   const isConnecting = connectionState === "connecting" || connectionState === "reconnecting";
+  const hasPipelineSelection = selectedPipeline.trim().length > 0;
   const canConnect =
     !isConnecting &&
     !isDiagnosticsLoading &&
     scopeHealth?.status === "ok" &&
-    !diagnosticsError;
+    hasPipelineSelection;
   // Use user-friendly error messages for display
   const scopeErrorTitle = error?.userFriendly?.title ?? null;
   const scopeErrorDescription = error?.userFriendly?.description ?? null;
@@ -523,6 +675,9 @@ export function SoundscapeStudio({
           <div className="absolute inset-0 p-4 pt-14 pb-14 flex items-center justify-center">
             {/* Live scope telemetry */}
             <div className="absolute top-16 left-4 md:left-6 glass bg-black/55 border border-white/15 rounded-xl px-3 py-2 z-20 max-w-[75vw]">
+              <p className="sr-only" role="status" aria-live="polite">
+                Scope stream connected. Active pipeline {activePipelineChain}.
+              </p>
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-scope-cyan/80">
                 <span className="inline-block w-2 h-2 rounded-full bg-scope-cyan animate-pulse" />
                 Stream Live
@@ -636,7 +791,7 @@ export function SoundscapeStudio({
               >
                 Initializing
               </h2>
-              <p className="text-scope-cyan/80 text-sm font-medium mb-4">
+              <p className="text-scope-cyan/80 text-sm font-medium mb-4" role="status" aria-live="polite">
                 {statusMessage || "Connecting..."}
               </p>
               <div className="w-48 h-1.5 glass bg-white/5 rounded-full mx-auto overflow-hidden">
@@ -781,6 +936,40 @@ export function SoundscapeStudio({
                   <span className="text-white/80">{scopeHealth?.version ?? "n/a"}</span>
                 </div>
 
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5">
+                  <p className="text-[10px] text-white/45 uppercase tracking-wide mb-2">Scope Capabilities</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                    <span className="text-white/50">GPU</span>
+                    <span className="text-white/85 truncate">{scopeCapabilities.hardwareSummary}</span>
+                    <span className="text-white/50">VRAM</span>
+                    <span className="text-white/85">
+                      {scopeCapabilities.totalVramGb
+                        ? `${scopeCapabilities.freeVramGb?.toFixed(1) ?? "?"}/${scopeCapabilities.totalVramGb.toFixed(1)} GB free`
+                        : "n/a"}
+                    </span>
+                    <span className="text-white/50">Models</span>
+                    <span
+                      className={
+                        scopeCapabilities.modelReady === true
+                          ? "text-scope-cyan font-medium"
+                          : scopeCapabilities.modelReady === false
+                            ? "text-amber-300 font-medium"
+                            : "text-white/70"
+                      }
+                    >
+                      {scopeCapabilities.modelReady === null
+                        ? "Unknown"
+                        : scopeCapabilities.modelReady
+                          ? "Ready"
+                          : "Not ready"}
+                    </span>
+                    <span className="text-white/50">LoRA / Plugins</span>
+                    <span className="text-white/85">
+                      {scopeCapabilities.loraCount} / {scopeCapabilities.pluginCount}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="mt-3">
                   <label
                     htmlFor="pipeline-select"
@@ -867,8 +1056,83 @@ export function SoundscapeStudio({
                   </div>
                 </div>
 
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-2">
+                  <p className="text-[10px] text-white/45 uppercase tracking-wide">Generation Controls</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[10px] text-white/55">
+                      Denoising Profile
+                      <select
+                        value={denoisingProfileId}
+                        disabled={isConnecting}
+                        onChange={(event) => handleDenoisingProfileChange(event.target.value)}
+                        className="mt-1 w-full px-2 py-1.5 rounded-lg glass bg-black/40 border border-white/15 text-[11px] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50"
+                      >
+                        <option value="speed" className="bg-scope-bg">Speed</option>
+                        <option value="balanced" className="bg-scope-bg">Balanced</option>
+                        <option value="quality" className="bg-scope-bg">Quality</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-white/55">
+                      Reactivity
+                      <select
+                        value={reactivityProfileId}
+                        disabled={isConnecting}
+                        onChange={(event) => handleReactivityProfileChange(event.target.value)}
+                        className="mt-1 w-full px-2 py-1.5 rounded-lg glass bg-black/40 border border-white/15 text-[11px] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50"
+                      >
+                        <option value="cinematic" className="bg-scope-bg">Cinematic</option>
+                        <option value="balanced" className="bg-scope-bg">Balanced</option>
+                        <option value="kinetic" className="bg-scope-bg">Kinetic</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="block text-[10px] text-white/55">
+                    Prompt Accent
+                    <input
+                      type="text"
+                      value={promptAccent.text}
+                      onChange={(event) => handlePromptAccentTextChange(event.target.value)}
+                      disabled={isConnecting}
+                      placeholder="volumetric haze, prismatic bloom..."
+                      className="mt-1 w-full px-2.5 py-1.5 rounded-lg glass bg-black/40 border border-white/15 text-[11px] text-white placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50"
+                    />
+                  </label>
+                  <label className="block text-[10px] text-white/55">
+                    Accent Weight ({promptAccent.weight.toFixed(2)})
+                    <input
+                      type="range"
+                      min={0.05}
+                      max={1}
+                      step={0.05}
+                      value={promptAccent.weight}
+                      disabled={isConnecting}
+                      onChange={(event) => handlePromptAccentWeightChange(Number(event.target.value))}
+                      className="mt-1 w-full accent-scope-cyan"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROMPT_ACCENT_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleApplyPromptAccentPreset(preset)}
+                        disabled={isConnecting}
+                        className="rounded-md border border-white/20 bg-white/8 px-2 py-1 text-[9px] uppercase tracking-wide text-white/75 hover:bg-white/15 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+                      >
+                        + {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-white/45">
+                    Active denoising: [{activeDenoisingSteps.join(", ")}]
+                  </p>
+                </div>
+
                 {diagnosticsError && (
-                  <p className="mt-2 text-[10px] text-red-300">{diagnosticsError}</p>
+                  <p className="mt-2 text-[10px] text-amber-300" role="status" aria-live="polite">
+                    Diagnostics warning: {diagnosticsError}
+                  </p>
                 )}
                 {lastScopeCheckAt && (
                   <p className="mt-2 text-[10px] text-white/35">
@@ -941,6 +1205,17 @@ export function SoundscapeStudio({
       {/* COMPACT CONTROLS DOCK - Bottom */}
       {showControls && (
         <div id="soundscape-controls" className="flex-none glass-radiant border-t border-scope-purple/20">
+          <div className="px-4 pt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={handleToggleControls}
+              aria-expanded={showControls}
+              aria-controls="soundscape-controls"
+              className="px-3 py-1.5 min-h-[44px] glass bg-white/5 hover:bg-white/10 text-white/60 hover:text-white/80 text-[9px] font-medium uppercase tracking-wide rounded border border-white/10 hover:border-scope-purple/30 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+            >
+              Hide Controls
+            </button>
+          </div>
           <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:gap-6">
             {/* Music Source */}
             <div className="flex items-center gap-3 md:min-w-[280px]">
@@ -958,12 +1233,19 @@ export function SoundscapeStudio({
             {/* Theme Selector */}
             <div className="flex-1 flex items-center gap-3">
               <h3 className="font-display text-[10px] uppercase tracking-[0.15em] text-scope-cyan/60 whitespace-nowrap">Theme</h3>
-              <ThemeSelector
-                themes={presetThemes}
-                currentTheme={currentTheme}
-                onThemeChange={setTheme}
-                compact
-              />
+              <div className="flex-1 space-y-1">
+                <ThemeSelector
+                  themes={presetThemes}
+                  currentTheme={currentTheme}
+                  onThemeChange={setTheme}
+                  compact
+                />
+                {connectionState !== "connected" && (
+                  <p className="text-[9px] text-white/45 uppercase tracking-wide">
+                    Theme updates will apply on next connect
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Divider */}
@@ -975,6 +1257,17 @@ export function SoundscapeStudio({
                 <span className="text-white/45 uppercase tracking-wide">Active Pipeline</span>
                 <span className="text-white/80 font-medium">{activePipelineChain}</span>
               </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-white/45 uppercase tracking-wide">Profiles</span>
+                <span className="text-white/80 font-medium capitalize">
+                  {denoisingProfileId} / {reactivityProfileId}
+                </span>
+              </div>
+              {promptAccent.text && (
+                <div className="text-[10px] text-white/60 truncate">
+                  Accent: <span className="text-white/80">{promptAccent.text}</span>
+                </div>
+              )}
               <AnalysisMeter
                 analysis={soundscapeState.analysis}
                 parameters={soundscapeParameters}

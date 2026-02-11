@@ -143,7 +143,7 @@ export function AudioPlayer({
           disabled={disabled}
           aria-label={isPlaying ? "Pause audio" : "Play audio"}
           className={`
-            w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all duration-300 border
+            w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-sm transition-all duration-300 border
             focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
             ${isPlaying
               ? "glass bg-scope-purple/30 text-white border-scope-purple/50 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
@@ -168,7 +168,7 @@ export function AudioPlayer({
           onClick={handleRestart}
           disabled={disabled}
           aria-label="Restart track"
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all duration-300 border glass bg-white/10 text-white/70 border-white/20 hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-sm transition-all duration-300 border glass bg-white/10 text-white/70 border-white/20 hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M1 4v6h6" />

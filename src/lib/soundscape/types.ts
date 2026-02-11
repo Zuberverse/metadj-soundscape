@@ -181,6 +181,8 @@ export interface ScopeParameters {
 
 export type ReactivityPreset = "subtle" | "balanced" | "intense" | "chaotic";
 export type BeatResponse = "none" | "pulse" | "shift" | "burst";
+export type DenoisingProfileId = "speed" | "balanced" | "quality";
+export type ReactivityProfileId = "cinematic" | "balanced" | "kinetic";
 
 export interface CustomThemeInput {
   /** Required: What do you want to see? */
@@ -191,6 +193,11 @@ export interface CustomThemeInput {
   reactivity?: ReactivityPreset;
   /** Optional: Beat behavior */
   beatResponse?: BeatResponse;
+}
+
+export interface PromptAccent {
+  text: string;
+  weight: number;
 }
 
 // ============================================================================

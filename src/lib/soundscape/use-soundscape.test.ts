@@ -37,6 +37,10 @@ const mockMappingEngineInstance = {
     noiseScale: 0.5,
   })),
   setTheme: vi.fn(),
+  setDenoisingSteps: vi.fn(),
+  setReactivityProfile: vi.fn(),
+  setPromptOverlay: vi.fn(),
+  markExternalTransitionActive: vi.fn(),
 };
 
 const mockParameterSenderInstance = {
@@ -189,6 +193,40 @@ describe("useSoundscape", () => {
       // MappingEngine.setTheme should be called when it exists
       // (engine is created on connectAudio, but setTheme updates the state regardless)
       expect(result.current.currentTheme.id).toBe("neon-foundry");
+    });
+  });
+
+  describe("generation controls", () => {
+    it("updates denoising/reactivity profiles and prompt accent", () => {
+      const { result } = renderHook(() => useSoundscape());
+
+      act(() => {
+        result.current.setDenoisingProfile("quality");
+        result.current.setReactivityProfile("kinetic");
+        result.current.setPromptAccent("volumetric fog", 0.4);
+      });
+
+      expect(result.current.denoisingProfileId).toBe("quality");
+      expect(result.current.reactivityProfileId).toBe("kinetic");
+      expect(result.current.promptAccent).toMatchObject({
+        text: "volumetric fog",
+        weight: 0.4,
+      });
+      expect(result.current.activeDenoisingSteps.length).toBeGreaterThan(0);
+    });
+
+    it("composes prompt entries with accent layer", () => {
+      const { result } = renderHook(() => useSoundscape());
+
+      act(() => {
+        result.current.setPromptAccent("prismatic particles", 0.35);
+      });
+
+      const entries = result.current.composePromptEntries("base scene");
+      expect(entries).toEqual([
+        { text: "base scene", weight: 1.0 },
+        { text: "prismatic particles", weight: 0.35 },
+      ]);
     });
   });
 

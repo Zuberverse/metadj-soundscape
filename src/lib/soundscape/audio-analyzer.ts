@@ -18,6 +18,7 @@ import type {
 interface AudioElementConnection {
   audioContext: AudioContext;
   sourceNode: MediaElementAudioSourceNode;
+  analyzerNode: AnalyserNode | null;
 }
 
 const connectedElements = new WeakMap<HTMLMediaElement, AudioElementConnection>();
@@ -31,6 +32,7 @@ export class AudioAnalyzer {
   private analyzerNode: AnalyserNode | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
   private meyda: MeydaAnalyzer | null = null;
+  private connectedElement: HTMLAudioElement | null = null;
 
   // State
   private isAnalyzing = false;
@@ -40,6 +42,9 @@ export class AudioAnalyzer {
   private energyHistory: number[] = [];
   private readonly historyLength = 10;
   private lastEnergy = 0;
+  private adaptiveEnergyCeiling = 0.15;
+  private readonly adaptiveCeilingDecay = 0.997;
+  private readonly adaptiveHeadroomMultiplier = 1.12;
 
   // Beat detection state
   private beatDetector: BeatDetector | null = null;
@@ -59,12 +64,15 @@ export class AudioAnalyzer {
     }
   ) {
     this.normalization = normalization;
+    this.adaptiveEnergyCeiling = normalization.energyMax > 0 ? normalization.energyMax : 0.15;
   }
 
   /**
    * Initialize analyzer and connect to audio element
    */
   async initialize(audioElement: HTMLAudioElement): Promise<void> {
+    this.connectedElement = audioElement;
+
     // Check if this element was already connected to Web Audio API
     const existing = connectedElements.get(audioElement);
 
@@ -72,6 +80,19 @@ export class AudioAnalyzer {
       // Reuse existing connection
       this.audioContext = existing.audioContext;
       this.sourceNode = existing.sourceNode;
+
+      if (existing.analyzerNode) {
+        try {
+          existing.sourceNode.disconnect(existing.analyzerNode);
+        } catch {
+          // No-op: connection may already be detached.
+        }
+        try {
+          existing.analyzerNode.disconnect();
+        } catch {
+          // No-op: analyzer may already be disconnected.
+        }
+      }
 
       // Resume context if it was suspended
       if (this.audioContext.state === "suspended") {
@@ -86,6 +107,7 @@ export class AudioAnalyzer {
       connectedElements.set(audioElement, {
         audioContext: this.audioContext,
         sourceNode: this.sourceNode,
+        analyzerNode: null,
       });
     }
 
@@ -96,6 +118,12 @@ export class AudioAnalyzer {
     // Connect: source -> analyzer -> destination
     this.sourceNode.connect(this.analyzerNode);
     this.analyzerNode.connect(this.audioContext.destination);
+
+    connectedElements.set(audioElement, {
+      audioContext: this.audioContext,
+      sourceNode: this.sourceNode,
+      analyzerNode: this.analyzerNode,
+    });
 
     // Initialize Meyda
     await this.initializeMeyda();
@@ -135,6 +163,17 @@ export class AudioAnalyzer {
   destroy(): void {
     this.stop();
 
+    const analyzerNode = this.analyzerNode;
+    if (this.connectedElement) {
+      const existing = connectedElements.get(this.connectedElement);
+      if (existing && existing.analyzerNode === analyzerNode) {
+        connectedElements.set(this.connectedElement, {
+          ...existing,
+          analyzerNode: null,
+        });
+      }
+    }
+
     if (this.meyda) {
       this.meyda.stop();
       this.meyda = null;
@@ -158,6 +197,7 @@ export class AudioAnalyzer {
     // and will be reused if the same audio element is connected again
     this.audioContext = null;
     this.sourceNode = null;
+    this.connectedElement = null;
 
     this.beatDetector = null;
   }
@@ -167,6 +207,12 @@ export class AudioAnalyzer {
    */
   setNormalization(config: Partial<NormalizationConfig>): void {
     this.normalization = { ...this.normalization, ...config };
+    if (this.normalization.energyMax > 0) {
+      this.adaptiveEnergyCeiling = Math.max(
+        this.adaptiveEnergyCeiling,
+        this.normalization.energyMax
+      );
+    }
   }
 
   /**
@@ -245,8 +291,10 @@ export class AudioAnalyzer {
       }
     }
 
-    // Compute derived metrics
+    // Compute derived metrics before updating adaptive ceiling so the current
+    // frame still respects the active normalization baseline.
     const derived = this.computeDerived(rawFeatures);
+    this.updateAdaptiveNormalization(rawFeatures);
 
     // Update beat detector with energy
     this.updateBeatDetection(derived.energy);
@@ -275,7 +323,7 @@ export class AudioAnalyzer {
     const { energyMax, spectralCentroidMin, spectralCentroidMax, spectralFlatnessMax } =
       this.normalization;
 
-    const safeEnergyMax = energyMax > 0 ? energyMax : 1;
+    const safeEnergyMax = Math.max(energyMax > 0 ? energyMax : 1, this.adaptiveEnergyCeiling, 0.05);
     const safeCentroidRange =
       spectralCentroidMax > spectralCentroidMin
         ? spectralCentroidMax - spectralCentroidMin
@@ -320,6 +368,24 @@ export class AudioAnalyzer {
       energyDerivative,
       peakEnergy,
     };
+  }
+
+  private updateAdaptiveNormalization(features: AudioFeatures): void {
+    const baseEnergyMax = this.normalization.energyMax > 0 ? this.normalization.energyMax : 0.15;
+    const targetCeiling = Math.max(
+      baseEnergyMax,
+      features.rms * this.adaptiveHeadroomMultiplier
+    );
+
+    if (targetCeiling > this.adaptiveEnergyCeiling) {
+      this.adaptiveEnergyCeiling = targetCeiling;
+      return;
+    }
+
+    this.adaptiveEnergyCeiling = Math.max(
+      baseEnergyMax,
+      this.adaptiveEnergyCeiling * this.adaptiveCeilingDecay
+    );
   }
 
   // ============================================================================
@@ -398,6 +464,9 @@ class BeatDetector {
 
   /** Energy spike threshold multiplier (1.3 = 30% above average) */
   private threshold = 1.3;
+  private readonly minBeatEnergy = 0.12;
+  private readonly minAverageEnergy = 0.04;
+  private readonly minSpikeDelta = 0.05;
 
   /** Frame number of last detected beat */
   private lastBeatFrame = 0;
@@ -439,7 +508,9 @@ class BeatDetector {
 
     // Check for beat (energy spike above threshold)
     const isBeat =
-      energy > avgEnergy * this.threshold &&
+      energy > Math.max(this.minBeatEnergy, avgEnergy * this.threshold) &&
+      avgEnergy > this.minAverageEnergy &&
+      energy - avgEnergy > this.minSpikeDelta &&
       this.frameCount - this.lastBeatFrame > 8; // Minimum 8 frames between beats
 
     if (isBeat) {
