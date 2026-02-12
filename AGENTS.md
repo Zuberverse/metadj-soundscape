@@ -1,7 +1,7 @@
 # MetaDJ Soundscape
 
 *Parent: /3-projects/5-software/AGENTS.md*
-**Last Modified**: 2026-01-23 22:30 EST
+**Last Modified**: 2026-02-12 11:47 EST
 
 ## Scope
 
@@ -23,6 +23,8 @@ Audio-reactive AI video generation application for the Daydream 2025 Interactive
 | `npm run lint` | ESLint |
 | `npm run type-check` | TypeScript |
 | `npm run test` | Vitest |
+
+**Codex Runtime Note**: Long-running dev servers started inside Codex tool sessions can terminate when the session/turn ends. For persistent local testing, run `npm run dev` in your own terminal window/tab.
 
 **Prerequisites**: Scope server must be running (RunPod or local).
 

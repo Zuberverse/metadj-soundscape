@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-12 11:47 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -69,6 +69,8 @@ npm install
 npm run dev
 # Open http://localhost:3500
 ```
+
+If you are launching from Codex CLI tooling, run this in your own terminal window/tab for persistence; Codex-managed tool sessions can stop long-running dev processes at turn boundaries.
 
 ### Verify Scope Connectivity
 
