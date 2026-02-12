@@ -254,8 +254,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     (themeIdOrInput: string | CustomThemeInput) => {
       const theme = resolveTheme(themeIdOrInput);
 
-      // Always log theme changes for debugging
-      console.log(`[Soundscape] 🎨 setTheme: "${theme.id}" (${theme.name})`);
+      log(`🎨 setTheme: "${theme.id}" (${theme.name})`);
 
       // Update React state and ref
       setCurrentTheme(theme);
@@ -302,7 +301,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
         try {
           dataChannelRef.current.send(JSON.stringify(themeChangeParams));
-          console.log(`[Soundscape] ✅ Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
+          log(`✅ Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
 
           // CRITICAL: Mark the transition as active in MappingEngine to prevent
           // conflicting params from audio analysis during the transition
@@ -310,7 +309,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
             mappingEngineRef.current.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
           }
         } catch (error) {
-          console.error("[Soundscape] ❌ Failed to send theme transition:", error);
+          log("❌ Failed to send theme transition:", error);
         }
 
         // Update UI state

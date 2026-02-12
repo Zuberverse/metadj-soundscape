@@ -10,13 +10,14 @@ import {
   useSoundscape,
   DEFAULT_ASPECT_RATIO,
   DENOISING_PROFILES,
+  REACTIVITY_PROFILES,
   type DenoisingProfileId,
   type ReactivityProfileId,
 } from "@/lib/soundscape";
 import type { AspectRatioConfig } from "@/lib/soundscape";
 import { getScopeClient, useScopeConnection } from "@/lib/scope";
 import type { HealthResponse, PipelineDescriptor, PipelineStatusResponse } from "@/lib/scope";
-import { AudioPlayer } from "./AudioPlayer";
+import { AudioPlayer, type AudioPlayerControls } from "./AudioPlayer";
 import { ThemeSelector } from "./ThemeSelector";
 import { AspectRatioToggle } from "./AspectRatioToggle";
 import { AnalysisMeter } from "./AnalysisMeter";
@@ -40,12 +41,22 @@ const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
 // Reconnection configuration
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_MS = 2000;
+const WARNING_DROPPED_FRAME_PERCENT = 5;
+const CRITICAL_DROPPED_FRAME_PERCENT = 12;
+const WARNING_FPS_THRESHOLD = 10;
+
+type DiagnosticsRefreshResult = {
+  isHealthy: boolean;
+  resolvedPipeline: string;
+  resolvedPreprocessor: string;
+};
 
 interface VideoStats {
   width: number;
   height: number;
   totalFrames: number | null;
   droppedFrames: number | null;
+  fps: number | null;
 }
 
 interface ScopeCapabilities {
@@ -88,6 +99,13 @@ export function SoundscapeStudio({
   const [scopeStream, setScopeStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const transportControlsRef = useRef<AudioPlayerControls | null>(null);
+  const previousFrameSampleRef = useRef<{ timestamp: number; totalFrames: number } | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStartRef = useRef<number | null>(null);
+  const processedBeatTimestampRef = useRef<number>(0);
+  const autoThemeBeatCounterRef = useRef(0);
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [showControlsInternal, setShowControlsInternal] = useState(true);
@@ -103,6 +121,10 @@ export function SoundscapeStudio({
       setShowControlsInternal(prev => !prev);
     }
   }, [onControlsToggle]);
+
+  const handleRegisterAudioControls = useCallback((controls: AudioPlayerControls | null) => {
+    transportControlsRef.current = controls;
+  }, []);
 
   // Aspect ratio state (16:9 widescreen by default)
   const [aspectRatio, setAspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
@@ -121,7 +143,16 @@ export function SoundscapeStudio({
     height: 0,
     totalFrames: null,
     droppedFrames: null,
+    fps: null,
   });
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [recordedClipUrl, setRecordedClipUrl] = useState<string | null>(null);
+  const [recordedClipMimeType, setRecordedClipMimeType] = useState<string | null>(null);
+  const [recordedClipSeconds, setRecordedClipSeconds] = useState<number | null>(null);
+  const [copyCommandStatus, setCopyCommandStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [autoThemeEnabled, setAutoThemeEnabled] = useState(false);
+  const [autoThemeSectionBeats, setAutoThemeSectionBeats] = useState(32);
   const [scopeCapabilities, setScopeCapabilities] = useState<ScopeCapabilities>({
     hardwareSummary: "Unknown",
     freeVramGb: null,
@@ -270,9 +301,11 @@ export function SoundscapeStudio({
     [promptAccent.text, promptAccent.weight, setPromptAccent]
   );
 
-  const refreshScopeDiagnostics = useCallback(async () => {
+  const refreshScopeDiagnostics = useCallback(async (): Promise<DiagnosticsRefreshResult> => {
     setIsDiagnosticsLoading(true);
     setDiagnosticsError(null);
+
+    const fallbackPipeline = selectedPipeline || DEFAULT_PIPELINE;
 
     try {
       const health = await scopeClient.checkHealth();
@@ -283,6 +316,8 @@ export function SoundscapeStudio({
         setPipelineStatus(null);
         setDiagnosticsError("Scope server unavailable. Verify SCOPE_API_URL and server health.");
         setAvailablePipelines([DEFAULT_PIPELINE_DESCRIPTOR]);
+        setSelectedPipeline(DEFAULT_PIPELINE);
+        setSelectedPreprocessor(NO_PREPROCESSOR);
         setScopeCapabilities({
           hardwareSummary: "Unknown",
           freeVramGb: null,
@@ -291,7 +326,11 @@ export function SoundscapeStudio({
           loraCount: 0,
           pluginCount: 0,
         });
-        return;
+        return {
+          isHealthy: false,
+          resolvedPipeline: DEFAULT_PIPELINE,
+          resolvedPreprocessor: NO_PREPROCESSOR,
+        };
       }
 
       const [pipelines, status, hardwareInfo, modelStatus, loras, plugins] = await Promise.all([
@@ -347,36 +386,50 @@ export function SoundscapeStudio({
         const mainPipelines = sorted.filter((pipeline) => !isPreprocessorPipeline(pipeline));
         const preprocessors = sorted.filter((pipeline) => isPreprocessorPipeline(pipeline));
 
+        const resolvedPipeline = mainPipelines.some((pipeline) => pipeline.id === selectedPipeline)
+          ? selectedPipeline
+          : mainPipelines.some((pipeline) => pipeline.id === DEFAULT_PIPELINE)
+            ? DEFAULT_PIPELINE
+            : mainPipelines[0]?.id ?? DEFAULT_PIPELINE;
+
+        const resolvedPreprocessor =
+          selectedPreprocessor !== NO_PREPROCESSOR &&
+          preprocessors.some((pipeline) => pipeline.id === selectedPreprocessor)
+            ? selectedPreprocessor
+            : NO_PREPROCESSOR;
+
         setAvailablePipelines(sorted);
-        setSelectedPipeline((current) => {
-          const currentExists = mainPipelines.some((pipeline) => pipeline.id === current);
-          if (currentExists) return current;
-          if (mainPipelines.some((pipeline) => pipeline.id === DEFAULT_PIPELINE)) {
-            return DEFAULT_PIPELINE;
-          }
-          return mainPipelines[0]?.id ?? DEFAULT_PIPELINE;
-        });
-        setSelectedPreprocessor((current) => {
-          if (current === NO_PREPROCESSOR) return current;
-          if (preprocessors.some((pipeline) => pipeline.id === current)) {
-            return current;
-          }
-          return NO_PREPROCESSOR;
-        });
+        setSelectedPipeline(resolvedPipeline);
+        setSelectedPreprocessor(resolvedPreprocessor);
+        return {
+          isHealthy: true,
+          resolvedPipeline,
+          resolvedPreprocessor,
+        };
       } else {
         setDiagnosticsError("Connected to Scope, but no pipeline schemas were returned.");
         setAvailablePipelines([DEFAULT_PIPELINE_DESCRIPTOR]);
-        setSelectedPipeline((current) => current || DEFAULT_PIPELINE);
+        setSelectedPipeline(DEFAULT_PIPELINE);
         setSelectedPreprocessor(NO_PREPROCESSOR);
+        return {
+          isHealthy: true,
+          resolvedPipeline: DEFAULT_PIPELINE,
+          resolvedPreprocessor: NO_PREPROCESSOR,
+        };
       }
     } catch (error) {
       setDiagnosticsError(
         error instanceof Error ? error.message : "Failed to refresh Scope diagnostics"
       );
+      return {
+        isHealthy: false,
+        resolvedPipeline: fallbackPipeline,
+        resolvedPreprocessor: NO_PREPROCESSOR,
+      };
     } finally {
       setIsDiagnosticsLoading(false);
     }
-  }, [scopeClient, isPreprocessorPipeline, selectedPipeline]);
+  }, [scopeClient, isPreprocessorPipeline, selectedPipeline, selectedPreprocessor]);
 
   // Connect video stream to element
   useEffect(() => {
@@ -428,14 +481,16 @@ export function SoundscapeStudio({
       setDenoisingProfile(storedDenoisingProfile as DenoisingProfileId);
     }
     const storedReactivity = window.localStorage.getItem("soundscape.reactivityProfile");
-    if (storedReactivity) {
+    if (storedReactivity && storedReactivity in REACTIVITY_PROFILES) {
       setReactivityProfile(storedReactivity as ReactivityProfileId);
     }
     const storedAccentText = window.localStorage.getItem("soundscape.promptAccent.text") ?? "";
     const storedAccentWeight = Number(window.localStorage.getItem("soundscape.promptAccent.weight") ?? "0.25");
-    if (storedAccentText || Number.isFinite(storedAccentWeight)) {
-      setPromptAccent(storedAccentText, Number.isFinite(storedAccentWeight) ? storedAccentWeight : 0.25);
-    }
+    const validAccentWeight =
+      Number.isFinite(storedAccentWeight) && storedAccentWeight >= 0.05 && storedAccentWeight <= 1
+        ? storedAccentWeight
+        : 0.25;
+    setPromptAccent(storedAccentText, validAccentWeight);
   }, [setDenoisingProfile, setPromptAccent, setReactivityProfile]);
 
   useEffect(() => {
@@ -461,11 +516,13 @@ export function SoundscapeStudio({
 
   useEffect(() => {
     if (!scopeStream) {
+      previousFrameSampleRef.current = null;
       setVideoStats({
         width: 0,
         height: 0,
         totalFrames: null,
         droppedFrames: null,
+        fps: null,
       });
       return;
     }
@@ -485,6 +542,7 @@ export function SoundscapeStudio({
 
       let totalFrames: number | null = null;
       let droppedFrames: number | null = null;
+      let fps: number | null = null;
 
       if (typeof qualityApiVideo.getVideoPlaybackQuality === "function") {
         const quality = qualityApiVideo.getVideoPlaybackQuality();
@@ -495,11 +553,28 @@ export function SoundscapeStudio({
         droppedFrames = qualityApiVideo.webkitDroppedFrameCount ?? 0;
       }
 
+      if (totalFrames !== null) {
+        const now = performance.now();
+        const previousSample = previousFrameSampleRef.current;
+        if (previousSample) {
+          const deltaFrames = totalFrames - previousSample.totalFrames;
+          const deltaSeconds = (now - previousSample.timestamp) / 1000;
+          if (deltaSeconds > 0 && deltaFrames >= 0) {
+            fps = deltaFrames / deltaSeconds;
+          }
+        }
+        previousFrameSampleRef.current = {
+          timestamp: now,
+          totalFrames,
+        };
+      }
+
       setVideoStats({
         width: video.videoWidth,
         height: video.videoHeight,
         totalFrames,
         droppedFrames,
+        fps,
       });
     }, 1000);
 
@@ -559,6 +634,11 @@ export function SoundscapeStudio({
     stopPlaybackForDisconnect();
     setScopeStream(null);
     setDataChannel(null);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
   }, [setDataChannel, stopPlaybackForDisconnect]);
 
   const {
@@ -643,9 +723,31 @@ export function SoundscapeStudio({
 
   const handleConnectScope = useCallback(async () => {
     clearError();
-    await refreshScopeDiagnostics();
-    await connect();
+    const diagnostics = await refreshScopeDiagnostics();
+    if (!diagnostics.isHealthy) {
+      return;
+    }
+
+    const pipelineIds =
+      diagnostics.resolvedPreprocessor !== NO_PREPROCESSOR
+        ? [diagnostics.resolvedPreprocessor, diagnostics.resolvedPipeline]
+        : [diagnostics.resolvedPipeline];
+
+    await connect({
+      pipelineId: diagnostics.resolvedPipeline,
+      pipelineIds,
+    });
   }, [clearError, refreshScopeDiagnostics, connect]);
+
+  const handleCopyScopeCommand = useCallback(async () => {
+    const command = "npm run check:scope";
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopyCommandStatus("copied");
+    } catch {
+      setCopyCommandStatus("error");
+    }
+  }, []);
 
   const handleResumeVideoPlayback = useCallback(async () => {
     const videoElement = videoRef.current;
@@ -665,6 +767,206 @@ export function SoundscapeStudio({
     videoStats.totalFrames && videoStats.totalFrames > 0 && videoStats.droppedFrames !== null
       ? (videoStats.droppedFrames / videoStats.totalFrames) * 100
       : null;
+
+  const performanceStatus = useMemo(() => {
+    if (dropPercentage === null && videoStats.fps === null) {
+      return { label: "Sampling", className: "text-white/65" };
+    }
+
+    if (
+      (dropPercentage !== null && dropPercentage >= CRITICAL_DROPPED_FRAME_PERCENT) ||
+      (videoStats.fps !== null && videoStats.fps < WARNING_FPS_THRESHOLD * 0.7)
+    ) {
+      return { label: "Critical", className: "text-red-300" };
+    }
+
+    if (
+      (dropPercentage !== null && dropPercentage >= WARNING_DROPPED_FRAME_PERCENT) ||
+      (videoStats.fps !== null && videoStats.fps < WARNING_FPS_THRESHOLD)
+    ) {
+      return { label: "Watch", className: "text-amber-300" };
+    }
+
+    return { label: "Healthy", className: "text-scope-cyan" };
+  }, [dropPercentage, videoStats.fps]);
+
+  const isScopeOffline = scopeHealth !== null && scopeHealth.status !== "ok";
+
+  const startRecordingClip = useCallback(() => {
+    if (!scopeStream || typeof MediaRecorder === "undefined") {
+      setRecordingError("Recording is not available for this browser/session.");
+      return;
+    }
+
+    const supportedMimeTypes = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    const selectedMimeType =
+      supportedMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? "";
+
+    try {
+      if (recordedClipUrl) {
+        URL.revokeObjectURL(recordedClipUrl);
+      }
+
+      recordingChunksRef.current = [];
+      setRecordingError(null);
+      setRecordedClipUrl(null);
+      setRecordedClipMimeType(null);
+      setRecordedClipSeconds(null);
+
+      const recorder = selectedMimeType
+        ? new MediaRecorder(scopeStream, { mimeType: selectedMimeType })
+        : new MediaRecorder(scopeStream);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        setRecordingError("Recording failed. Try reconnecting and starting again.");
+      };
+
+      recorder.onstop = () => {
+        const chunks = recordingChunksRef.current;
+        if (chunks.length === 0) {
+          return;
+        }
+
+        const mimeType = recorder.mimeType || "video/webm";
+        const clipBlob = new Blob(chunks, { type: mimeType });
+        const clipUrl = URL.createObjectURL(clipBlob);
+        setRecordedClipUrl(clipUrl);
+        setRecordedClipMimeType(mimeType);
+
+        if (recordingStartRef.current) {
+          const seconds = (Date.now() - recordingStartRef.current) / 1000;
+          setRecordedClipSeconds(seconds);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recordingStartRef.current = Date.now();
+      recorder.start(1000);
+      setIsRecording(true);
+    } catch (error) {
+      setRecordingError(error instanceof Error ? error.message : "Failed to start recording.");
+      setIsRecording(false);
+    }
+  }, [recordedClipUrl, scopeStream]);
+
+  const stopRecordingClip = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  }, []);
+
+  useEffect(() => {
+    if (copyCommandStatus === "idle") return;
+    const timeoutId = setTimeout(() => {
+      setCopyCommandStatus("idle");
+    }, 1800);
+    return () => clearTimeout(timeoutId);
+  }, [copyCommandStatus]);
+
+  useEffect(() => {
+    if (scopeStream) return;
+    stopRecordingClip();
+  }, [scopeStream, stopRecordingClip]);
+
+  useEffect(() => {
+    return () => {
+      stopRecordingClip();
+      if (recordedClipUrl) {
+        URL.revokeObjectURL(recordedClipUrl);
+      }
+    };
+  }, [recordedClipUrl, stopRecordingClip]);
+
+  useEffect(() => {
+    const handleGlobalHotkeys = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTextInput =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+
+      if (isTextInput || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key === " ") {
+        event.preventDefault();
+        void transportControlsRef.current?.togglePlayPause();
+        return;
+      }
+
+      if (/^[1-9]$/.test(event.key)) {
+        const index = Number(event.key) - 1;
+        const theme = presetThemes[index];
+        if (theme) {
+          setTheme(theme.id);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalHotkeys);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalHotkeys);
+    };
+  }, [presetThemes, setTheme]);
+
+  useEffect(() => {
+    if (!autoThemeEnabled || !isPlaying || !scopeStream || !soundscapeState.analysis) {
+      processedBeatTimestampRef.current = 0;
+      autoThemeBeatCounterRef.current = 0;
+      return;
+    }
+
+    const beat = soundscapeState.analysis.beat;
+    if (!beat.isBeat || !beat.lastBeatTime) {
+      return;
+    }
+
+    if (beat.lastBeatTime === processedBeatTimestampRef.current) {
+      return;
+    }
+
+    processedBeatTimestampRef.current = beat.lastBeatTime;
+    autoThemeBeatCounterRef.current += 1;
+
+    if (autoThemeBeatCounterRef.current % autoThemeSectionBeats !== 0) {
+      return;
+    }
+
+    const currentIndex = presetThemes.findIndex((theme) => theme.id === currentTheme?.id);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % presetThemes.length : 0;
+    const nextTheme = presetThemes[nextIndex];
+
+    if (nextTheme) {
+      setTheme(nextTheme.id);
+    }
+  }, [
+    autoThemeEnabled,
+    autoThemeSectionBeats,
+    currentTheme?.id,
+    isPlaying,
+    presetThemes,
+    scopeStream,
+    setTheme,
+    soundscapeState.analysis,
+  ]);
 
   return (
     <div className="h-full flex flex-col">
@@ -691,10 +993,52 @@ export function SoundscapeStudio({
                   ? `${videoStats.width}×${videoStats.height}`
                   : "waiting for frames"}
               </div>
+              <div className="text-[10px] text-white/70 tabular-nums">
+                FPS: {videoStats.fps !== null ? videoStats.fps.toFixed(1) : "sampling"}
+              </div>
               {dropPercentage !== null && (
                 <div className="text-[10px] text-white/70 tabular-nums">
                   Dropped Frames: {dropPercentage.toFixed(1)}%
                 </div>
+              )}
+              <div className={`text-[10px] uppercase tracking-wide ${performanceStatus.className}`}>
+                Performance: {performanceStatus.label}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={startRecordingClip}
+                    className="rounded-md border border-red-400/35 bg-red-500/10 px-2 py-1 text-[9px] uppercase tracking-wide text-red-200 hover:bg-red-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                  >
+                    Record Clip
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopRecordingClip}
+                    className="rounded-md border border-red-400/35 bg-red-500/20 px-2 py-1 text-[9px] uppercase tracking-wide text-red-100 hover:bg-red-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                  >
+                    Stop Recording
+                  </button>
+                )}
+                {recordedClipUrl && (
+                  <a
+                    href={recordedClipUrl}
+                    download={`soundscape-clip-${Date.now()}.webm`}
+                    className="rounded-md border border-scope-cyan/35 bg-scope-cyan/10 px-2 py-1 text-[9px] uppercase tracking-wide text-scope-cyan hover:bg-scope-cyan/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+                  >
+                    Download Clip
+                  </a>
+                )}
+              </div>
+              {recordedClipSeconds !== null && (
+                <div className="text-[9px] text-white/50">
+                  Last clip: {recordedClipSeconds.toFixed(1)}s {recordedClipMimeType ? `(${recordedClipMimeType})` : ""}
+                </div>
+              )}
+              {recordingError && (
+                <div className="text-[9px] text-amber-300">{recordingError}</div>
               )}
             </div>
 
@@ -936,6 +1280,33 @@ export function SoundscapeStudio({
                   <span className="text-white/80">{scopeHealth?.version ?? "n/a"}</span>
                 </div>
 
+                {isScopeOffline && (
+                  <div className="mt-3 rounded-xl border border-amber-300/35 bg-amber-400/10 p-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-wider text-amber-200 font-semibold">
+                      Demo-Safe Mode
+                    </p>
+                    <p className="text-[10px] text-amber-100/90">
+                      Scope is offline. Audio analysis, theme switching, and local controls still work while you recover the server.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyScopeCommand}
+                        className="rounded-md border border-amber-300/40 bg-black/20 px-2 py-1 text-[9px] uppercase tracking-wide text-amber-100 hover:bg-black/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                      >
+                        Copy health command
+                      </button>
+                      <span className="text-[9px] text-amber-100/75">
+                        {copyCommandStatus === "copied"
+                          ? "Copied"
+                          : copyCommandStatus === "error"
+                            ? "Clipboard unavailable"
+                            : "npm run check:scope"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5">
                   <p className="text-[10px] text-white/45 uppercase tracking-wide mb-2">Scope Capabilities</p>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
@@ -1087,6 +1458,34 @@ export function SoundscapeStudio({
                     </label>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[10px] text-white/55">
+                      Auto Theme
+                      <select
+                        value={autoThemeEnabled ? "on" : "off"}
+                        disabled={isConnecting}
+                        onChange={(event) => setAutoThemeEnabled(event.target.value === "on")}
+                        className="mt-1 w-full px-2 py-1.5 rounded-lg glass bg-black/40 border border-white/15 text-[11px] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50"
+                      >
+                        <option value="off" className="bg-scope-bg">Off</option>
+                        <option value="on" className="bg-scope-bg">On</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-white/55">
+                      Section Beats
+                      <select
+                        value={autoThemeSectionBeats}
+                        disabled={!autoThemeEnabled || isConnecting}
+                        onChange={(event) => setAutoThemeSectionBeats(Number(event.target.value))}
+                        className="mt-1 w-full px-2 py-1.5 rounded-lg glass bg-black/40 border border-white/15 text-[11px] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan disabled:opacity-50"
+                      >
+                        <option value={16} className="bg-scope-bg">16 beats</option>
+                        <option value={32} className="bg-scope-bg">32 beats</option>
+                        <option value={64} className="bg-scope-bg">64 beats</option>
+                      </select>
+                    </label>
+                  </div>
+
                   <label className="block text-[10px] text-white/55">
                     Prompt Accent
                     <input
@@ -1126,6 +1525,9 @@ export function SoundscapeStudio({
                   </div>
                   <p className="text-[10px] text-white/45">
                     Active denoising: [{activeDenoisingSteps.join(", ")}]
+                  </p>
+                  <p className="text-[10px] text-white/45">
+                    Hotkeys: <span className="text-white/70">Space</span> play/pause, <span className="text-white/70">1-9</span> theme presets
                   </p>
                 </div>
 
@@ -1223,6 +1625,7 @@ export function SoundscapeStudio({
               <AudioPlayer
                 onAudioElement={handleAudioElement}
                 onPlayStateChange={handlePlayStateChange}
+                onRegisterControls={handleRegisterAudioControls}
                 compact
               />
             </div>
@@ -1261,6 +1664,12 @@ export function SoundscapeStudio({
                 <span className="text-white/45 uppercase tracking-wide">Profiles</span>
                 <span className="text-white/80 font-medium capitalize">
                   {denoisingProfileId} / {reactivityProfileId}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-white/45 uppercase tracking-wide">Auto Theme</span>
+                <span className={`font-medium ${autoThemeEnabled ? "text-scope-cyan" : "text-white/55"}`}>
+                  {autoThemeEnabled ? `On • ${autoThemeSectionBeats} beats` : "Off"}
                 </span>
               </div>
               {promptAccent.text && (

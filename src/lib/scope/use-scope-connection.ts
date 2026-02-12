@@ -103,6 +103,17 @@ export interface UseScopeConnectionOptions {
   videoTrackTimeoutMs?: number;
 }
 
+export interface ScopeConnectOverrides {
+  /** Override primary pipeline ID for this connect attempt */
+  pipelineId?: string;
+  /** Override pipeline chain for this connect attempt */
+  pipelineIds?: string[];
+  /** Override pipeline load params for this connect attempt */
+  loadParams?: PipelineLoadParams;
+  /** Override initial WebRTC parameters for this connect attempt */
+  initialParameters?: Record<string, unknown>;
+}
+
 export interface UseScopeConnectionReturn {
   /** Current connection state */
   connectionState: ConnectionState;
@@ -117,7 +128,7 @@ export interface UseScopeConnectionReturn {
   /** Reference to data channel */
   dataChannel: RTCDataChannel | null;
   /** Connect to Scope */
-  connect: () => Promise<void>;
+  connect: (overrides?: ScopeConnectOverrides) => Promise<void>;
   /** Disconnect from Scope */
   disconnect: (preserveError?: boolean) => void;
   /** Clear current error */
@@ -164,7 +175,8 @@ export function useScopeConnection(
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoTrackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connectRef = useRef<() => Promise<void>>(async () => {});
+  const connectRef = useRef<(overrides?: ScopeConnectOverrides) => Promise<void>>(async () => {});
+  const lastConnectOverridesRef = useRef<ScopeConnectOverrides>({});
   const connectAttemptRef = useRef(0);
   const isConnectingRef = useRef(false);
   const isManualDisconnectRef = useRef(false);
@@ -274,10 +286,17 @@ export function useScopeConnection(
   );
 
   // Connect to Scope
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (overrides: ScopeConnectOverrides = {}) => {
     if (isConnectingRef.current) {
       return;
     }
+
+    const hasOverrides = Object.keys(overrides).length > 0;
+    if (hasOverrides) {
+      lastConnectOverridesRef.current = { ...overrides };
+    }
+    const activeOverrides = hasOverrides ? overrides : lastConnectOverridesRef.current;
+
     const connectAttemptId = connectAttemptRef.current + 1;
     connectAttemptRef.current = connectAttemptId;
     const isCurrentAttempt = () =>
@@ -306,21 +325,27 @@ export function useScopeConnection(
 
       // Step 2: Load pipeline
       const requestedPipelineIds =
-        pipelineIds && pipelineIds.length > 0
-          ? pipelineIds
-          : pipelineId
-            ? [pipelineId]
-            : [];
+        activeOverrides.pipelineIds && activeOverrides.pipelineIds.length > 0
+          ? activeOverrides.pipelineIds
+          : activeOverrides.pipelineId
+            ? [activeOverrides.pipelineId]
+            : pipelineIds && pipelineIds.length > 0
+              ? pipelineIds
+              : pipelineId
+                ? [pipelineId]
+                : [];
 
       if (requestedPipelineIds.length === 0) {
         throw createScopeError("PIPELINE_LOAD_FAILED", "No pipeline selected");
       }
 
+      const resolvedLoadParams = activeOverrides.loadParams ?? loadParams ?? {};
+
       try {
         await prepareScopePipeline({
           scopeClient,
           pipelineIds: requestedPipelineIds,
-          loadParams: loadParams ?? {},
+          loadParams: resolvedLoadParams,
           onStatus: setStatusMessage,
         });
         if (!isCurrentAttempt()) {
@@ -336,9 +361,12 @@ export function useScopeConnection(
       // Step 3: Create WebRTC session
       setStatusMessage("Creating connection...");
 
+      const resolvedInitialParameters =
+        activeOverrides.initialParameters ?? initialParameters;
+
       const { pc, dataChannel } = await createScopeWebRtcSession({
         scopeClient,
-        initialParameters,
+        initialParameters: resolvedInitialParameters,
         setupPeerConnection: (connection) => {
           peerConnectionRef.current = connection;
           setupPeerConnection?.(connection);

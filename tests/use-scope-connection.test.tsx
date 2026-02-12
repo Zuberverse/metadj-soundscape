@@ -28,7 +28,9 @@ type FakePeerConnection = {
 
 let lastPeerConnection: FakePeerConnection | null = null;
 let lastTrackHandler: ((event: RTCTrackEvent) => void) | undefined;
-let connectHarness: (() => Promise<void>) | null = null;
+let connectHarness:
+  | ((overrides?: { pipelineId?: string; pipelineIds?: string[] }) => Promise<void>)
+  | null = null;
 let disconnectHarness: ((preserveError?: boolean) => void) | null = null;
 
 function createFakePeerConnection(): FakePeerConnection {
@@ -105,6 +107,51 @@ afterEach(() => {
 });
 
 describe("useScopeConnection", () => {
+  it("honors connect() pipeline overrides", async () => {
+    createScopeWebRtcSessionMock.mockImplementation(async (options) => {
+      const pc = createFakePeerConnection();
+      lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
+
+      if (options.setupPeerConnection) {
+        options.setupPeerConnection(pc as unknown as RTCPeerConnection);
+      }
+
+      return {
+        pc: pc as unknown as RTCPeerConnection,
+        dataChannel: undefined,
+        sessionId: "session",
+      };
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { container, unmount } = renderHarness(scopeClient);
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness({
+        pipelineId: "streamdiffusionv2",
+        pipelineIds: ["streamdiffusionv2"],
+      });
+    });
+
+    expect(prepareScopePipelineMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineIds: ["streamdiffusionv2"],
+      })
+    );
+
+    const state = container.querySelector('[data-testid="state"]');
+    expect(state?.getAttribute("data-connection")).toBe("connecting");
+
+    unmount();
+  });
+
   it("reconnects after connection loss", async () => {
     vi.useFakeTimers();
     createScopeWebRtcSessionMock.mockImplementation(async (options) => {

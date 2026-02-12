@@ -1,11 +1,13 @@
 # Feature Notes
 
-**Last Modified**: 2026-01-08 22:01 EST
+**Last Modified**: 2026-02-12 09:23 EST
 
-Feature specs live here. Keep each feature in its own file and link it below.
+Feature-level specifications for Soundscape.
 
 ## Specs
-- `docs/features/soundscape-mvp-spec.md` - Active
+
+- `docs/features/soundscape-mvp-spec.md` — Active public capability spec (current build)
 
 ## Planned
-- Future ideas are tracked outside this public repository.
+
+Future expansion ideas are tracked outside this public repository.

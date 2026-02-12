@@ -1,7 +1,6 @@
 /**
  * Audio Player Component
- * MVP: Demo track playback only with infinite loop
- * Future: Additional audio sources
+ * Supports demo track playback and live microphone input.
  */
 
 "use client";
@@ -14,6 +13,16 @@ const DEMO_TRACK = {
   name: "Metaversal Odyssey",
   artist: "MetaDJ",
 };
+
+type AudioSourceMode = "demo" | "mic";
+type MicrophoneState = "idle" | "requesting" | "active" | "error";
+
+export interface AudioPlayerControls {
+  togglePlayPause: () => Promise<void>;
+  restart: () => Promise<void>;
+  isPlaying: () => boolean;
+  sourceMode: () => AudioSourceMode;
+}
 
 /**
  * Props for the AudioPlayer component.
@@ -33,6 +42,8 @@ interface AudioPlayerProps {
   disabled?: boolean;
   /** Use compact dock layout instead of full player (default: false) */
   compact?: boolean;
+  /** Optional registration hook for keyboard transport controls */
+  onRegisterControls?: (controls: AudioPlayerControls | null) => void;
 }
 
 export function AudioPlayer({
@@ -40,13 +51,97 @@ export function AudioPlayer({
   onPlayStateChange,
   disabled = false,
   compact = false,
+  onRegisterControls,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const hasConnectedRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [sourceMode, setSourceMode] = useState<AudioSourceMode>("demo");
+  const [micState, setMicState] = useState<MicrophoneState>("idle");
+  const [micError, setMicError] = useState<string | null>(null);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const stopMicStream = useCallback(() => {
+    const stream = micStreamRef.current;
+    if (!stream) return;
+
+    stream.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+    setMicState("idle");
+  }, []);
+
+  const configureDemoSource = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.pause();
+    audio.srcObject = null;
+    audio.src = DEMO_TRACK.path;
+    audio.loop = true;
+    audio.muted = false;
+    audio.preload = "metadata";
+    audio.currentTime = 0;
+    setCurrentTime(0);
+    setMicError(null);
+  }, []);
+
+  const ensureMicSource = useCallback(async (): Promise<boolean> => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return false;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicState("error");
+      setMicError("Microphone capture is not supported in this browser.");
+      return false;
+    }
+
+    if (!micStreamRef.current) {
+      setMicState("requesting");
+      setMicError(null);
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        });
+        micStreamRef.current = stream;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Microphone permission was denied.";
+        setMicState("error");
+        setMicError(message);
+        return false;
+      }
+    }
+
+    audio.pause();
+    audio.src = "";
+    audio.srcObject = micStreamRef.current;
+    audio.loop = false;
+    audio.muted = true;
+    audio.preload = "none";
+
+    setCurrentTime(0);
+    setDuration(0);
+    setMicState("active");
+    return true;
+  }, []);
 
   const ensureAudioConnected = useCallback(async () => {
     if (!audioRef.current || hasConnectedRef.current) {
@@ -58,7 +153,19 @@ export function AudioPlayer({
 
   const handlePlay = useCallback(async () => {
     if (!audioRef.current) return;
+
     try {
+      if (sourceMode === "mic") {
+        const ready = await ensureMicSource();
+        if (!ready) {
+          onPlayStateChange(false);
+          setIsPlaying(false);
+          return;
+        }
+      } else {
+        configureDemoSource();
+      }
+
       await ensureAudioConnected();
       await audioRef.current.play();
       setIsPlaying(true);
@@ -68,7 +175,7 @@ export function AudioPlayer({
       setIsPlaying(false);
       onPlayStateChange(false);
     }
-  }, [ensureAudioConnected, onPlayStateChange]);
+  }, [configureDemoSource, ensureAudioConnected, ensureMicSource, onPlayStateChange, sourceMode]);
 
   const handlePause = useCallback(() => {
     if (!audioRef.current) return;
@@ -79,42 +186,72 @@ export function AudioPlayer({
 
   const handleRestart = useCallback(async () => {
     if (!audioRef.current) return;
-    audioRef.current.currentTime = 0;
-    setCurrentTime(0);
-    // If not playing, start playback after restart
-    if (!isPlaying) {
-      try {
-        await ensureAudioConnected();
-        await audioRef.current.play();
-        setIsPlaying(true);
-        onPlayStateChange(true);
-      } catch (error) {
-        console.error("[AudioPlayer] Failed to restart playback:", error);
-      }
+
+    if (sourceMode === "demo") {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
     }
-  }, [isPlaying, ensureAudioConnected, onPlayStateChange]);
+
+    if (!isPlayingRef.current) {
+      await handlePlay();
+    }
+  }, [handlePlay, sourceMode]);
+
+  const togglePlayPause = useCallback(async () => {
+    if (isPlayingRef.current) {
+      handlePause();
+      return;
+    }
+    await handlePlay();
+  }, [handlePause, handlePlay]);
 
   const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
+    if (audioRef.current && sourceMode === "demo") {
       setCurrentTime(audioRef.current.currentTime);
     }
-  }, []);
+  }, [sourceMode]);
 
   const handleLoadedMetadata = useCallback(() => {
-    if (audioRef.current) {
+    if (audioRef.current && sourceMode === "demo") {
       setDuration(audioRef.current.duration);
     }
-  }, []);
+  }, [sourceMode]);
 
   const handleSeek = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const time = parseFloat(e.target.value);
-      if (audioRef.current) {
+      if (audioRef.current && sourceMode === "demo") {
         audioRef.current.currentTime = time;
         setCurrentTime(time);
       }
     },
-    []
+    [sourceMode]
+  );
+
+  const handleSourceChange = useCallback(
+    async (mode: AudioSourceMode) => {
+      if (mode === sourceMode) return;
+
+      const wasPlaying = isPlayingRef.current;
+      handlePause();
+
+      if (mode === "demo") {
+        stopMicStream();
+        configureDemoSource();
+        setSourceMode("demo");
+      } else {
+        setSourceMode("mic");
+        const ready = await ensureMicSource();
+        if (!ready) {
+          return;
+        }
+      }
+
+      if (wasPlaying) {
+        await handlePlay();
+      }
+    },
+    [configureDemoSource, ensureMicSource, handlePause, handlePlay, sourceMode, stopMicStream]
   );
 
   const formatTime = (seconds: number): string => {
@@ -124,13 +261,62 @@ export function AudioPlayer({
   };
 
   useEffect(() => {
+    if (!onRegisterControls) return;
+
+    onRegisterControls({
+      togglePlayPause,
+      restart: handleRestart,
+      isPlaying: () => isPlayingRef.current,
+      sourceMode: () => sourceMode,
+    });
+
     return () => {
+      onRegisterControls(null);
+    };
+  }, [handleRestart, onRegisterControls, sourceMode, togglePlayPause]);
+
+  useEffect(() => {
+    return () => {
+      stopMicStream();
       if (hasConnectedRef.current) {
         onAudioElement(null);
         hasConnectedRef.current = false;
       }
     };
-  }, [onAudioElement]);
+  }, [onAudioElement, stopMicStream]);
+
+  const sourceSwitcher = (
+    <div className="flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 p-1">
+      <button
+        type="button"
+        onClick={() => {
+          void handleSourceChange("demo");
+        }}
+        disabled={disabled}
+        className={`px-2 py-1 text-[9px] uppercase tracking-wide rounded-md transition-colors ${
+          sourceMode === "demo"
+            ? "bg-scope-cyan/20 text-scope-cyan"
+            : "text-white/55 hover:text-white/80"
+        }`}
+      >
+        Demo
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void handleSourceChange("mic");
+        }}
+        disabled={disabled}
+        className={`px-2 py-1 text-[9px] uppercase tracking-wide rounded-md transition-colors ${
+          sourceMode === "mic"
+            ? "bg-scope-purple/25 text-scope-purple"
+            : "text-white/55 hover:text-white/80"
+        }`}
+      >
+        Mic
+      </button>
+    </div>
+  );
 
   // Compact mode for dock
   if (compact) {
@@ -139,7 +325,9 @@ export function AudioPlayer({
         {/* Play/Pause */}
         <button
           type="button"
-          onClick={isPlaying ? handlePause : handlePlay}
+          onClick={() => {
+            void togglePlayPause();
+          }}
           disabled={disabled}
           aria-label={isPlaying ? "Pause audio" : "Play audio"}
           className={`
@@ -165,7 +353,9 @@ export function AudioPlayer({
         {/* Restart */}
         <button
           type="button"
-          onClick={handleRestart}
+          onClick={() => {
+            void handleRestart();
+          }}
           disabled={disabled}
           aria-label="Restart track"
           className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-sm transition-all duration-300 border glass bg-white/10 text-white/70 border-white/20 hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
@@ -177,21 +367,35 @@ export function AudioPlayer({
         </button>
 
         {/* Track info */}
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-white/80 truncate font-medium" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>{DEMO_TRACK.name}</p>
-          {duration > 0 && (
+        <div className="flex-1 min-w-0 space-y-0.5">
+          <p className="text-[11px] text-white/80 truncate font-medium" style={{ fontFamily: "var(--font-cinzel), Cinzel, serif" }}>
+            {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone Input"}
+          </p>
+          {sourceMode === "demo" && duration > 0 && (
             <p className="text-[10px] text-white/40 tabular-nums">{formatTime(currentTime)} / {formatTime(duration)}</p>
+          )}
+          {sourceMode === "mic" && (
+            <p className="text-[10px] text-white/45">
+              {micState === "requesting" ? "Requesting permission..." : micState === "active" ? "Listening" : "Microphone idle"}
+            </p>
+          )}
+          {micError && sourceMode === "mic" && (
+            <p className="text-[10px] text-amber-300 truncate">{micError}</p>
           )}
         </div>
 
-        {/* Hidden audio element with loop */}
+        {sourceSwitcher}
+
+        {/* Hidden audio element */}
         <audio
           ref={audioRef}
-          src={DEMO_TRACK.path}
+          src={sourceMode === "demo" ? DEMO_TRACK.path : undefined}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
-          loop
-          preload="metadata"
+          loop={sourceMode === "demo"}
+          preload={sourceMode === "demo" ? "metadata" : "none"}
+          muted={sourceMode === "mic"}
+          playsInline
         />
       </div>
     );
@@ -210,23 +414,27 @@ export function AudioPlayer({
             </svg>
           </div>
           <div className="flex flex-col gap-1 flex-1">
-            <p className="font-bold text-white uppercase tracking-tighter text-lg">{DEMO_TRACK.name}</p>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">{DEMO_TRACK.artist}</p>
+            <p className="font-bold text-white uppercase tracking-tighter text-lg">
+              {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone Input"}
+            </p>
+            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+              {sourceMode === "demo" ? DEMO_TRACK.artist : "Capture"}
+            </p>
           </div>
-          <div className="px-3 py-1.5 glass bg-scope-cyan/10 rounded-lg text-[10px] text-scope-cyan/70 font-bold uppercase tracking-wider">
-            ∞ Loop
-          </div>
+          {sourceSwitcher}
         </div>
       </div>
 
-      {/* Hidden Audio Element with loop */}
+      {/* Hidden Audio Element */}
       <audio
         ref={audioRef}
-        src={DEMO_TRACK.path}
+        src={sourceMode === "demo" ? DEMO_TRACK.path : undefined}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
-        loop
-        preload="metadata"
+        loop={sourceMode === "demo"}
+        preload={sourceMode === "demo" ? "metadata" : "none"}
+        muted={sourceMode === "mic"}
+        playsInline
       />
 
       {/* Playback Controls */}
@@ -235,7 +443,9 @@ export function AudioPlayer({
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={isPlaying ? handlePause : handlePlay}
+            onClick={() => {
+              void togglePlayPause();
+            }}
             disabled={disabled}
             className={`
               w-16 h-16 rounded-full flex items-center justify-center text-3xl
@@ -265,37 +475,45 @@ export function AudioPlayer({
           </button>
         </div>
 
-        {/* Progress Bar */}
-        <div className="space-y-3 px-2">
-          <div className="relative h-2 group">
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              value={currentTime}
-              onChange={handleSeek}
-              disabled={disabled}
-              className="peer absolute inset-0 w-full h-full bg-white/5 rounded-full appearance-none cursor-pointer accent-scope-cyan z-20 opacity-0"
-              aria-label="Seek audio"
-            />
-            {/* Visual Progress Track */}
-            <div className="absolute inset-0 bg-white/5 rounded-full z-0 overflow-hidden peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan/70 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-black">
+        {sourceMode === "demo" ? (
+          <div className="space-y-3 px-2">
+            <div className="relative h-2 group">
+              <input
+                type="range"
+                min={0}
+                max={duration || 100}
+                value={currentTime}
+                onChange={handleSeek}
+                disabled={disabled}
+                className="peer absolute inset-0 w-full h-full bg-white/5 rounded-full appearance-none cursor-pointer accent-scope-cyan z-20 opacity-0"
+                aria-label="Seek audio"
+              />
+              <div className="absolute inset-0 bg-white/5 rounded-full z-0 overflow-hidden peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan/70 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-black">
+                <div
+                  className="h-full bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100"
+                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                />
+              </div>
               <div
-                className="h-full bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100"
-                style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none group-hover:scale-125 peer-focus-visible:scale-125"
+                style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 8px)` }}
               />
             </div>
-            {/* Knob mimic */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none group-hover:scale-125 peer-focus-visible:scale-125"
-              style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 8px)` }}
-            />
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.3em] text-white/20">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
           </div>
-          <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.3em] text-white/20">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
+        ) : (
+          <div className="space-y-2 px-2">
+            <p className="text-[10px] uppercase tracking-widest text-white/45">
+              {micState === "requesting" ? "Requesting microphone permission..." : micState === "active" ? "Live microphone analysis" : "Microphone ready"}
+            </p>
+            {micError && (
+              <p className="text-[10px] text-amber-300">{micError}</p>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

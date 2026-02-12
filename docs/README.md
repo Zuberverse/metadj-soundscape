@@ -1,43 +1,37 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-02-10 11:51 EST
+**Last Modified**: 2026-02-12 09:23 EST
 
-Quick navigation for the Soundscape documentation.
-
-Public repository note: Internal strategy and operational details are intentionally omitted.
+Documentation index for Soundscape.
 
 ## Start Here
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](./architecture.md) | System design, WebRTC flow, UI patterns |
-| [Soundscape Mechanics](./soundscape-mechanics.md) | How audio drives visuals, parameter details |
+| [Architecture](./architecture.md) | System topology, connection lifecycle, recording + auto-theme behavior |
+| [Soundscape Mechanics](./soundscape-mechanics.md) | Signal processing, mapping, transitions, performance semantics |
+| [Feature Spec](./features/soundscape-mvp-spec.md) | Public capability summary for current build |
 
 ## Scope Integration
 
 | Document | Description |
 |----------|-------------|
-| [Scope Overview](./scope.md) | Scope context + official links (external hub is canonical) |
-| [Scope Technical](./scope-technical.md) | Project delta technical assumptions |
-| [API Reference](./api-reference.md) | Project delta API usage |
-
-## Features
-
-| Path | Description |
-|------|-------------|
-| [features/](./features/) | Feature-specific documentation |
+| [Scope Overview](./scope.md) | Scope context and official links |
+| [Scope Technical](./scope-technical.md) | Project-specific technical assumptions |
+| [API Reference](./api-reference.md) | Scope endpoint usage in this app |
+| [Scope Platform Reference](./scope-platform-reference.md) | Platform deltas and compatibility notes |
 
 ## Operations
 
 | Document | Description |
 |----------|-------------|
-| [RunPod Reference](./runpod-reference.md) | Project delta deployment notes |
-| [Tools](./tools.md) | Development tools and workflows |
-| [Strategy](./strategy.md) | Project direction and scope |
+| [RunPod Reference](./runpod-reference.md) | Deployment context and operational notes |
+| [Tools](./tools.md) | Local tooling and scripts |
+| [Strategy](./strategy.md) | Project direction and scoping notes |
 
-## Research
+## Historical / Research
 
 | Document | Description |
 |----------|-------------|
 | [Research Notes](./research.md) | Technical investigations and findings |
-| [Scope Track Overview](./scope-track-overview.md) | Historical hackathon context |
+| [Scope Track Overview](./scope-track-overview.md) | Hackathon/program context |

@@ -1,33 +1,53 @@
-# MetaDJ Soundscape - MVP Summary
+# MetaDJ Soundscape - Public Capability Spec
 
-**Last Modified**: 2026-01-08 22:01 EST
-**Status**: Public Summary
-**Version**: 1.0.0
-
----
+**Last Modified**: 2026-02-12 09:23 EST
+**Status**: Active
+**Version**: 1.1.0-candidate
 
 ## Summary
-MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Scope. It analyzes a demo track in the browser and streams real-time parameters to a Scope server, producing synchronized visuals that respond to music.
 
-## Included in the MVP
-- Demo track playback with infinite loop.
-- Real-time audio analysis (energy, brightness, texture, beats).
-- Theme presets with audio-reactive mapping.
-- Custom theme prompt input (lightweight UI).
-- WebRTC streaming from Scope to browser.
-- Aspect ratio toggle (16:9 and 9:16).
-- Ambient mode when audio is paused.
+MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Scope. It analyzes in-browser audio signals, maps them to generation parameters, and streams those parameters to Scope in real time.
 
-## Not Included (Public)
-- File upload or microphone input.
-- Multi-track mixing or collaborative sessions.
-- Production deployment automation.
+## Included In Current Build
+
+- Demo track playback with infinite loop
+- Microphone input mode
+- Real-time audio analysis (energy, brightness, texture, beat state)
+- Theme presets with audio-reactive parameter mapping
+- Prompt accent controls (text + weight + presets)
+- Denoising and reactivity profiles
+- Scope diagnostics + pipeline/preprocessor selection
+- WebRTC streaming from Scope to browser
+- Ambient generation mode
+- Clip recording/download from live Scope stream
+- Auto theme timeline (beat-section rotation)
+- Keyboard shortcuts (`Space`, `1-9`)
+- Live telemetry (resolution, FPS sample, dropped frame ratio)
+
+## Public Non-Goals (Current)
+
+- Multi-user collaborative sessions
+- Multi-track DAW-style mixing inside app
+- Full production deployment automation workflows
 
 ## Technical Notes (Public)
-- Pipeline: `longlive` (recommended for smooth transitions).
-- Resolutions: 576x320 (landscape) and 320x576 (portrait), divisible by 64.
-- Parameter updates: 30 Hz via WebRTC data channel.
-- Denoising steps: 4-step schedule `[1000, 750, 500, 250]`.
+
+- Default pipeline: `longlive`
+- Default resolutions:
+  - 16:9 -> `576x320`
+  - 9:16 -> `320x576`
+- Parameter send cadence: ~30 Hz
+- Analysis cadence: ~86 Hz
+- Default denoising schedule: `[1000, 750, 500, 250]`
+
+## Validation Baseline
+
+- Lint: pass
+- Type-check: pass
+- Test suite: pass
+- Production build: pass
+- Prod dependency audit: no known vulnerabilities
 
 ## Setup
-See `README.md` for local setup and Scope server configuration.
+
+See `README.md` for run instructions, environment variables, and Scope setup guidance.

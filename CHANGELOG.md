@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-10 20:09 EST
+**Last Modified**: 2026-02-12 09:23 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Microphone audio input mode in `AudioPlayer` alongside the built-in demo track source.
+- Live clip recording workflow for Scope stream output with downloadable `webm` export.
+- Beat-synced Auto Theme timeline controls (16/32/64 beat sections) for hands-free preset rotation.
+- Keyboard shortcuts for performance flow: `Space` toggles play/pause and `1-9` selects preset themes.
+- Demo-Safe offline guidance panel with one-click copy of `npm run check:scope`.
+- Performance telemetry classification using sampled FPS and dropped frame thresholds (Healthy/Watch/Critical).
+- Scope proxy route regression tests covering path allowlist enforcement and successful health proxy behavior.
+- AudioPlayer regression test for transport control registration and playback toggle behavior.
+- Scope connection regression test for `connect()` pipeline override handling.
 - Scope diagnostics panel on the connection screen (health, scope version, pipeline status, last check timestamp, manual refresh).
 - Dynamic pipeline selection from live Scope schemas before connect.
 - Live stream telemetry overlay (active pipeline, resolution, dropped-frame percentage when available).
@@ -28,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audio analyzer regression coverage for same-element analyzer reuse and low-energy noise beat suppression.
 
 ### Changed
+- Upgraded frontend runtime/security baseline to `next@16.1.6` and aligned `eslint-config-next`/React patch versions.
+- Scope connect action now uses refreshed, resolved pipeline IDs directly to avoid stale local preference race conditions.
+- Scope connection hook now supports per-connect overrides and preserves last connect overrides for reconnect attempts.
+- Persisted reactivity profile restoration now validates against known profile keys before applying.
+- Theme transition console output now respects debug logging controls (avoids unconditional production noise).
 - Initial WebRTC prompt now includes theme style modifiers for better visual consistency at connect time.
 - Public docs trimmed for release readiness (Scope brief sanitized; transition timing examples aligned).
 - Scope integration now sends canonical `pipeline_ids` for `/api/v1/pipeline/load` with compatibility fallback to legacy `pipeline_id`.

@@ -1,208 +1,144 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-10 12:04 EST
+**Last Modified**: 2026-02-12 09:23 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
-Music in. AI visuals out. Real-time.
+Soundscape turns music into real-time AI visuals. The browser analyzes audio signals, maps them to generation controls, and streams parameters to Daydream Scope over WebRTC.
 
-Soundscape extracts audio features—energy, brightness, beats—and streams them to Daydream Scope. The AI generates frame-by-frame, responding to what the music is actually doing.
+## What Is New In This Build
 
-## Features
+- **Mic input mode** in addition to the built-in demo track.
+- **Clip recording + download** from the live Scope stream (`webm`).
+- **Auto Theme Timeline** that rotates presets every N beats (16/32/64).
+- **Hotkeys**: `Space` (play/pause), `1-9` (preset themes).
+- **Demo-Safe Mode** UX when Scope is offline, with quick diagnostics CTA.
+- **Performance HUD** with FPS sampling + dropped frame warning states.
+- **Hardened connect flow** that resolves pipelines from fresh diagnostics before connecting.
+- **Security patch baseline** upgraded to `next@16.1.6` (no known audit vulnerabilities).
 
-- **Real-time Audio Analysis** — Meyda-powered feature extraction (energy, spectral centroid, RMS, zero-crossing rate)
-- **Beat Detection** — Energy-based BPM detection
-- **Theme Presets** — Twelve curated visual themes with audio-reactive parameter mapping
-- **WebRTC Streaming** — Low-latency video delivery from GPU server
-- **Infinite Loop Playback** — Demo track plays continuously for seamless visual generation
-- **Ambient Mode** — Generates visuals without audio when playback is paused
-- **Scope Diagnostics Panel** — Live health, version, pipeline status, and manual readiness checks
-- **Dynamic Pipeline Selection** — Pull pipeline IDs from Scope and choose before connect
-- **Live Telemetry Overlay** — Active pipeline, stream resolution, and dropped-frame visibility
-- **Docked Analysis Meters** — Compact audio/engine signal feedback while performing
+## Core Features
 
-## Demo
-
-Built-in demo track ("Metaversal Odyssey") loops infinitely. No external audio setup needed. The track is a MetaDJ Original.
-
-File upload and microphone input: planned for future releases.
+- **Real-time Audio Analysis** — Meyda extraction (RMS, spectral centroid, flatness, ZCR)
+- **Beat Detection + BPM Estimation** — Energy-spike detector with cooldowns
+- **12 Visual Themes** — Preset prompt/mapping profiles for different aesthetics
+- **WebRTC Scope Streaming** — GPU output video + parameter data channel
+- **Ambient Mode** — Visual generation can continue without active audio playback
+- **Generation Controls** — Denoising profile, reactivity profile, prompt accent, pipeline chain
+- **Diagnostics Panel** — Health, pipeline status, hardware, model readiness, plugins/LoRAs
+- **Telemetry Overlay** — Active pipeline, resolution, fps sample, dropped frame ratio
 
 ## Preset Themes
 
-| Theme | Description |
-|-------|-------------|
-| **Cosmic Voyage** | Neon digital space with energy-responsive noise |
-| **Neon Foundry** | Industrial AI interior with beat-driven noise pulses |
-| **Digital Forest** | Bioluminescent nature/tech hybrid |
-| **Synthwave Highway** | Retro-futuristic driving visuals |
-| **Crystal Sanctuary** | Meditative crystalline environments |
-| **Ocean Depths** | Bioluminescent underwater exploration |
-| **Cyber City** | Neon-drenched futuristic metropolis |
-| **Aurora Dreams** | Ethereal northern lights formations |
-| **8-Bit Adventure** | Retro pixel art gaming worlds |
-| **Volcanic Forge** | Molten fire and ember landscapes |
-| **Quantum Realm** | Abstract particle physics dimensions |
-| **Neon Tokyo** | Japanese cyberpunk street racing |
+- Cosmic Voyage
+- Neon Foundry
+- Digital Forest
+- Synthwave Highway
+- Crystal Sanctuary
+- Ocean Depths
+- Cyber City
+- Aurora Dreams
+- 8-Bit Adventure
+- Volcanic Forge
+- Quantum Realm
+- Neon Tokyo
 
-## Architecture
+## Keyboard Shortcuts
 
-```
-[Audio Input] → [Meyda Analysis] → [Mapping Engine] → [WebRTC DataChannel] → [Scope GPU]
-                                                                                    ↓
-[Browser Video] ← ──────────────── [RTCPeerConnection] ← ─────────────── [Generated Frames]
-```
-
-## Technology Stack
-
-- **Frontend**: Next.js 16 + TypeScript + Tailwind 4
-- **Audio Analysis**: Meyda library for real-time feature extraction
-- **Video Streaming**: WebRTC for low-latency GPU-to-browser delivery
-- **AI Backend**: Daydream Scope (StreamDiffusion) on RunPod
+| Shortcut | Action |
+|----------|--------|
+| `Space` | Toggle play/pause |
+| `1-9` | Jump to preset theme by index |
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 20.19+
-- Running Scope server (see [Scope Server Setup](#scope-server-setup))
+- Node.js `>=20.19.0`
+- Running Scope server (RunPod or local)
 
-### Installation
+### Install
 
 ```bash
 npm install
 ```
 
-### Development
+### Run
 
 ```bash
-# Start development server (port 3500)
 npm run dev
-
-# Open in browser
-open http://localhost:3500
+# Open http://localhost:3500
 ```
 
-### Usage
+### Verify Scope Connectivity
 
-1. Open Scope readiness and run a refresh check
-2. Select output format (16:9 or 9:16) and pipeline
-3. Click connect (requires Scope server running)
-4. Hit Play to start the demo track
-5. Watch audio-reactive visuals + live telemetry, then switch themes
+```bash
+npm run check:scope
+```
 
-## How It Works
+## Typical Session Flow
 
-### Audio Analysis
-
-Meyda extracts features at ~86Hz:
-- **Energy** — Intensity level
-- **Spectral Centroid** — Brightness/tone
-- **RMS** — Amplitude
-- **Zero-Crossing Rate** — Noisiness
-
-### Parameter Mapping
-
-Each theme maps audio to Scope parameters:
-- Energy controls noise_scale (visual intensity)
-- Beats trigger noise pulses (no hard cuts)
-- All transitions use SLERP blending
-
-### Streaming
-
-WebRTC DataChannel sends parameters. Scope generates frames with StreamDiffusion. Video streams back over the same connection. Round-trip latency stays minimal.
+1. Open `/soundscape`.
+2. Click **Refresh** in Scope Readiness.
+3. Confirm server/pipeline readiness and choose output aspect ratio + pipeline.
+4. Connect Scope.
+5. Pick audio source: **Demo** or **Mic**.
+6. Play audio; tune denoising/reactivity/prompt accents.
+7. Optionally enable **Auto Theme** for beat-driven preset rotation.
+8. Optionally record a clip and download the `webm` file.
 
 ## Environment Variables
 
-Copy `.env.example` to `.env.local` and configure:
+Copy `.env.example` to `.env.local`.
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SCOPE_API_URL` | Recommended | Scope server base URL used by the proxy |
-| `NEXT_PUBLIC_SCOPE_API_URL` | Optional | Scope server base URL used by the proxy (dev convenience) |
-| `SCOPE_PROXY_ENABLE` | Required in production | Enable the built-in proxy (`true`/`false`) |
+| Variable | Description |
+|----------|-------------|
+| `SCOPE_API_URL` | Scope server base URL for server-side proxy target |
+| `NEXT_PUBLIC_SCOPE_API_URL` | Optional dev convenience fallback |
+| `SCOPE_PROXY_ENABLE` | Required in production to enable `/api/scope` proxy |
 
-**Security Note**: The app uses the `/api/scope` proxy by default. The proxy is disabled in production unless `SCOPE_PROXY_ENABLE=true`. Enable it only behind platform-level auth (Vercel Password Protection, VPN, etc.). If you want direct client connections, update `ScopeClient` to use a direct base URL.
+### Security Note
 
-## Scope Server Setup
-
-Soundscape requires a running Daydream Scope server for AI video generation. Canonical setup instructions live in the external hub and official docs.
-
-**Canonical External References**:
-- `1-system/3-docs/external-tools/ai/daydream/daydream-scope.md`
-- https://docs.daydream.live/scope
-- https://runpod.io/console/deploy?template=daydream-scope
-
-**Current Scope Release Snapshot (Verified 2026-02-10)**:
-- Latest stable: `v0.1.0` (published 2026-02-09)
-- No `v1.0` stable release published yet
-
-**Project-Specific Notes**:
-- Set `SCOPE_API_URL` to your Scope server (RunPod or local).
-- Health endpoint is `/health`.
-- The app uses the `/api/scope` proxy by default; enable it in production with `SCOPE_PROXY_ENABLE=true`.
-
-**Quick Verification**:
-```bash
-curl http://your-scope-url/health
-```
+The app defaults to `/api/scope` proxy routing. In production, proxying is disabled unless `SCOPE_PROXY_ENABLE=true`. If enabled, protect the deployment with platform-level access control.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
+| `npm run dev` | Start dev server |
+| `npm run build` | Build production bundle |
 | `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run type-check` | TypeScript type check |
-| `npm run test` | Run test suite |
+| `npm run lint` | ESLint strict run |
+| `npm run type-check` | TypeScript type-check |
+| `npm run test` | Vitest test run |
+| `npm run check:scope` | Probe Scope endpoints |
 
-## Project Structure
+## Architecture Snapshot
 
-```
-src/
-├── app/
-│   └── soundscape/     # Soundscape page
-├── components/
-│   └── soundscape/     # UI components (Studio, Player, ThemeSelector)
-└── lib/
-    ├── scope/          # WebRTC and Scope API integration
-    └── soundscape/     # Audio analysis, mapping engine, themes
+```text
+[Demo Track or Mic] -> [Audio Analyzer (~86Hz)] -> [Mapping Engine] -> [DataChannel (~30Hz)] -> [Scope GPU]
+                                                                                                   |
+[Browser Video] <------------------------------------------ [RTCPeerConnection Video Track] <-----+
 ```
 
 ## Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| "Server not healthy" | Health endpoint is `/health` (root-level) |
-| Connected but no frames | Pipeline must load correctly before WebRTC starts (check `/api/v1/pipeline/status`) |
-| Generation doesn't start | Include `paused: false` in initial parameters |
-| Pipeline stuck loading | Close other Scope UI tabs (conflicts with pipeline) |
+| Issue | Quick Fix |
+|-------|-----------|
+| Server shows offline | Run `npm run check:scope`; verify `SCOPE_API_URL`; restart Scope pod |
+| Connect fails on stale pipeline | Use Scope diagnostics refresh and reconnect (resolved pipeline is now enforced) |
+| No frames but connected | Verify pipeline loaded (`/api/v1/pipeline/status`) and avoid conflicting Scope tabs |
+| Mic mode silent | Check browser microphone permission + input device selection |
+| Recording unavailable | Browser lacks `MediaRecorder` support for the current stream codec |
 
-## Historical Context
+## Documentation Map
 
-Originally built for the **Daydream 2025 Interactive AI Video Program (Scope Track)**:
-- **Program**: Two-week sprint (Dec 22 - Jan 8)
-- **Focus**: Real-time interactive AI video generation
-- **Platform**: Daydream Scope (StreamDiffusion-based)
-
-### Vibe Coded
-
-This entire application was vibe coded using Claude Code and OpenAI Codex. No traditional development cycle. Just ideas, iteration, and AI-assisted implementation. The barrier between concept and creation keeps shrinking.
-
-## Documentation
-
-- `1-system/3-docs/external-tools/ai/daydream/` — Canonical Daydream external docs hub
-- `docs/soundscape-mechanics.md` — How Soundscape works (latent cache, noise, FPS, transitions)
-- `docs/architecture.md` — System design and WebRTC flow
-- `docs/scope-platform-reference.md` — Project delta notes for Scope platform
-- `docs/api-reference.md` — Project delta API usage notes
-
-## Resources
-
-- [Scope GitHub](https://github.com/daydreamlive/scope/)
-- [Scope Docs](https://docs.daydream.live/scope)
-- [RunPod Docs](https://docs.runpod.io)
+- `docs/README.md` — Documentation index
+- `docs/architecture.md` — Runtime architecture + lifecycle
+- `docs/soundscape-mechanics.md` — Audio/visual mechanics + transitions
+- `docs/features/soundscape-mvp-spec.md` — Public capability summary
+- `docs/api-reference.md` — Scope API usage notes
+- `docs/scope-platform-reference.md` — Scope platform delta notes
 
 ## License
 
