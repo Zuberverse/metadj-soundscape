@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-12 11:47 EST
+**Last Modified**: 2026-02-12 12:02 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -70,7 +70,16 @@ npm run dev
 # Open http://localhost:3500
 ```
 
-If you are launching from Codex CLI tooling, run this in your own terminal window/tab for persistence; Codex-managed tool sessions can stop long-running dev processes at turn boundaries.
+For persistent launch from Codex/Claude sessions, from corpus root use:
+
+```bash
+./1-system/2-scripts/integration/ai-dev-server.sh start 3-projects/5-software/metadj-soundscape --port 3500
+```
+
+Then manage lifecycle with:
+`./1-system/2-scripts/integration/ai-dev-server.sh status metadj-soundscape`,
+`logs metadj-soundscape --lines 120`, and
+`stop metadj-soundscape`.
 
 ### Verify Scope Connectivity
 

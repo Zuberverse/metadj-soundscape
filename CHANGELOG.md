@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-12 12:02 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audio analyzer regression coverage for same-element analyzer reuse and low-energy noise beat suppression.
 
 ### Changed
+- Documentation now recommends corpus-level `ai-dev-server.sh` for persistent Codex/Claude dev sessions.
 - Upgraded frontend runtime/security baseline to `next@16.1.6` and aligned `eslint-config-next`/React patch versions.
 - Scope connect action now uses refreshed, resolved pipeline IDs directly to avoid stale local preference race conditions.
 - Scope connection hook now supports per-connect overrides and preserves last connect overrides for reconnect attempts.

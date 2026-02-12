@@ -1,7 +1,7 @@
 # MetaDJ Soundscape
 
 *Parent: /3-projects/5-software/AGENTS.md*
-**Last Modified**: 2026-01-23 22:30 EST
+**Last Modified**: 2026-02-12 12:02 EST
 
 ## Scope
 
@@ -23,6 +23,10 @@ Audio-reactive AI video generation application for the Daydream 2025 Interactive
 | `npm run lint` | ESLint |
 | `npm run type-check` | TypeScript |
 | `npm run test` | Vitest |
+
+**AI CLI Runtime Note**: For persistent launches in Codex/Claude sessions, from corpus root use:
+`./1-system/2-scripts/integration/ai-dev-server.sh start 3-projects/5-software/metadj-soundscape --port 3500`
+Then use `status`, `logs`, and `stop` subcommands from the same script for lifecycle management.
 
 **Prerequisites**: Scope server must be running (RunPod or local).
 
