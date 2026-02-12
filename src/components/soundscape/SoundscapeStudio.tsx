@@ -1095,11 +1095,12 @@ export function SoundscapeStudio({
             </div>
           </div>
         ) : isConnecting ? (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6">
+            <div className="h-full flex items-start justify-center">
             {/* Ambient glow background */}
             <div className="glow-bg bg-scope-purple/20 top-1/4 left-1/4" />
             <div className="glow-bg bg-scope-cyan/15 bottom-1/4 right-1/4 animation-delay-2000" />
-            <div className="glass-radiant text-center p-8 rounded-3xl max-w-sm">
+            <div className="glass-radiant text-center p-8 rounded-3xl max-w-sm w-full max-h-full overflow-y-auto overscroll-contain">
               {/* Animated Music Notes Icon */}
               <div className="mb-5 animate-float flex justify-center">
                 <svg
@@ -1142,13 +1143,15 @@ export function SoundscapeStudio({
                 <div className="h-full bg-gradient-to-r from-scope-purple via-scope-cyan to-scope-magenta animate-pulse rounded-full w-2/3" />
               </div>
             </div>
+            </div>
           </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6">
+            <div className="h-full flex items-start justify-center">
             {/* Ambient glow background */}
             <div className="glow-bg bg-scope-purple/15 top-1/3 left-1/3" />
             <div className="glow-bg bg-scope-cyan/10 bottom-1/3 right-1/3 animation-delay-2000" />
-            <div className="glass-radiant text-center max-w-md px-8 py-10 rounded-3xl">
+            <div className="glass-radiant text-center w-full max-w-2xl px-5 py-6 sm:px-8 sm:py-8 rounded-3xl max-h-full overflow-y-auto overscroll-contain">
               {/* Double Music Notes with Sparkles Icon */}
               <div className="mb-6 animate-float flex justify-center">
                 <svg
@@ -1586,6 +1589,7 @@ export function SoundscapeStudio({
                   )}
                 </div>
               )}
+            </div>
             </div>
           </div>
         )}
