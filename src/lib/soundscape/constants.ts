@@ -85,7 +85,7 @@ export const MAX_RECONNECT_ATTEMPTS = 3;
 
 /**
  * Base delay between reconnection attempts (ms).
- * Exponential backoff is applied on top of this.
+ * Linear scaling is applied: delay = base * attemptNumber.
  */
 export const RECONNECT_BASE_DELAY_MS = 2000;
 

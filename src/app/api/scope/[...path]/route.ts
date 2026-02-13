@@ -44,8 +44,12 @@ const PATH_ALLOWLIST = [
 ];
 
 function isPathAllowed(path: string): boolean {
-  // Normalize: remove leading/trailing slashes, prevent path traversal
-  const normalized = path.replace(/^\/+|\/+$/g, "").replace(/\.\./g, "");
+  // Normalize: remove leading/trailing slashes
+  const normalized = path.replace(/^\/+|\/+$/g, "");
+  // Reject path traversal attempts outright
+  if (normalized.includes("..")) {
+    return false;
+  }
   return PATH_ALLOWLIST.some((allowed) => normalized === allowed || normalized.startsWith(`${allowed}/`));
 }
 
@@ -98,7 +102,14 @@ async function proxyRequest(
   if (request.method !== "GET" && request.method !== "HEAD") {
     const contentType = request.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
-      body = JSON.stringify(await request.json());
+      try {
+        body = JSON.stringify(await request.json());
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid JSON in request body" },
+          { status: 400 }
+        );
+      }
     } else {
       body = await request.arrayBuffer();
     }

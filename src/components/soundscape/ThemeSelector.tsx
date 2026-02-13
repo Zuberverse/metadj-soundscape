@@ -1,12 +1,33 @@
 /**
  * Theme Selector Component
- * Visual theme selection for Soundscape
+ * Visual theme selection for Soundscape with color-coded indicators
  */
 
 "use client";
 
 import { useState, useCallback, type KeyboardEvent } from "react";
 import type { Theme, CustomThemeInput, ReactivityPreset, BeatResponse } from "@/lib/soundscape";
+
+/**
+ * Color accents per theme for visual differentiation.
+ * Maps theme IDs to a gradient pair (from, to) used for the indicator dot and active ring.
+ */
+const THEME_ACCENTS: Record<string, { from: string; to: string }> = {
+  "cosmic-voyage": { from: "#8B5CF6", to: "#06B6D4" },
+  "neon-foundry": { from: "#8B5CF6", to: "#EC4899" },
+  "digital-forest": { from: "#10B981", to: "#06B6D4" },
+  "synthwave-highway": { from: "#EC4899", to: "#F59E0B" },
+  "crystal-sanctuary": { from: "#8B5CF6", to: "#A855F7" },
+  "ocean-depths": { from: "#06B6D4", to: "#3B82F6" },
+  "cyber-city": { from: "#06B6D4", to: "#EC4899" },
+  "aurora-dreams": { from: "#10B981", to: "#8B5CF6" },
+  "8-bit-adventure": { from: "#F59E0B", to: "#EC4899" },
+  "volcanic-forge": { from: "#EF4444", to: "#F59E0B" },
+  "quantum-realm": { from: "#3B82F6", to: "#8B5CF6" },
+  "neon-tokyo": { from: "#EC4899", to: "#06B6D4" },
+};
+
+const DEFAULT_ACCENT = { from: "#8B5CF6", to: "#06B6D4" };
 
 /**
  * Props for the ThemeSelector component.
@@ -95,74 +116,124 @@ export function ThemeSelector({
     [currentTheme?.id, disabled, handlePresetSelect, themes]
   );
 
-  // Compact mode for dock
+  // Compact mode for dock -- horizontal scrollable strip with color indicators
   if (compact) {
     return (
       <div
-        className="flex items-center gap-2 flex-wrap"
+        className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5"
         role="radiogroup"
         aria-label="Visual themes"
         onKeyDown={handleThemeKeyDown}
       >
-        {themes.map((theme) => (
-          <button
-            key={theme.id}
-            type="button"
-            onClick={() => handlePresetSelect(theme.id)}
-            disabled={disabled}
-            role="radio"
-            aria-checked={currentTheme?.id === theme.id}
-            tabIndex={currentTheme?.id === theme.id || (!currentTheme && themes[0]?.id === theme.id) ? 0 : -1}
-            className={`
-              px-3 py-2 min-h-[44px] rounded-lg text-[10px] font-medium whitespace-nowrap transition-all duration-300
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
-              ${currentTheme?.id === theme.id
-                ? "glass bg-scope-purple/30 text-white border border-scope-purple/50 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
-                : "glass bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:border-scope-purple/30"}
-            `}
-          >
-            {theme.name}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      {/* Preset Themes Grid */}
-      <div>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/45 px-1 mb-6">Visual Environment</h3>
-        <div
-          className="grid grid-cols-2 gap-3"
-          role="radiogroup"
-          aria-label="Visual themes"
-          onKeyDown={handleThemeKeyDown}
-        >
-          {themes.map((theme) => (
+        {themes.map((theme, index) => {
+          const isActive = currentTheme?.id === theme.id;
+          const accent = THEME_ACCENTS[theme.id] ?? DEFAULT_ACCENT;
+          return (
             <button
               key={theme.id}
               type="button"
               onClick={() => handlePresetSelect(theme.id)}
               disabled={disabled}
               role="radio"
-              aria-checked={currentTheme?.id === theme.id}
-              tabIndex={currentTheme?.id === theme.id || (!currentTheme && themes[0]?.id === theme.id) ? 0 : -1}
+              aria-checked={isActive}
+              aria-label={`${theme.name} theme${isActive ? " (active)" : ""}`}
+              tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
               className={`
-                p-5 rounded-2xl text-left transition-all duration-500 hover:scale-[1.03] active:scale-95 group
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black
-                ${currentTheme?.id === theme.id
-                  ? "glass bg-scope-purple/20 border-scope-purple/40 shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-                  : "glass bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10"}
-                ${disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
+                flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] rounded-lg text-[10px] font-semibold whitespace-nowrap
+                transition-colors duration-300
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
+                ${isActive
+                  ? "bg-white/12 text-white border border-white/20"
+                  : "bg-white/5 text-white/55 border border-transparent hover:bg-white/8 hover:text-white/75"}
+                ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
               `}
             >
-              <span className="block font-bold text-white uppercase tracking-tighter text-sm mb-1 group-hover:text-pop transition-all">{theme.name}</span>
-              <span className="block text-[10px] text-white/55 truncate font-medium">
-                {theme.description}
-              </span>
+              {/* Color indicator dot */}
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-50"}`}
+                style={{
+                  background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`,
+                  boxShadow: isActive ? `0 0 6px ${accent.from}66` : "none",
+                }}
+                aria-hidden="true"
+              />
+              {theme.name}
             </button>
-          ))}
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Preset Themes Grid */}
+      <div>
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40 px-1 mb-4">Visual Environment</h3>
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 gap-2 animate-fade-in-stagger"
+          role="radiogroup"
+          aria-label="Visual themes"
+          onKeyDown={handleThemeKeyDown}
+        >
+          {themes.map((theme, index) => {
+            const isActive = currentTheme?.id === theme.id;
+            const accent = THEME_ACCENTS[theme.id] ?? DEFAULT_ACCENT;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => handlePresetSelect(theme.id)}
+                disabled={disabled}
+                role="radio"
+                aria-checked={isActive}
+                tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
+                className={`
+                  relative p-4 rounded-xl text-left transition-colors duration-300 group
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black
+                  ${isActive
+                    ? "glass bg-white/10 border-white/20"
+                    : "glass bg-white/[0.03] border-white/5 hover:bg-white/8 hover:border-white/12"}
+                  ${disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
+                `}
+              >
+                {/* Active indicator bar at top */}
+                <div
+                  className={`absolute top-0 left-3 right-3 h-0.5 rounded-b-full transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-0"}`}
+                  style={{ background: `linear-gradient(to right, ${accent.from}, ${accent.to})` }}
+                  aria-hidden="true"
+                />
+
+                <div className="flex items-start gap-2.5">
+                  {/* Color indicator */}
+                  <span
+                    className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-40 group-hover:opacity-70"}`}
+                    style={{
+                      background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`,
+                      boxShadow: isActive ? `0 0 8px ${accent.from}55` : "none",
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0">
+                    <span className="block font-semibold text-white text-xs tracking-tight mb-0.5 truncate">{theme.name}</span>
+                    <span className="block text-[10px] text-white/45 truncate leading-snug">
+                      {theme.description}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Keyboard shortcut hint */}
+                {index < 9 && (
+                  <span
+                    className="absolute top-2 right-2.5 text-[9px] text-white/20 font-mono tabular-nums"
+                    aria-hidden="true"
+                  >
+                    {index + 1}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Custom Theme Button */}
@@ -172,27 +243,31 @@ export function ThemeSelector({
           disabled={disabled}
           aria-pressed={showCustom}
           aria-expanded={showCustom}
+          aria-controls="custom-theme-panel"
           className={`
-            mt-3 w-full p-5 rounded-2xl text-left transition-all duration-500 hover:scale-[1.01] active:scale-95 group
+            mt-2 w-full p-4 rounded-xl text-left transition-colors duration-300 group
             focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black
             ${showCustom
-              ? "glass bg-scope-cyan/20 border-scope-cyan/40 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
-              : "glass bg-white/5 border-dashed border-white/20 hover:border-scope-cyan/40"}
+              ? "glass bg-scope-cyan/10 border-scope-cyan/30"
+              : "glass bg-white/[0.03] border-dashed border-white/15 hover:border-scope-cyan/30 hover:bg-white/5"}
             ${disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
           `}
         >
-          <span className="block font-bold text-white uppercase tracking-tighter text-sm mb-1 group-hover:text-pop transition-all">✨ Custom</span>
-          <span className="block text-[10px] text-white/55 truncate font-medium">Inject unique vision</span>
+          <span className="block font-semibold text-white text-xs tracking-tight mb-0.5">Custom Theme</span>
+          <span className="block text-[10px] text-white/45">Define your own visual world</span>
         </button>
       </div>
 
       {/* Custom Theme Panel */}
       {showCustom && (
-        <div className="glass-radiant bg-black/40 rounded-[2rem] p-6 space-y-6 border-white/5 animate-scale-in">
-          <div className="space-y-3">
+        <div
+          id="custom-theme-panel"
+          className="glass bg-white/[0.03] rounded-xl p-5 space-y-5 border border-white/10 animate-fade-in"
+        >
+          <div className="space-y-2">
             <label
               htmlFor="custom-prompt"
-              className="text-[10px] font-black uppercase tracking-[0.4em] text-white/45 px-1"
+              className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40"
             >
               Visual Descriptor
             </label>
@@ -200,19 +275,19 @@ export function ThemeSelector({
               id="custom-prompt"
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="Inject spectral seed..."
+              placeholder="Describe the visual world you want to see..."
               disabled={disabled}
-              className="w-full px-4 py-3 glass bg-black/40 border border-white/5 rounded-2xl text-sm text-white placeholder:text-white/35 resize-none focus:outline-none focus:border-scope-cyan/40 transition-all duration-300"
+              className="w-full px-4 py-3 glass bg-black/30 border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 resize-none focus:outline-none focus:border-scope-cyan/40 transition-colors duration-300"
               rows={3}
             />
           </div>
 
           {/* Reactivity Selector */}
-          <div className="space-y-4">
-            <label id="reactivity-label" className="text-[10px] font-black uppercase tracking-[0.4em] text-white/45 px-1">
-              Neural Sensitivity
-            </label>
-            <div className="flex gap-2" role="group" aria-labelledby="reactivity-label">
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40">
+              Reactivity
+            </legend>
+            <div className="flex gap-1.5" role="group">
               {(["subtle", "balanced", "intense", "chaotic"] as ReactivityPreset[]).map(
                 (preset) => (
                   <button
@@ -222,11 +297,11 @@ export function ThemeSelector({
                     disabled={disabled}
                     aria-pressed={reactivity === preset}
                     className={`
-                      flex-1 py-3 px-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-500
+                      flex-1 py-2.5 px-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors duration-300
                       focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
                       ${reactivity === preset
-                        ? "bg-scope-purple text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]"
-                        : "glass bg-white/5 text-white/55 hover:bg-white/10 hover:text-white"}
+                        ? "bg-scope-purple/25 text-white border border-scope-purple/40"
+                        : "glass bg-white/5 text-white/50 hover:bg-white/8 hover:text-white/70 border border-transparent"}
                       ${disabled ? "opacity-30 cursor-not-allowed" : ""}
                     `}
                   >
@@ -235,14 +310,14 @@ export function ThemeSelector({
                 )
               )}
             </div>
-          </div>
+          </fieldset>
 
           {/* Beat Response Selector */}
-          <div className="space-y-4">
-            <label id="beat-response-label" className="text-[10px] font-black uppercase tracking-[0.4em] text-white/45 px-1">
-              Temporal Response
-            </label>
-            <div className="flex gap-2" role="group" aria-labelledby="beat-response-label">
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40">
+              Beat Response
+            </legend>
+            <div className="flex gap-1.5" role="group">
               {(["none", "pulse", "shift", "burst"] as BeatResponse[]).map((response) => (
                 <button
                   key={response}
@@ -251,11 +326,11 @@ export function ThemeSelector({
                   disabled={disabled}
                   aria-pressed={beatResponse === response}
                   className={`
-                      flex-1 py-3 px-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-500
-                      focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
+                    flex-1 py-2.5 px-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors duration-300
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
                     ${beatResponse === response
-                      ? "bg-scope-cyan text-black shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-                      : "glass bg-white/5 text-white/55 hover:bg-white/10 hover:text-white"}
+                      ? "bg-scope-cyan/20 text-scope-cyan border border-scope-cyan/35"
+                      : "glass bg-white/5 text-white/50 hover:bg-white/8 hover:text-white/70 border border-transparent"}
                     ${disabled ? "opacity-30 cursor-not-allowed" : ""}
                   `}
                 >
@@ -263,7 +338,7 @@ export function ThemeSelector({
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {/* Apply Button */}
           <button
@@ -271,14 +346,14 @@ export function ThemeSelector({
             onClick={handleCustomApply}
             disabled={disabled || !customPrompt.trim()}
             className={`
-              w-full py-4 rounded-2xl font-black uppercase tracking-[0.4em] text-[10px] transition-all duration-500 shadow-xl
+              w-full py-3.5 rounded-xl font-semibold uppercase tracking-[0.2em] text-[11px] transition-colors duration-300
               focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black
               ${disabled || !customPrompt.trim()
-                ? "bg-white/5 text-white/35 cursor-not-allowed"
-                : "glass-radiant bg-scope-cyan/20 hover:bg-scope-cyan text-white/80 hover:text-white hover:scale-[1.02] active:scale-95"}
+                ? "bg-white/5 text-white/30 cursor-not-allowed border border-white/5"
+                : "bg-scope-cyan/15 hover:bg-scope-cyan/25 text-scope-cyan border border-scope-cyan/30"}
             `}
           >
-            Apply Custom Protocol
+            Apply Custom Theme
           </button>
         </div>
       )}

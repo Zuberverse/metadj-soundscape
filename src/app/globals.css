@@ -93,15 +93,16 @@ h3,
   filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.6));
 }
 
-@utility interactive-scale {
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+@utility interactive-glow {
+  transition: box-shadow 0.4s ease, border-color 0.4s ease;
 
   &:hover {
-    transform: scale(1.03) translateY(-4px);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.2), 0 0 40px rgba(6, 182, 212, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   &:active {
-    transform: scale(0.97);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
   }
 }
 
@@ -220,18 +221,72 @@ h3,
   animation-delay: 4s;
 }
 
-/* Scale-in animation */
-@keyframes scale-in {
+/* Fade-in animation (replaces scale-in to respect NO movement animations policy) */
+@keyframes fade-in {
   0% {
     opacity: 0;
-    transform: scale(0.95);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
-.animate-scale-in {
-  animation: scale-in 0.3s ease-out;
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Staggered fade-in for lists */
+.animate-fade-in-stagger > * {
+  opacity: 0;
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-fade-in-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-fade-in-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.animate-fade-in-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.animate-fade-in-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.animate-fade-in-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.animate-fade-in-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.animate-fade-in-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.animate-fade-in-stagger > *:nth-child(8) { animation-delay: 280ms; }
+.animate-fade-in-stagger > *:nth-child(9) { animation-delay: 320ms; }
+.animate-fade-in-stagger > *:nth-child(10) { animation-delay: 360ms; }
+.animate-fade-in-stagger > *:nth-child(11) { animation-delay: 400ms; }
+.animate-fade-in-stagger > *:nth-child(12) { animation-delay: 440ms; }
+
+/* Section collapse/expand */
+@utility collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+}
+
+/* Status pulse - opacity only */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* Skeleton loading shimmer */
+@keyframes shimmer {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { opacity: 0.3; }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Focus-visible ring utility for custom focus states */
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    outline: 2px solid var(--color-scope-cyan);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
 }

@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-12 12:02 EST
+**Last Modified**: 2026-02-12 20:26 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -74,18 +74,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audio-reactive AI video generation** powered by Daydream Scope and StreamDiffusion
 - **Real-time audio analysis** via Meyda.js (RMS, spectral centroid, energy, ZCR)
 - **Beat detection** with energy-based tempo tracking
-- **5 preset themes** with audio-reactive parameter mapping:
+- **12 preset themes** with audio-reactive parameter mapping:
   - Cosmic Voyage — Neon digital space with energy-responsive noise
   - Neon Foundry — Industrial AI interior with beat-driven noise pulses
   - Digital Forest — Bioluminescent nature/tech hybrid
   - Synthwave Highway — Retro-futuristic driving visuals
   - Crystal Sanctuary — Meditative crystalline environments
+  - Ocean Depths — Deep sea bioluminescence
+  - Cyber City — Cyberpunk urban neon
+  - Aurora Dreams — Northern lights and celestial flow
+  - 8-Bit Adventure — Retro pixel art game world
+  - Volcanic Forge — Molten lava and fire
+  - Quantum Realm — Subatomic particle visualization
+  - Neon Tokyo — Japanese neon cityscape
 - **WebRTC streaming** for low-latency GPU-to-browser video delivery
 - **Demo track** ("Metaversal Odyssey", MetaDJ Original) with infinite loop playback
 - **Aspect ratio toggle** (16:9 widescreen / 9:16 portrait)
 - **AnalysisMeter** showing real-time audio feature values
 - **ThemeSelector** with visual theme grid
-- **Auto-reconnection** with linear backoff (up to 3 attempts)
+- **Auto-reconnection** with linear scaling backoff (up to 3 attempts)
 - **Enhance mode** (post-processing contrast/saturation boost)
 - **Test suite** — Coverage for audio analysis, mapping engine, and connection hooks
 - **User-friendly error messages** — Structured error handling with title, description, and recovery suggestions

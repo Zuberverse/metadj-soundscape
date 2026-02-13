@@ -286,31 +286,39 @@ export function AudioPlayer({
   }, [onAudioElement, stopMicStream]);
 
   const sourceSwitcher = (
-    <div className="flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 p-1">
+    <div
+      className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5"
+      role="radiogroup"
+      aria-label="Audio source"
+    >
       <button
         type="button"
+        role="radio"
+        aria-checked={sourceMode === "demo"}
         onClick={() => {
           void handleSourceChange("demo");
         }}
         disabled={disabled}
-        className={`px-2 py-1 text-[9px] uppercase tracking-wide rounded-md transition-colors ${
+        className={`px-2.5 py-1.5 min-h-[32px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
           sourceMode === "demo"
             ? "bg-scope-cyan/20 text-scope-cyan"
-            : "text-white/55 hover:text-white/80"
+            : "text-white/45 hover:text-white/70"
         }`}
       >
         Demo
       </button>
       <button
         type="button"
+        role="radio"
+        aria-checked={sourceMode === "mic"}
         onClick={() => {
           void handleSourceChange("mic");
         }}
         disabled={disabled}
-        className={`px-2 py-1 text-[9px] uppercase tracking-wide rounded-md transition-colors ${
+        className={`px-2.5 py-1.5 min-h-[32px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
           sourceMode === "mic"
-            ? "bg-scope-purple/25 text-scope-purple"
-            : "text-white/55 hover:text-white/80"
+            ? "bg-scope-purple/20 text-scope-purple"
+            : "text-white/45 hover:text-white/70"
         }`}
       >
         Mic
@@ -321,7 +329,7 @@ export function AudioPlayer({
   // Compact mode for dock
   if (compact) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {/* Play/Pause */}
         <button
           type="button"
@@ -331,11 +339,12 @@ export function AudioPlayer({
           disabled={disabled}
           aria-label={isPlaying ? "Pause audio" : "Play audio"}
           className={`
-            w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-sm transition-all duration-300 border
+            w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border
             focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
             ${isPlaying
-              ? "glass bg-scope-purple/30 text-white border-scope-purple/50 shadow-[0_0_12px_rgba(139,92,246,0.3)]"
-              : "glass bg-scope-purple/20 text-white border-scope-purple/40 hover:bg-scope-purple/30"}
+              ? "bg-scope-purple/25 text-white border-scope-purple/40 shadow-[0_0_10px_rgba(139,92,246,0.25)]"
+              : "bg-scope-purple/15 text-white/90 border-scope-purple/30 hover:bg-scope-purple/25"}
+            ${disabled ? "opacity-40 cursor-not-allowed" : ""}
           `}
         >
           {isPlaying ? (
@@ -358,7 +367,12 @@ export function AudioPlayer({
           }}
           disabled={disabled}
           aria-label="Restart track"
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-sm transition-all duration-300 border glass bg-white/10 text-white/70 border-white/20 hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+          className={`
+            w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border
+            bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
+            ${disabled ? "opacity-40 cursor-not-allowed" : ""}
+          `}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M1 4v6h6" />
@@ -368,19 +382,29 @@ export function AudioPlayer({
 
         {/* Track info */}
         <div className="flex-1 min-w-0 space-y-0.5">
-          <p className="text-[11px] text-white/80 truncate font-medium" style={{ fontFamily: "var(--font-cinzel), Cinzel, serif" }}>
-            {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone Input"}
+          <p
+            className="text-[11px] text-white/85 truncate font-medium"
+            style={{ fontFamily: "var(--font-cinzel), Cinzel, serif" }}
+          >
+            {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone"}
           </p>
           {sourceMode === "demo" && duration > 0 && (
-            <p className="text-[10px] text-white/40 tabular-nums">{formatTime(currentTime)} / {formatTime(duration)}</p>
-          )}
-          {sourceMode === "mic" && (
-            <p className="text-[10px] text-white/45">
-              {micState === "requesting" ? "Requesting permission..." : micState === "active" ? "Listening" : "Microphone idle"}
+            <p className="text-[10px] text-white/35 tabular-nums font-medium">
+              {formatTime(currentTime)} / {formatTime(duration)}
             </p>
           )}
-          {micError && sourceMode === "mic" && (
-            <p className="text-[10px] text-amber-300 truncate">{micError}</p>
+          {sourceMode === "mic" && (
+            <p className={`text-[10px] font-medium ${
+              micState === "active" ? "text-scope-purple/70" :
+              micState === "requesting" ? "text-white/45 animate-status-pulse" :
+              micState === "error" ? "text-amber-300/80" :
+              "text-white/35"
+            }`}>
+              {micState === "requesting" ? "Requesting permission..." :
+               micState === "active" ? "Listening" :
+               micState === "error" && micError ? micError :
+               "Microphone ready"}
+            </p>
           )}
         </div>
 
@@ -402,22 +426,22 @@ export function AudioPlayer({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Demo Track Display */}
-      <div className="glass rounded-2xl p-5 border-white/5 relative overflow-hidden group">
-        <div className="absolute inset-0 bg-scope-purple/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="w-14 h-14 bg-gradient-brand rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <div className="glass rounded-xl p-4 border-white/8 relative overflow-hidden group">
+        <div className="absolute inset-0 bg-scope-purple/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        <div className="flex items-center gap-3.5 relative z-10">
+          <div className="w-12 h-12 bg-gradient-to-br from-scope-purple to-scope-cyan rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
               <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
             </svg>
           </div>
-          <div className="flex flex-col gap-1 flex-1">
-            <p className="font-bold text-white uppercase tracking-tighter text-lg">
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <p className="font-semibold text-white text-sm tracking-tight truncate">
               {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone Input"}
             </p>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+            <p className="text-[10px] font-medium text-white/40 uppercase tracking-widest">
               {sourceMode === "demo" ? DEMO_TRACK.artist : "Capture"}
             </p>
           </div>
@@ -438,7 +462,7 @@ export function AudioPlayer({
       />
 
       {/* Playback Controls */}
-      <div className="space-y-6 pt-2">
+      <div className="space-y-4">
         {/* Play/Pause Button */}
         <div className="flex justify-center">
           <button
@@ -448,27 +472,31 @@ export function AudioPlayer({
             }}
             disabled={disabled}
             className={`
-              w-16 h-16 rounded-full flex items-center justify-center text-3xl
-              transition-all duration-500 shadow-2xl relative group
+              w-14 h-14 rounded-full flex items-center justify-center text-2xl
+              transition-colors duration-300 relative
               focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black
               ${disabled
                 ? "bg-white/5 text-white/10 cursor-not-allowed"
-                : "bg-scope-purple hover:bg-white text-white hover:text-scope-purple hover:shadow-[0_0_40px_rgba(139,92,246,0.4)]"}
-              hover:scale-110 active:scale-90
+                : isPlaying
+                  ? "bg-scope-purple text-white shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                  : "bg-scope-purple/80 hover:bg-scope-purple text-white"}
             `}
             aria-label={isPlaying ? "Pause audio" : "Play audio"}
           >
-            {/* Pulsing ring when active */}
+            {/* Pulsing ring when active - opacity only */}
             {isPlaying && (
-              <div className="absolute inset-0 rounded-full border-2 border-current animate-ping opacity-20 scale-125" aria-hidden="true" />
+              <div
+                className="absolute inset-0 rounded-full border-2 border-scope-purple animate-ping opacity-15"
+                aria-hidden="true"
+              />
             )}
             {isPlaying ? (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <rect x="6" y="4" width="4" height="16" rx="1" />
                 <rect x="14" y="4" width="4" height="16" rx="1" />
               </svg>
             ) : (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}
@@ -476,7 +504,7 @@ export function AudioPlayer({
         </div>
 
         {sourceMode === "demo" ? (
-          <div className="space-y-3 px-2">
+          <div className="space-y-2 px-1">
             <div className="relative h-2 group">
               <input
                 type="range"
@@ -485,8 +513,8 @@ export function AudioPlayer({
                 value={currentTime}
                 onChange={handleSeek}
                 disabled={disabled}
-                className="peer absolute inset-0 w-full h-full bg-white/5 rounded-full appearance-none cursor-pointer accent-scope-cyan z-20 opacity-0"
-                aria-label="Seek audio"
+                className="peer absolute inset-0 w-full h-full bg-transparent rounded-full appearance-none cursor-pointer z-20 opacity-0"
+                aria-label="Seek audio position"
               />
               <div className="absolute inset-0 bg-white/5 rounded-full z-0 overflow-hidden peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan/70 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-black">
                 <div
@@ -495,22 +523,32 @@ export function AudioPlayer({
                 />
               </div>
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none group-hover:scale-125 peer-focus-visible:scale-125"
-                style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 8px)` }}
+                className="absolute top-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-md z-10 transition-all duration-100 border-2 border-scope-cyan pointer-events-none opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100"
+                style={{
+                  left: `calc(${(currentTime / (duration || 1)) * 100}% - 7px)`,
+                  transform: "translateY(-50%)",
+                }}
+                aria-hidden="true"
               />
             </div>
-            <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.3em] text-white/20">
+            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-white/25">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
         ) : (
-          <div className="space-y-2 px-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/45">
-              {micState === "requesting" ? "Requesting microphone permission..." : micState === "active" ? "Live microphone analysis" : "Microphone ready"}
+          <div className="space-y-1.5 px-1">
+            <p className={`text-[10px] uppercase tracking-widest font-medium ${
+              micState === "requesting" ? "text-white/45 animate-status-pulse" :
+              micState === "active" ? "text-scope-purple/70" :
+              "text-white/35"
+            }`}>
+              {micState === "requesting" ? "Requesting microphone permission..." :
+               micState === "active" ? "Live microphone analysis active" :
+               "Microphone ready"}
             </p>
             {micError && (
-              <p className="text-[10px] text-amber-300">{micError}</p>
+              <p className="text-[10px] text-amber-300/80 font-medium">{micError}</p>
             )}
           </div>
         )}

@@ -18,11 +18,14 @@ Audio-reactive AI video generation application for the Daydream 2025 Interactive
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Dev server (port 3500) |
+| `npm run dev:turbo` | Dev server with Turbopack (port 3500) |
 | `npm run build` | Production build |
 | `npm run start` | Production server |
 | `npm run lint` | ESLint |
 | `npm run type-check` | TypeScript |
 | `npm run test` | Vitest |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run check:scope` | Probe Scope API endpoint |
 
 **AI CLI Runtime Note**: For persistent launches in Codex/Claude sessions, from corpus root use:
 `./1-system/2-scripts/integration/ai-dev-server.sh start 3-projects/5-software/metadj-soundscape --port 3500`

@@ -1,6 +1,6 @@
 # Soundscape Technical Mechanics
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-12 20:28 EST
 **Status**: Active
 
 ## Purpose
@@ -88,9 +88,9 @@ Optional beat-synced rotation:
 
 HUD derives health from dropped frames and sampled FPS.
 
-- **Healthy**: low dropped-frame ratio and acceptable FPS
-- **Watch**: moderate frame loss or low FPS
-- **Critical**: high frame loss or severe FPS drop
+- **Healthy**: dropped frames < 5% and FPS >= 10
+- **Watch**: dropped frames >= 5% or FPS < 10
+- **Critical**: dropped frames >= 12% or FPS < 7
 
 ## Continuity Constraints
 

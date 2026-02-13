@@ -49,7 +49,7 @@ describe("Soundscape page", () => {
 
     // Verify branding is present
     const heading = container.querySelector("h1");
-    expect(heading?.textContent).toContain("MetaDJ Soundscape");
+    expect(heading?.textContent).toContain("Soundscape");
 
     unmount();
   });

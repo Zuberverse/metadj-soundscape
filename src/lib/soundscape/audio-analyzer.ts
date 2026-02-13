@@ -259,10 +259,11 @@ export class AudioAnalyzer {
         },
       });
     } catch (error) {
-      // Graceful degradation: audio analysis disabled but app continues
       console.error("[AudioAnalyzer] Failed to initialize Meyda:", error);
-      console.warn("[AudioAnalyzer] Audio analysis will be disabled for this session");
       this.meyda = null;
+      throw new Error(
+        `Audio analysis initialization failed: ${error instanceof Error ? error.message : "Unknown error"}. Visuals will not react to audio.`
+      );
     }
   }
 

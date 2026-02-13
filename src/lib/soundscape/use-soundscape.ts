@@ -301,7 +301,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
         try {
           dataChannelRef.current.send(JSON.stringify(themeChangeParams));
-          log(`✅ Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
+          log(`Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
 
           // CRITICAL: Mark the transition as active in MappingEngine to prevent
           // conflicting params from audio analysis during the transition
@@ -309,7 +309,11 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
             mappingEngineRef.current.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
           }
         } catch (error) {
-          log("❌ Failed to send theme transition:", error);
+          console.warn("[Soundscape] Theme change send failed:", error);
+          setState((prev) => ({
+            ...prev,
+            error: "Theme change failed to send — visual may not update.",
+          }));
         }
 
         // Update UI state
@@ -484,7 +488,16 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     }
 
     // Resume audio context (required after user interaction)
-    await analyzerRef.current.resume();
+    try {
+      await analyzerRef.current.resume();
+    } catch (error) {
+      console.error("[Soundscape] AudioContext resume failed:", error);
+      setState((prev) => ({
+        ...prev,
+        error: "Audio could not start. Try tapping the page to enable audio playback.",
+      }));
+      return;
+    }
 
     // Start analysis
     analyzerRef.current.start(handleAnalysis);

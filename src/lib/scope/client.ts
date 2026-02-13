@@ -506,7 +506,14 @@ export class ScopeClient {
         throw new Error(`Failed to create WebRTC offer: ${response.status}`);
       }
 
-      return response.json();
+      const data = await response.json();
+
+      // Validate critical sessionId field — downstream ICE candidate calls depend on it
+      if (!data.sessionId || typeof data.sessionId !== "string") {
+        throw new Error("Invalid WebRTC offer response: missing sessionId");
+      }
+
+      return data;
     } catch (error) {
       console.error("[Scope] Failed to create WebRTC offer:", error);
       return null;

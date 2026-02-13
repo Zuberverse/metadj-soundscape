@@ -99,7 +99,7 @@ const TEMPO_DESCRIPTORS: Record<string, string> = {
  * parameterSender.send(params);
  *
  * // On theme change
- * engine.setTheme(newTheme); // Triggers smooth 8-frame transition
+ * engine.setTheme(newTheme); // Triggers smooth 6-frame transition
  * ```
  */
 export class MappingEngine {
@@ -828,6 +828,7 @@ export class ParameterSender {
   private pendingParams: ScopeParameters | null = null;
   private sendScheduled = false;
   private sendTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private consecutiveSendFailures = 0;
 
   /**
    * Create a new ParameterSender.
@@ -896,9 +897,13 @@ export class ParameterSender {
       this.sendTimeoutId = null;
 
       if (!this.dataChannel || this.dataChannel.readyState !== "open") {
-        if (process.env.NODE_ENV === "development" && this.pendingParams) {
-          console.warn("[ParameterSender] Dropping params - channel not open:",
-            this.dataChannel ? `state=${this.dataChannel.readyState}` : "no channel");
+        if (this.pendingParams) {
+          this.consecutiveSendFailures++;
+          if (this.consecutiveSendFailures === 1 || this.consecutiveSendFailures % 30 === 0) {
+            console.warn("[ParameterSender] Dropping params - channel not open:",
+              this.dataChannel ? `state=${this.dataChannel.readyState}` : "no channel",
+              `(${this.consecutiveSendFailures} consecutive drops)`);
+          }
         }
         this.pendingParams = null;
         return;
@@ -909,9 +914,12 @@ export class ParameterSender {
         try {
           this.dataChannel.send(JSON.stringify(formatted));
           this.lastSendTime = performance.now();
+          this.consecutiveSendFailures = 0;
         } catch (error) {
-          if (process.env.NODE_ENV === "development") {
-            console.warn("[ParameterSender] Failed to send params:", error);
+          this.consecutiveSendFailures++;
+          if (this.consecutiveSendFailures === 1 || this.consecutiveSendFailures % 30 === 0) {
+            console.warn("[ParameterSender] Failed to send params:", error,
+              `(${this.consecutiveSendFailures} consecutive failures)`);
           }
         }
 

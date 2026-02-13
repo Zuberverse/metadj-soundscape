@@ -59,12 +59,9 @@ export function createScopeError(
 // Connection State
 // ============================================================================
 
-export type ConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "failed";
+// ConnectionState is defined in soundscape/types.ts (single source of truth)
+import type { ConnectionState } from "../soundscape/types";
+export type { ConnectionState };
 
 export interface UseScopeConnectionOptions {
   /** Scope client instance */
@@ -427,8 +424,11 @@ export function useScopeConnection(
                 }
                 return;
               }
-            } catch {
-              // Not JSON, pass through
+            } catch (e) {
+              if (!(e instanceof SyntaxError)) {
+                console.error("[Scope] DataChannel message handler error:", e);
+              }
+              // SyntaxError = not JSON, pass through to consumer
             }
             onDataChannelMessage?.(event);
           },

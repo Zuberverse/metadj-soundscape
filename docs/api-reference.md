@@ -1,6 +1,6 @@
 # Scope API Reference (Soundscape)
 
-**Last Modified**: 2026-02-10 11:51 EST
+**Last Modified**: 2026-02-12 20:28 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -131,13 +131,17 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 
 ---
 
-## Additional Endpoints (Not used in MVP path)
+## Additional Endpoints (Proxied, not on MVP path)
 
-- `GET /api/v1/models/status`
-- `POST /api/v1/models/download`
-- `GET|POST /api/v1/assets`
-- `GET /api/v1/assets/{path}`
-- `GET /api/v1/lora/list`
+- `GET /api/v1/hardware` — GPU/VRAM summary
+- `GET /api/v1/models/status` — Model readiness
+- `POST /api/v1/models/download` — Trigger model download
+- `GET|POST /api/v1/assets` — Asset upload/list
+- `GET /api/v1/assets/{path}` — Serve specific asset
+- `GET /api/v1/lora/list` — LoRA management
+- `GET /api/v1/plugins` (fallback: `GET /plugins`) — Plugin API
+- `GET /api/v1/prompts` — Prompt operations
+- `DELETE /api/v1/session/{id}` — Session teardown
 
 ---
 

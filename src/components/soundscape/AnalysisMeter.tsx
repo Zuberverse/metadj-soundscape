@@ -38,13 +38,13 @@ function MeterBar({ label, value, color, showValue = true }: MeterBarProps) {
   const meterId = label.toLowerCase().replace(/\s+/g, "-");
 
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest px-1" id={`${meterId}-label`}>
-        <span className="text-white/60">{label}</span>
-        {showValue && <span className="text-white/75 text-pop">{percentage}%</span>}
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center text-[10px] uppercase tracking-wider px-0.5" id={`${meterId}-label`}>
+        <span className="text-white/50 font-medium">{label}</span>
+        {showValue && <span className="text-white/70 tabular-nums font-semibold">{percentage}%</span>}
       </div>
       <div
-        className="h-1.5 glass bg-black/40 rounded-full overflow-hidden border border-white/5"
+        className="h-1.5 bg-white/5 rounded-full overflow-hidden"
         role="progressbar"
         aria-labelledby={`${meterId}-label`}
         aria-valuemin={0}
@@ -52,11 +52,11 @@ function MeterBar({ label, value, color, showValue = true }: MeterBarProps) {
         aria-valuenow={percentage}
       >
         <div
-          className="h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+          className="h-full rounded-full transition-all duration-200"
           style={{
             width: `${percentage}%`,
-            background: `linear-gradient(to right, ${color}cc, ${color})`,
-            boxShadow: `0 0 15px ${color}66`,
+            background: `linear-gradient(to right, ${color}99, ${color})`,
+            boxShadow: value > 0.3 ? `0 0 8px ${color}44` : "none",
           }}
         />
       </div>
@@ -77,9 +77,9 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         {/* Mini meters */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-scope-purple/70 font-medium uppercase">E</span>
+            <span className="text-[9px] text-scope-purple/70 font-semibold uppercase tracking-wide" aria-hidden="true">E</span>
             <div
-              className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10"
+              className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
               role="progressbar"
               aria-label="Energy level"
               aria-valuemin={0}
@@ -90,16 +90,16 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
                 className="h-full bg-scope-purple rounded-full transition-all duration-150"
                 style={{
                   width: `${compactEnergy}%`,
-                  boxShadow: derived?.energy && derived.energy > 0.3 ? '0 0 8px rgba(139,92,246,0.5)' : 'none'
+                  boxShadow: derived?.energy && derived.energy > 0.3 ? '0 0 6px rgba(139,92,246,0.4)' : 'none'
                 }}
               />
             </div>
             <span className="sr-only">Energy {compactEnergy}%</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-scope-cyan/70 font-medium uppercase">B</span>
+            <span className="text-[9px] text-scope-cyan/70 font-semibold uppercase tracking-wide" aria-hidden="true">B</span>
             <div
-              className="w-16 h-1.5 glass bg-white/5 rounded-full overflow-hidden border border-white/10"
+              className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
               role="progressbar"
               aria-label="Brightness level"
               aria-valuemin={0}
@@ -110,7 +110,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
                 className="h-full bg-scope-cyan rounded-full transition-all duration-150"
                 style={{
                   width: `${compactBrightness}%`,
-                  boxShadow: derived?.brightness && derived.brightness > 0.3 ? '0 0 8px rgba(6,182,212,0.5)' : 'none'
+                  boxShadow: derived?.brightness && derived.brightness > 0.3 ? '0 0 6px rgba(6,182,212,0.4)' : 'none'
                 }}
               />
             </div>
@@ -119,74 +119,94 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         </div>
 
         {/* BPM */}
-        <div className="flex items-center gap-2 glass bg-white/5 px-3 py-1.5 rounded-lg border border-white/10" role="status" aria-live="polite">
-          <div className={`w-2 h-2 rounded-full transition-all duration-150 ${beat?.isBeat ? "bg-scope-magenta shadow-[0_0_8px_rgba(236,72,153,0.6)]" : "bg-white/20"}`} />
+        <div
+          className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/8"
+          role="status"
+          aria-live="polite"
+          aria-label={`Tempo: ${beat?.bpm ?? "unknown"} BPM`}
+        >
+          <div
+            className={`w-2 h-2 rounded-full transition-all duration-100 ${
+              beat?.isBeat
+                ? "bg-scope-magenta shadow-[0_0_6px_rgba(236,72,153,0.5)]"
+                : "bg-white/15"
+            }`}
+            aria-hidden="true"
+          />
           <span className="text-sm text-white/80 font-semibold tabular-nums">{beat?.bpm ?? "--"}</span>
-          <span className="text-[9px] text-white/40 uppercase">bpm</span>
+          <span className="text-[9px] text-white/35 uppercase font-medium">bpm</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Audio Analysis Section */}
-      <div className="space-y-6">
-        <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
+      <div className="space-y-4">
+        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
           Spectral Data
         </h4>
-        <div className="space-y-6">
+        <div className="space-y-4">
           <MeterBar
             label="Energy"
             value={derived?.energy ?? 0}
-            color="#A855F7" // Purple
+            color="#A855F7"
           />
           <MeterBar
             label="Brightness"
             value={derived?.brightness ?? 0}
-            color="#06B6D4" // Cyan
+            color="#06B6D4"
           />
           <MeterBar
             label="Texture"
             value={derived?.texture ?? 0}
-            color="#EC4899" // Magenta
+            color="#EC4899"
           />
         </div>
       </div>
 
       {/* Beat Detection Section */}
-      <div className="space-y-6">
-        <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
-          Temporal Sync
+      <div className="space-y-3">
+        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
+          Tempo
         </h4>
-        <div className="flex items-center gap-6 glass bg-white/5 p-5 rounded-[2rem] border border-white/5 group">
+        <div
+          className="flex items-center gap-4 bg-white/[0.03] p-4 rounded-xl border border-white/8"
+          role="status"
+          aria-live="polite"
+          aria-label={`Tempo: ${beat?.bpm ?? "unknown"} BPM, confidence ${beat?.confidence ? Math.round(beat.confidence * 100) : 0}%`}
+        >
           {/* Beat Indicator */}
-          <div className="relative">
+          <div className="relative flex-shrink-0">
             <div
               className={`
-                w-10 h-10 rounded-full transition-all duration-300 flex items-center justify-center text-xl
-                ${beat?.isBeat ? "bg-scope-magenta shadow-[0_0_30px_rgba(236,72,153,0.6)] scale-110" : "bg-white/5 text-white/10"}
+                w-10 h-10 rounded-full transition-all duration-150 flex items-center justify-center
+                ${beat?.isBeat
+                  ? "bg-scope-magenta/30 shadow-[0_0_16px_rgba(236,72,153,0.4)]"
+                  : "bg-white/5"}
               `}
-              aria-label={beat?.isBeat ? "Beat detected" : "No beat"}
+              aria-hidden="true"
             >
-              {beat?.isBeat ? "⚡" : "•"}
+              <div
+                className={`w-3 h-3 rounded-full transition-all duration-100 ${
+                  beat?.isBeat ? "bg-scope-magenta" : "bg-white/15"
+                }`}
+              />
             </div>
-            {beat?.isBeat && (
-              <div className="absolute inset-0 rounded-full border-2 border-scope-magenta animate-ping opacity-40 scale-150" />
-            )}
           </div>
 
           {/* BPM Display */}
           <div className="flex-1 flex flex-col gap-0.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-white tracking-tighter text-pop">
+              <span className="text-2xl font-bold text-white tracking-tight tabular-nums">
                 {beat?.bpm ?? "--"}
               </span>
-              <span className="text-[10px] font-black text-white/45 uppercase tracking-widest">BPM</span>
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">BPM</span>
             </div>
             {beat?.confidence !== undefined && beat.confidence > 0 && (
-              <div className="text-[9px] font-bold text-white/45 uppercase tracking-widest">
-                Accuracy: {Math.round(beat.confidence * 100)}%
+              <div className="text-[10px] font-medium text-white/35 uppercase tracking-wider">
+                Confidence: {Math.round(beat.confidence * 100)}%
               </div>
             )}
           </div>
@@ -195,22 +215,18 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
       {/* Scope Parameters Section */}
       {parameters && (
-        <div className="space-y-6">
-          <h4 className="text-[10px] font-black text-white/45 uppercase tracking-[0.4em] px-1">
-            Engine Config
+        <div className="space-y-4">
+          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
+            Engine Output
           </h4>
-          <div className="space-y-6">
-            <MeterBar
-              label="Diffusion Noise"
-              value={parameters.noiseScale}
-              color="#F59E0B" // Amber
-            />
-          </div>
-
-          {/* Denoising Steps */}
-          <div className="pt-2 px-1 flex justify-between items-center">
-            <span className="text-[9px] font-black uppercase tracking-widest text-white/50">Denoising Latency</span>
-            <span className="text-[10px] font-bold text-white/65 tabular-nums tracking-tighter">
+          <MeterBar
+            label="Noise Scale"
+            value={parameters.noiseScale}
+            color="#F59E0B"
+          />
+          <div className="flex justify-between items-center text-[10px] px-0.5">
+            <span className="text-white/40 uppercase tracking-wider font-medium">Denoising Steps</span>
+            <span className="text-white/60 tabular-nums font-mono text-[11px]">
               [{parameters.denoisingSteps.join(", ")}]
             </span>
           </div>
@@ -219,8 +235,9 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
       {/* No Data State */}
       {!analysis && (
-        <div className="text-center py-12 glass bg-white/5 rounded-[2rem] border border-white/5 border-dashed">
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Awaiting Signal Ingest</p>
+        <div className="text-center py-10 bg-white/[0.02] rounded-xl border border-dashed border-white/8">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/30">Awaiting Audio Input</p>
+          <p className="text-[9px] text-white/20 mt-1">Play a track or enable microphone</p>
         </div>
       )}
     </div>

@@ -256,9 +256,10 @@ export type ConnectionState =
   | "disconnected"
   | "connecting"
   | "connected"
-  | "reconnecting";
+  | "reconnecting"
+  | "failed";
 
-export type PlaybackState = "idle" | "loading" | "playing" | "paused" | "ended";
+export type PlaybackState = "idle" | "loading" | "playing" | "paused";
 
 export interface ConnectionStats {
   fps: number;
