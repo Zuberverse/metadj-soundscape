@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-12 20:26 EST
+**Last Modified**: 2026-02-17 11:21 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audio analyzer now enforces a single active analyzer chain per audio element and adds beat-floor gating for low-noise stability.
 - Adaptive energy normalization updates now apply after the current frame calculation to preserve expected instantaneous normalization behavior.
 - Dock/mobile UX and a11y upgraded: hide-controls action added, compact control targets expanded to 44px, theme selection uses radiogroup semantics, and analysis meters expose ARIA progressbars.
+- Tailwind v4 monorepo source detection fix: `globals.css` now uses `@import "tailwindcss" source(none)` with explicit `@source` directives to avoid broken auto-detection when corpus `.git` root is multiple levels up.
 
 ## [1.0.0] - 2026-01-08
 

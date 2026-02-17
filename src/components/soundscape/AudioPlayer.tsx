@@ -22,6 +22,8 @@ export interface AudioPlayerControls {
   restart: () => Promise<void>;
   isPlaying: () => boolean;
   sourceMode: () => AudioSourceMode;
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
 }
 
 /**
@@ -44,6 +46,8 @@ interface AudioPlayerProps {
   compact?: boolean;
   /** Optional registration hook for keyboard transport controls */
   onRegisterControls?: (controls: AudioPlayerControls | null) => void;
+  /** Show volume control (default: true in compact mode) */
+  showVolume?: boolean;
 }
 
 export function AudioPlayer({
@@ -52,11 +56,14 @@ export function AudioPlayer({
   disabled = false,
   compact = false,
   onRegisterControls,
+  showVolume = true,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const hasConnectedRef = useRef(false);
   const isPlayingRef = useRef(false);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -64,6 +71,9 @@ export function AudioPlayer({
   const [sourceMode, setSourceMode] = useState<AudioSourceMode>("demo");
   const [micState, setMicState] = useState<MicrophoneState>("idle");
   const [micError, setMicError] = useState<string | null>(null);
+  const [volume, setVolume] = useState(0.8);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -86,12 +96,13 @@ export function AudioPlayer({
     audio.srcObject = null;
     audio.src = DEMO_TRACK.path;
     audio.loop = true;
-    audio.muted = false;
+    audio.muted = isMuted;
+    audio.volume = volume;
     audio.preload = "metadata";
     audio.currentTime = 0;
     setCurrentTime(0);
     setMicError(null);
-  }, []);
+  }, [isMuted, volume]);
 
   const ensureMicSource = useCallback(async (): Promise<boolean> => {
     const audio = audioRef.current;
@@ -206,7 +217,7 @@ export function AudioPlayer({
   }, [handlePause, handlePlay]);
 
   const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current && sourceMode === "demo") {
+    if (audioRef.current && sourceMode === "demo" && !isDraggingRef.current) {
       setCurrentTime(audioRef.current.currentTime);
     }
   }, [sourceMode]);
@@ -226,6 +237,21 @@ export function AudioPlayer({
       }
     },
     [sourceMode]
+  );
+
+  // Click on progress bar to seek
+  const handleProgressBarClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!progressBarRef.current || !audioRef.current || sourceMode !== "demo" || disabled) {
+        return;
+      }
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const clickPosition = (e.clientX - rect.left) / rect.width;
+      const newTime = clickPosition * duration;
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    },
+    [duration, sourceMode, disabled]
   );
 
   const handleSourceChange = useCallback(
@@ -254,6 +280,30 @@ export function AudioPlayer({
     [configureDemoSource, ensureMicSource, handlePause, handlePlay, sourceMode, stopMicStream]
   );
 
+  const handleVolumeChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const newVolume = parseFloat(e.target.value);
+      setVolume(newVolume);
+      if (audioRef.current) {
+        audioRef.current.volume = newVolume;
+      }
+      if (newVolume > 0 && isMuted) {
+        setIsMuted(false);
+        if (audioRef.current) {
+          audioRef.current.muted = false;
+        }
+      }
+    },
+    [isMuted]
+  );
+
+  const toggleMute = useCallback(() => {
+    if (!audioRef.current) return;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    audioRef.current.muted = newMuted;
+  }, [isMuted]);
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -268,12 +318,19 @@ export function AudioPlayer({
       restart: handleRestart,
       isPlaying: () => isPlayingRef.current,
       sourceMode: () => sourceMode,
+      setVolume: (v: number) => {
+        setVolume(v);
+        if (audioRef.current) {
+          audioRef.current.volume = v;
+        }
+      },
+      getVolume: () => volume,
     });
 
     return () => {
       onRegisterControls(null);
     };
-  }, [handleRestart, onRegisterControls, sourceMode, togglePlayPause]);
+  }, [handleRestart, onRegisterControls, sourceMode, togglePlayPause, volume]);
 
   useEffect(() => {
     return () => {
@@ -326,10 +383,58 @@ export function AudioPlayer({
     </div>
   );
 
+  const volumeControl = (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setShowVolumeSlider(!showVolumeSlider)}
+        onMouseEnter={() => setShowVolumeSlider(true)}
+        aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+        className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+      >
+        {isMuted || volume === 0 ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+        ) : volume < 0.5 ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        )}
+      </button>
+      
+      {showVolumeSlider && (
+        <div 
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 glass bg-black/80 rounded-xl border border-white/10"
+          onMouseLeave={() => setShowVolumeSlider(false)}
+        >
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={isMuted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="w-24 accent-scope-cyan"
+            aria-label="Volume"
+          />
+        </div>
+      )}
+    </div>
+  );
+
   // Compact mode for dock
   if (compact) {
     return (
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         {/* Play/Pause */}
         <button
           type="button"
@@ -380,37 +485,77 @@ export function AudioPlayer({
           </svg>
         </button>
 
-        {/* Track info */}
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <p
-            className="text-[11px] text-white/85 truncate font-medium"
-            style={{ fontFamily: "var(--font-cinzel), Cinzel, serif" }}
-          >
-            {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone"}
-          </p>
+        {/* Track info with integrated progress bar */}
+        <div className="flex-1 min-w-0 px-1">
+          <div className="flex items-center justify-between mb-1">
+            <p
+              className="text-[11px] text-white/85 truncate font-medium"
+              style={{ fontFamily: "var(--font-cinzel), Cinzel, serif" }}
+            >
+              {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone"}
+            </p>
+            {sourceMode === "demo" && duration > 0 && (
+              <p className="text-[10px] text-white/50 tabular-nums font-medium ml-2">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </p>
+            )}
+          </div>
+          
+          {/* Mini progress bar for compact mode */}
           {sourceMode === "demo" && duration > 0 && (
-            <p className="text-[10px] text-white/35 tabular-nums font-medium">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </p>
+            <div 
+              ref={progressBarRef}
+              className="relative h-1 bg-white/10 rounded-full cursor-pointer group"
+              onClick={handleProgressBarClick}
+            >
+              <div 
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={duration}
+                value={currentTime}
+                onChange={handleSeek}
+                disabled={disabled}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                aria-label="Seek audio position"
+              />
+            </div>
           )}
+          
           {sourceMode === "mic" && (
-            <p className={`text-[10px] font-medium ${
-              micState === "active" ? "text-scope-purple/70" :
-              micState === "requesting" ? "text-white/45 animate-status-pulse" :
-              micState === "error" ? "text-amber-300/80" :
-              "text-white/35"
-            }`}>
-              {micState === "requesting" ? "Requesting permission..." :
-               micState === "active" ? "Listening" :
-               micState === "error" && micError ? micError :
-               "Microphone ready"}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`text-[10px] font-medium ${
+                micState === "active" ? "text-scope-purple/70" :
+                micState === "requesting" ? "text-white/45 animate-status-pulse" :
+                micState === "error" ? "text-amber-300/80" :
+                "text-white/35"
+              }`}>
+                {micState === "requesting" ? "Requesting permission..." :
+                 micState === "active" ? "Listening" :
+                 micState === "error" && micError ? micError :
+                 "Microphone ready"}
+              </p>
+              {micState === "error" && (
+                <button
+                  type="button"
+                  onClick={() => void handleSourceChange("mic")}
+                  className="text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:text-scope-cyan/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded px-1"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
           )}
         </div>
 
         {sourceSwitcher}
+        
+        {showVolume && volumeControl}
 
-        {/* Hidden audio element */}
+        {/* Audio element */}
         <audio
           ref={audioRef}
           src={sourceMode === "demo" ? DEMO_TRACK.path : undefined}
@@ -418,7 +563,7 @@ export function AudioPlayer({
           onLoadedMetadata={handleLoadedMetadata}
           loop={sourceMode === "demo"}
           preload={sourceMode === "demo" ? "metadata" : "none"}
-          muted={sourceMode === "mic"}
+          muted={sourceMode === "mic" || isMuted}
           playsInline
         />
       </div>
@@ -449,7 +594,7 @@ export function AudioPlayer({
         </div>
       </div>
 
-      {/* Hidden Audio Element */}
+      {/* Audio Element */}
       <audio
         ref={audioRef}
         src={sourceMode === "demo" ? DEMO_TRACK.path : undefined}
@@ -457,7 +602,7 @@ export function AudioPlayer({
         onLoadedMetadata={handleLoadedMetadata}
         loop={sourceMode === "demo"}
         preload={sourceMode === "demo" ? "metadata" : "none"}
-        muted={sourceMode === "mic"}
+        muted={sourceMode === "mic" || isMuted}
         playsInline
       />
 
@@ -505,7 +650,11 @@ export function AudioPlayer({
 
         {sourceMode === "demo" ? (
           <div className="space-y-2 px-1">
-            <div className="relative h-2 group">
+            <div 
+              ref={progressBarRef}
+              className="relative h-2 group cursor-pointer"
+              onClick={handleProgressBarClick}
+            >
               <input
                 type="range"
                 min={0}
@@ -531,7 +680,7 @@ export function AudioPlayer({
                 aria-hidden="true"
               />
             </div>
-            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-white/25">
+            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-white/40">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
@@ -548,8 +697,66 @@ export function AudioPlayer({
                "Microphone ready"}
             </p>
             {micError && (
-              <p className="text-[10px] text-amber-300/80 font-medium">{micError}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] text-amber-300/80 font-medium">
+                  {micError.includes("Permission") || micError.includes("denied")
+                    ? "Microphone access denied. Check browser permissions and try again."
+                    : micError.includes("not supported")
+                    ? "Microphone not supported in this browser. Try Chrome or Edge."
+                    : micError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleSourceChange("mic")}
+                  className="text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:text-scope-cyan/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded px-1"
+                >
+                  Retry
+                </button>
+              </div>
             )}
+          </div>
+        )}
+        
+        {/* Volume Control for full mode */}
+        {showVolume && (
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white/80 transition-colors"
+            >
+              {isMuted || volume === 0 ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              ) : volume < 0.5 ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </svg>
+              )}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={isMuted ? 0 : volume}
+              onChange={handleVolumeChange}
+              className="flex-1 accent-scope-cyan"
+              aria-label="Volume"
+            />
+            <span className="text-[10px] text-white/40 w-8 text-right">
+              {Math.round((isMuted ? 0 : volume) * 100)}%
+            </span>
           </div>
         )}
       </div>

@@ -5,13 +5,15 @@
 
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { SoundscapeStudio } from "@/components/soundscape";
 
 export default function SoundscapePage() {
   const [isConnected, setIsConnected] = useState(false);
   const [sharpenEnabled, setSharpenEnabled] = useState(true);
   const [showControls, setShowControls] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Ref to hold disconnect function from SoundscapeStudio
   const disconnectRef = useRef<(() => void) | null>(null);
@@ -26,6 +28,39 @@ export default function SoundscapePage() {
     disconnectRef.current?.();
   }, []);
 
+  // Handle fullscreen toggle
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (error) {
+      console.error("Fullscreen error:", error);
+    }
+  }, []);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Lock body scroll on mount
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-scope-bg overflow-hidden relative">
       {/* Subtle ambient background */}
@@ -36,16 +71,24 @@ export default function SoundscapePage() {
 
       {/* Header */}
       <header
-        className="relative z-50 flex items-center justify-between px-4 md:px-6 h-12 border-b border-white/8 glass"
+        className="relative z-50 flex items-center justify-between px-4 md:px-6 h-14 border-b border-white/8 glass"
         role="banner"
       >
         {/* Left: Branding */}
         <div className="flex items-center gap-3">
-          <h1
-            className="text-base font-semibold tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent"
-            style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
-          >
-            Soundscape
+          <h1 className="flex items-baseline gap-1.5">
+            <span
+              className="text-base font-medium tracking-wide text-white/70"
+              style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
+            >
+              MetaDJ
+            </span>
+            <span
+              className="text-lg font-semibold tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent"
+              style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
+            >
+              Soundscape
+            </span>
           </h1>
           {/* Connection status badge - always visible */}
           <div
@@ -72,13 +115,42 @@ export default function SoundscapePage() {
             <span className={`text-[10px] font-semibold uppercase tracking-wider leading-none ${
               isConnected ? 'text-scope-cyan' : 'text-white/40'
             }`}>
-              {isConnected ? "Live" : "Offline"}
+              {isConnected ? "Live" : "Standby"}
             </span>
           </div>
         </div>
 
         {/* Right: Action buttons */}
-        <nav className="flex items-center gap-1.5" aria-label="Scope controls">
+        <nav className="flex items-center gap-2" aria-label="Scope controls">
+          {/* Fullscreen toggle */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            aria-pressed={isFullscreen}
+            className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-white/5 text-white/60 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+          >
+            {isFullscreen ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 15h4.5M15 15v4.5M15 15l5.25 5.25" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+            )}
+          </button>
+
+          {/* Help button - always visible */}
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            aria-label="Show keyboard shortcuts"
+            className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-white/5 text-white/60 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+          >
+            ?
+          </button>
+
           {isConnected && (
             <>
               {/* Visual enhancement toggle */}
@@ -134,6 +206,68 @@ export default function SoundscapePage() {
           onRegisterDisconnect={handleRegisterDisconnect}
         />
       </main>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="help-title"
+        >
+          <div 
+            className="glass-radiant rounded-2xl p-6 max-w-md w-full animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 
+                id="help-title"
+                className="text-lg text-white tracking-wide" 
+                style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}
+              >
+                Keyboard Shortcuts
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowHelp(false)}
+                aria-label="Close help"
+                className="p-1.5 text-white/40 hover:text-white/70 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-white/8">
+                <span className="text-sm text-white/70">Play / Pause</span>
+                <kbd className="px-2 py-1 bg-white/10 rounded text-white/80 font-mono text-xs">Space</kbd>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-white/8">
+                <span className="text-sm text-white/70">Theme preset 1-9</span>
+                <kbd className="px-2 py-1 bg-white/10 rounded text-white/80 font-mono text-xs">1 - 9</kbd>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-white/8">
+                <span className="text-sm text-white/70">Fullscreen toggle</span>
+                <kbd className="px-2 py-1 bg-white/10 rounded text-white/80 font-mono text-xs">F</kbd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-white/70">Navigate themes</span>
+                <span className="flex gap-1">
+                  <kbd className="px-2 py-1 bg-white/10 rounded text-white/80 font-mono text-xs">←</kbd>
+                  <kbd className="px-2 py-1 bg-white/10 rounded text-white/80 font-mono text-xs">→</kbd>
+                </span>
+              </div>
+            </div>
+            
+            <p className="mt-5 text-[11px] text-white/40 leading-relaxed">
+              Audio analysis and theme switching work locally. Connect to a Scope server to stream AI-generated visuals.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

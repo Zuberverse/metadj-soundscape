@@ -898,6 +898,20 @@ export function SoundscapeStudio({
     };
   }, [recordedClipUrl, stopRecordingClip]);
 
+  // Prevent accidental tab close during recording
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isRecording) {
+        event.preventDefault();
+        event.returnValue = "Recording in progress. Are you sure you want to leave?";
+        return event.returnValue;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isRecording]);
+
   useEffect(() => {
     const handleGlobalHotkeys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -911,6 +925,17 @@ export function SoundscapeStudio({
       if (event.key === " ") {
         event.preventDefault();
         void transportControlsRef.current?.togglePlayPause();
+        return;
+      }
+
+      // Fullscreen toggle with 'f' key
+      if (event.key === "f" || event.key === "F") {
+        event.preventDefault();
+        if (!document.fullscreenElement) {
+          void document.documentElement.requestFullscreen();
+        } else {
+          void document.exitFullscreen();
+        }
         return;
       }
 
@@ -951,9 +976,9 @@ export function SoundscapeStudio({
   // ====================================================================
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative z-10">
       {/* VIDEO HERO */}
-      <div className="flex-1 min-h-0 relative bg-black">
+      <div className="flex-1 min-h-0 relative bg-black z-0">
         {scopeStream ? (
           /* Connected: Video with telemetry overlay */
           <div className="absolute inset-0 p-3 pt-2 pb-12 md:p-4 md:pt-2 md:pb-14 flex items-center justify-center">
@@ -1073,9 +1098,13 @@ export function SoundscapeStudio({
           </div>
         ) : (
           /* Disconnected: Pre-connect setup */
-          <div className="absolute inset-0 overflow-y-auto custom-scrollbar overscroll-contain">
-            <div className="min-h-full flex items-start justify-center px-3 py-4 sm:px-4 sm:py-6">
-              <div className="glass-radiant text-center w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-7 rounded-2xl animate-fade-in">
+          <div className="absolute inset-0 overflow-hidden pb-12 md:pb-14 z-20">
+            <div 
+              className="absolute inset-0 overflow-y-auto custom-scrollbar scroll-contain z-10 px-3 py-4 sm:px-4 sm:py-6"
+              style={{ touchAction: 'pan-y' }}
+            >
+              <div className="min-h-full flex items-start justify-center">
+                <div className="glass-radiant text-center w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-7 rounded-2xl animate-fade-in relative z-20">
                 <h2 className="text-xl sm:text-2xl text-white mb-1.5 tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
                   Soundscape
                 </h2>
@@ -1191,7 +1220,7 @@ export function SoundscapeStudio({
                             <option value="on" className="bg-scope-bg">On</option>
                           </select>
                         </label>
-                        <label className="text-[10px] text-white/45 font-medium">
+                        <label className="text-[10px] text-white/45 font-medium" title="Number of beats before automatically switching to the next theme">
                           Section Beats
                           <select value={autoThemeSectionBeats} disabled={!autoThemeEnabled || isConnecting} onChange={(e) => setAutoThemeSectionBeats(Number(e.target.value))} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
                             <option value={16} className="bg-scope-bg">16 beats</option>
@@ -1218,16 +1247,30 @@ export function SoundscapeStudio({
                   </CollapsibleSection>
                 </div>
 
-                {/* Keyboard shortcuts */}
-                <p className="text-[9px] text-white/20 mb-4 uppercase tracking-wider">
-                  <span className="text-white/35">Space</span> play/pause <span className="mx-2 text-white/10">|</span> <span className="text-white/35">1-9</span> theme presets
-                </p>
+                {/* Keyboard shortcuts - improved visibility */}
+                <div className="mb-4 flex items-center justify-center gap-3">
+                  <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">Space</kbd> play/pause
+                  </span>
+                  <span className="text-white/20">|</span>
+                  <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">1-9</kbd> themes
+                  </span>
+                </div>
 
-                {/* Connect button */}
-                <button type="button" onClick={() => { void handleConnectScope(); }} disabled={!canConnect} className="px-8 py-3.5 glass bg-scope-cyan/15 hover:bg-scope-cyan/25 text-scope-cyan border border-scope-cyan/35 rounded-xl text-sm uppercase tracking-[0.12em] font-semibold transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                  {isConnecting ? "Connecting..." : "Connect"}
-                </button>
-                <p className="text-[10px] text-white/25 mt-2 font-medium">{activePipelineChain}</p>
+                {/* Connect button with tooltip */}
+                <div className="relative inline-block group">
+                  <button type="button" onClick={() => { void handleConnectScope(); }} disabled={!canConnect} className="px-8 py-3.5 glass bg-scope-cyan/15 hover:bg-scope-cyan/25 text-scope-cyan border border-scope-cyan/35 rounded-xl text-sm uppercase tracking-[0.12em] font-semibold transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
+                    {isConnecting ? "Connecting..." : "Connect"}
+                  </button>
+                  {!canConnect && !isConnecting && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-black/90 border border-white/10 rounded-lg text-[10px] text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                      Scope server offline. Click Refresh in Scope Readiness to check status.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-black/90" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-white/40 mt-2 font-medium">{activePipelineChain}</p>
 
                 {/* Error display */}
                 {scopeErrorTitle && (
@@ -1244,13 +1287,23 @@ export function SoundscapeStudio({
                   </div>
                 )}
               </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* Toggle Controls Button -- only when connected and controls hidden */}
         {!showControls && scopeStream && (
-          <button type="button" onClick={handleToggleControls} aria-expanded={showControls} aria-controls="soundscape-controls" className="absolute bottom-3 right-3 px-3 py-2 min-h-[40px] glass bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/75 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/10 hover:border-white/20 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black">
+          <button 
+            type="button" 
+            onClick={handleToggleControls} 
+            aria-expanded={showControls} 
+            aria-controls="soundscape-controls" 
+            className="absolute bottom-4 right-4 z-30 px-4 py-2.5 min-h-[44px] glass bg-scope-cyan/10 hover:bg-scope-cyan/20 text-scope-cyan hover:text-scope-cyan/90 text-[10px] font-semibold uppercase tracking-wider rounded-xl border border-scope-cyan/30 hover:border-scope-cyan/50 shadow-lg shadow-scope-cyan/10 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
             Show Controls
           </button>
         )}
@@ -1258,48 +1311,50 @@ export function SoundscapeStudio({
 
       {/* CONTROLS DOCK */}
       {showControls && (
-        <div id="soundscape-controls" className="flex-none glass-radiant border-t border-white/8">
+        <div id="soundscape-controls" className="relative z-30 flex-none glass-radiant border-t border-white/8">
           <div className="px-4 pt-2 flex justify-end">
             <button type="button" onClick={handleToggleControls} aria-expanded={showControls} aria-controls="soundscape-controls" className="px-3 py-1.5 min-h-[36px] bg-white/5 hover:bg-white/8 text-white/45 hover:text-white/65 text-[9px] font-semibold uppercase tracking-wider rounded-lg border border-white/8 hover:border-white/15 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black">
               Hide Controls
             </button>
           </div>
-          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:gap-5">
+          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:gap-5">
             {/* Music Source */}
             <div className="flex items-center gap-2.5 md:min-w-[280px]">
-              <h3 className="text-[10px] uppercase tracking-[0.15em] text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Music</h3>
+              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Music</h3>
               <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
             </div>
 
-            <div className="hidden md:block w-px h-8 bg-white/8" aria-hidden="true" />
+            <div className="hidden md:block w-px h-8 bg-white/8 mt-1" aria-hidden="true" />
 
             {/* Theme Selector */}
             <div className="flex-1 flex items-center gap-2.5 min-w-0">
-              <h3 className="text-[10px] uppercase tracking-[0.15em] text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Theme</h3>
+              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Theme</h3>
               <div className="flex-1 min-w-0 space-y-1">
                 <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
-                {connectionState !== "connected" && <p className="text-[9px] text-white/30 uppercase tracking-wider font-medium">Theme applies on next connect</p>}
+                {connectionState !== "connected" && (
+                  <p className="text-[9px] text-white/50 uppercase tracking-wider font-medium">
+                    Theme applies on next connect
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="hidden xl:block w-px h-8 bg-white/8" aria-hidden="true" />
+            <div className="hidden xl:block w-px h-8 bg-white/8 mt-1" aria-hidden="true" />
 
-            {/* Analysis + status */}
-            <div className="w-full xl:w-auto xl:min-w-[300px] space-y-1.5">
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="text-white/35 uppercase tracking-wider font-medium">Pipeline</span>
+            {/* Analysis + status - collapsible on mobile */}
+            <div className="w-full xl:w-auto xl:min-w-[280px] space-y-1.5">
+              {/* Status summary - always visible */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
                 <span className="text-white/70 font-semibold">{activePipelineChain}</span>
+                <span className="text-white/50 font-medium capitalize">{denoisingProfileId} / {reactivityProfileId}</span>
+                {autoThemeEnabled && <span className="text-scope-cyan font-semibold">Auto: {autoThemeSectionBeats}b</span>}
               </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="text-white/35 uppercase tracking-wider font-medium">Profiles</span>
-                <span className="text-white/70 font-medium capitalize">{denoisingProfileId} / {reactivityProfileId}</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="text-white/35 uppercase tracking-wider font-medium">Auto Theme</span>
-                <span className={`font-semibold ${autoThemeEnabled ? "text-scope-cyan" : "text-white/40"}`}>{autoThemeEnabled ? `On / ${autoThemeSectionBeats} beats` : "Off"}</span>
-              </div>
-              {promptAccent.text && <div className="text-[10px] text-white/50 truncate">Accent: <span className="text-white/70">{promptAccent.text}</span></div>}
-              <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+              {/* Analysis meter - only when audio is active */}
+              {isPlaying && (
+                <div className="pt-1">
+                  <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+                </div>
+              )}
             </div>
           </div>
         </div>

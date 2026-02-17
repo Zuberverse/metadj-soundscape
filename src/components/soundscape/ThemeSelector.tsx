@@ -119,48 +119,55 @@ export function ThemeSelector({
   // Compact mode for dock -- horizontal scrollable strip with color indicators
   if (compact) {
     return (
-      <div
-        className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5"
-        role="radiogroup"
-        aria-label="Visual themes"
-        onKeyDown={handleThemeKeyDown}
-      >
-        {themes.map((theme, index) => {
-          const isActive = currentTheme?.id === theme.id;
-          const accent = THEME_ACCENTS[theme.id] ?? DEFAULT_ACCENT;
-          return (
-            <button
-              key={theme.id}
-              type="button"
-              onClick={() => handlePresetSelect(theme.id)}
-              disabled={disabled}
-              role="radio"
-              aria-checked={isActive}
-              aria-label={`${theme.name} theme${isActive ? " (active)" : ""}`}
-              tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
-              className={`
-                flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] rounded-lg text-[10px] font-semibold whitespace-nowrap
-                transition-colors duration-300
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
-                ${isActive
-                  ? "bg-white/12 text-white border border-white/20"
-                  : "bg-white/5 text-white/55 border border-transparent hover:bg-white/8 hover:text-white/75"}
-                ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-              `}
-            >
-              {/* Color indicator dot */}
-              <span
-                className={`w-2 h-2 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-50"}`}
-                style={{
-                  background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`,
-                  boxShadow: isActive ? `0 0 6px ${accent.from}66` : "none",
-                }}
-                aria-hidden="true"
-              />
-              {theme.name}
-            </button>
-          );
-        })}
+      <div className="relative group">
+        <div
+          className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5 pr-8"
+          role="radiogroup"
+          aria-label="Visual themes"
+          onKeyDown={handleThemeKeyDown}
+        >
+          {themes.map((theme, index) => {
+            const isActive = currentTheme?.id === theme.id;
+            const accent = THEME_ACCENTS[theme.id] ?? DEFAULT_ACCENT;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => handlePresetSelect(theme.id)}
+                disabled={disabled}
+                role="radio"
+                aria-checked={isActive}
+                aria-label={`${theme.name} theme${isActive ? " (active)" : ""}`}
+                tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
+                className={`
+                  flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] rounded-lg text-[10px] font-semibold whitespace-nowrap
+                  transition-colors duration-300
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
+                  ${isActive
+                    ? "bg-white/12 text-white border border-white/20"
+                    : "bg-white/5 text-white/55 border border-transparent hover:bg-white/8 hover:text-white/75"}
+                  ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+                `}
+              >
+                {/* Color indicator dot */}
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-50"}`}
+                  style={{
+                    background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`,
+                    boxShadow: isActive ? `0 0 6px ${accent.from}66` : "none",
+                  }}
+                  aria-hidden="true"
+                />
+                {theme.name}
+              </button>
+            );
+          })}
+        </div>
+        {/* Scroll affordance - fade gradient */}
+        <div 
+          className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-scope-bg to-transparent pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-300"
+          aria-hidden="true"
+        />
       </div>
     );
   }

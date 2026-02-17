@@ -1,4 +1,6 @@
-@import 'tailwindcss';
+@import "tailwindcss" source(none);
+@source "../**/*.tsx";
+@source "../**/*.ts";
 
 @theme {
   /*
@@ -289,4 +291,10 @@ h3,
     outline-offset: 2px;
     border-radius: 8px;
   }
+}
+
+/* Scroll containment - prevents scroll from bubbling to parent */
+@utility scroll-contain {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
