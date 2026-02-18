@@ -92,9 +92,7 @@ describe("Scope proxy security", () => {
 
   it("forwards DELETE requests", async () => {
     const { DELETE } = await import("../src/app/api/scope/[...path]/route");
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, { status: 204 })
-    );
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const request = new NextRequest("http://localhost/api/scope/api/v1/session/abc", {
@@ -104,9 +102,64 @@ describe("Scope proxy security", () => {
       params: Promise.resolve({ path: ["api", "v1", "session", "abc"] }),
     });
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(405);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects production write requests without trusted origin", async () => {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      SCOPE_PROXY_ENABLE: "true",
+    });
+
+    const { POST } = await import("../src/app/api/scope/[...path]/route");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("https://soundscape.example/api/scope/api/v1/pipeline/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pipeline_ids: ["longlive"] }),
+    });
+
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["api", "v1", "pipeline", "load"] }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows production write requests from same-origin clients", async () => {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      SCOPE_PROXY_ENABLE: "true",
+    });
+
+    const { POST } = await import("../src/app/api/scope/[...path]/route");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "loaded" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("https://soundscape.example/api/scope/api/v1/pipeline/load", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://soundscape.example",
+      },
+      body: JSON.stringify({ pipeline_ids: ["longlive"] }),
+    });
+
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["api", "v1", "pipeline", "load"] }),
+    });
+
+    expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
   });
 
   it("only forwards allowlisted headers", async () => {

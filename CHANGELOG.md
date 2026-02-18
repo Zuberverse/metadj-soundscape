@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-17 11:21 EST
+**Last Modified**: 2026-02-18 10:19 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Soundscape hook regression coverage for generation control updates and prompt accent composition.
 - Mapping engine regression coverage for empty energy-spike prompt-variation lists.
 - Audio analyzer regression coverage for same-element analyzer reuse and low-energy noise beat suppression.
+- Soundscape page accessibility regression tests for help-modal escape handling and focus trapping.
+- AudioPlayer regression test for microphone-permission error announcements and retry focus behavior.
+- Soundscape hook regression tests for ambient-mode parameter sync after denoising/prompt accent updates.
+- Audio analyzer regression test for first-frame `energyDerivative` startup stabilization.
+- Scope proxy regression tests for production same-origin write enforcement.
 
 ### Changed
 - Documentation now recommends corpus-level `ai-dev-server.sh` for persistent Codex/Claude dev sessions.
@@ -68,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adaptive energy normalization updates now apply after the current frame calculation to preserve expected instantaneous normalization behavior.
 - Dock/mobile UX and a11y upgraded: hide-controls action added, compact control targets expanded to 44px, theme selection uses radiogroup semantics, and analysis meters expose ARIA progressbars.
 - Tailwind v4 monorepo source detection fix: `globals.css` now uses `@import "tailwindcss" source(none)` with explicit `@source` directives to avoid broken auto-detection when corpus `.git` root is multiple levels up.
+- Scope proxy hardening: endpoint/method matrix now only exposes Soundscape-required Scope routes, enforces same-origin browser context for write operations, applies per-method rate limits, and blocks insecure upstream config in production.
+- Ambient mode now re-syncs Scope parameters immediately when denoising profile or prompt accent changes while audio playback is paused.
+- Audio analyzer now suppresses first-frame energy derivative spikes to avoid false transition triggers on startup/resume.
+- Disconnecting audio now clears stale analysis and parameter state from the UI.
+- Telemetry overlay now displays numeric dropped-frame ratio directly alongside FPS/performance status.
+- Global hotkeys now support `ArrowLeft` / `ArrowRight` for theme navigation.
+- Help modal accessibility upgraded with Escape-to-close, focus trap, and focus restoration on close.
+- Microphone permission errors now use live-region alert semantics and shift focus to retry action for keyboard/screen-reader recovery.
+- Security response headers now include CSP, HSTS, COOP, COEP, and CORP baseline hardening.
 
 ## [1.0.0] - 2026-01-08
 

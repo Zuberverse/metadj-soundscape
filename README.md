@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-12 12:02 EST
+**Last Modified**: 2026-02-18 10:19 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -11,7 +11,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Mic input mode** in addition to the built-in demo track.
 - **Clip recording + download** from the live Scope stream (`webm`).
 - **Auto Theme Timeline** that rotates presets every N beats (16/32/64).
-- **Hotkeys**: `Space` (play/pause), `1-9` (preset themes).
+- **Hotkeys**: `Space` (play/pause), `1-9` (preset themes), `F` (fullscreen), arrows (theme cycle).
 - **Demo-Safe Mode** UX when Scope is offline, with quick diagnostics CTA.
 - **Performance HUD** with FPS sampling + dropped frame warning states.
 - **Hardened connect flow** that resolves pipelines from fresh diagnostics before connecting.
@@ -26,7 +26,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Ambient Mode** — Visual generation can continue without active audio playback
 - **Generation Controls** — Denoising profile, reactivity profile, prompt accent, pipeline chain
 - **Diagnostics Panel** — Health, pipeline status, hardware, model readiness, plugins/LoRAs
-- **Telemetry Overlay** — Active pipeline, resolution, fps sample, dropped frame ratio
+- **Telemetry Overlay** — Active pipeline, resolution, fps sample, dropped frame ratio, performance health
 
 ## Preset Themes
 
@@ -49,6 +49,8 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 |----------|--------|
 | `Space` | Toggle play/pause |
 | `1-9` | Jump to preset theme by index |
+| `F` | Toggle fullscreen |
+| `←` / `→` | Previous/next theme |
 
 ## Quick Start
 
@@ -110,7 +112,9 @@ Copy `.env.example` to `.env.local`.
 
 ### Security Note
 
-The app defaults to `/api/scope` proxy routing. In production, proxying is disabled unless `SCOPE_PROXY_ENABLE=true`. If enabled, protect the deployment with platform-level access control.
+The app defaults to `/api/scope` proxy routing. In production, proxying is disabled unless `SCOPE_PROXY_ENABLE=true`.
+When enabled, the proxy enforces a strict endpoint/method allowlist, same-origin validation for write requests, and request rate limiting.
+Deploy behind platform-level access controls for additional protection.
 
 ## Commands
 

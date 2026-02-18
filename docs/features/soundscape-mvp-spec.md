@@ -1,6 +1,6 @@
 # MetaDJ Soundscape - Public Capability Spec
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-18 10:19 EST
 **Status**: Active
 **Version**: 1.1.0-candidate
 
@@ -21,8 +21,8 @@ MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Sco
 - Ambient generation mode
 - Clip recording/download from live Scope stream
 - Auto theme timeline (beat-section rotation)
-- Keyboard shortcuts (`Space`, `1-9`)
-- Live telemetry (resolution, FPS sample, dropped frame ratio)
+- Keyboard shortcuts (`Space`, `1-9`, `F`, `←/→`)
+- Live telemetry (resolution, FPS sample, dropped frame ratio, performance status)
 
 ## Public Non-Goals (Current)
 

@@ -1,6 +1,6 @@
 # Architecture - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-18 10:19 EST
 **Status**: Active
 
 ## Purpose
@@ -64,7 +64,9 @@ Primary implementation: `src/lib/scope/use-scope-connection.ts`
 Route: `src/app/api/scope/[...path]/route.ts`
 
 - Path allowlist enforcement
-- Method passthrough (`GET/POST/PATCH/PUT/DELETE`)
+- Strict method/path matrix (`GET/HEAD/POST/PATCH` for approved Scope endpoints only)
+- Same-origin validation on write requests
+- In-memory per-method rate limiting
 - Request timeout handling
 - Proxy disabled in production unless `SCOPE_PROXY_ENABLE=true`
 
@@ -93,7 +95,7 @@ Overlay computes:
 - Dropped frame percentage
 - Performance state labels:
   - Healthy
-  - Watch
+  - Warning
   - Critical
 
 ## Key Files

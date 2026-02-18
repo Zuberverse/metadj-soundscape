@@ -380,6 +380,42 @@ describe("AudioAnalyzer", () => {
       expect(state.derived.texture).toBeGreaterThanOrEqual(0);
       expect(state.derived.texture).toBeLessThanOrEqual(1);
     });
+
+    it("sets first-frame energyDerivative to 0 to avoid startup spikes", async () => {
+      const analyzer = new AudioAnalyzer({ energyMax: 0.1 } as ConstructorParameters<typeof AudioAnalyzer>[0]);
+      const audioElement = createMockAudioElement();
+
+      await analyzer.initialize(audioElement);
+
+      const callback = vi.fn();
+      analyzer.start(callback);
+
+      if (mockMeydaCallback.current) {
+        mockMeydaCallback.current({
+          rms: 0.05,
+          spectralCentroid: 1000,
+          spectralFlatness: 0.2,
+          spectralRolloff: 2000,
+          zcr: 30,
+        });
+      }
+
+      const firstState = callback.mock.calls.at(-1)?.[0] as { derived: { energyDerivative: number } };
+      expect(firstState.derived.energyDerivative).toBe(0);
+
+      if (mockMeydaCallback.current) {
+        mockMeydaCallback.current({
+          rms: 0.08,
+          spectralCentroid: 1000,
+          spectralFlatness: 0.2,
+          spectralRolloff: 2000,
+          zcr: 30,
+        });
+      }
+
+      const secondState = callback.mock.calls.at(-1)?.[0] as { derived: { energyDerivative: number } };
+      expect(secondState.derived.energyDerivative).toBeGreaterThan(0);
+    });
   });
 
   describe("cleanup", () => {

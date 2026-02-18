@@ -7,6 +7,7 @@ import { AudioPlayer, type AudioPlayerControls } from "@/components/soundscape/A
 let container: HTMLDivElement | null = null;
 let root: ReturnType<typeof createRoot> | null = null;
 let controls: AudioPlayerControls | null = null;
+const originalMediaDevices = navigator.mediaDevices;
 
 const playMock = vi.fn(async () => undefined);
 const pauseMock = vi.fn();
@@ -29,6 +30,10 @@ describe("AudioPlayer", () => {
     container = null;
     root = null;
     controls = null;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
     vi.restoreAllMocks();
   });
 
@@ -63,5 +68,41 @@ describe("AudioPlayer", () => {
     });
 
     expect(onPlayStateChange).toHaveBeenCalledWith(false);
+  });
+
+  it("announces microphone permission failures as alerts", async () => {
+    const onAudioElement = vi.fn(async () => undefined);
+    const onPlayStateChange = vi.fn();
+    const getUserMediaMock = vi.fn().mockRejectedValue(new Error("Permission denied by user"));
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: getUserMediaMock },
+    });
+
+    act(() => {
+      root?.render(
+        <AudioPlayer
+          compact
+          onAudioElement={onAudioElement}
+          onPlayStateChange={onPlayStateChange}
+        />
+      );
+    });
+
+    const micButton = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Mic"
+    ) as HTMLButtonElement;
+    expect(micButton).toBeTruthy();
+
+    await act(async () => {
+      micButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const alertNode = container?.querySelector('[role="alert"]');
+    expect(alertNode?.textContent).toContain("Permission denied");
+    const retryButton = container?.querySelector("button[aria-label='Retry microphone access']") as HTMLButtonElement;
+    expect(document.activeElement).toBe(retryButton);
   });
 });

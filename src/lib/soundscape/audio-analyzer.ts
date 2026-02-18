@@ -42,6 +42,7 @@ export class AudioAnalyzer {
   private energyHistory: number[] = [];
   private readonly historyLength = 10;
   private lastEnergy = 0;
+  private hasPreviousEnergySample = false;
   private adaptiveEnergyCeiling = 0.15;
   private readonly adaptiveCeilingDecay = 0.997;
   private readonly adaptiveHeadroomMultiplier = 1.12;
@@ -72,6 +73,9 @@ export class AudioAnalyzer {
    */
   async initialize(audioElement: HTMLAudioElement): Promise<void> {
     this.connectedElement = audioElement;
+    this.energyHistory = [];
+    this.lastEnergy = 0;
+    this.hasPreviousEnergySample = false;
 
     // Check if this element was already connected to Web Audio API
     const existing = connectedElements.get(audioElement);
@@ -198,6 +202,9 @@ export class AudioAnalyzer {
     this.audioContext = null;
     this.sourceNode = null;
     this.connectedElement = null;
+    this.energyHistory = [];
+    this.lastEnergy = 0;
+    this.hasPreviousEnergySample = false;
 
     this.beatDetector = null;
   }
@@ -344,8 +351,10 @@ export class AudioAnalyzer {
     }
 
     // Energy derivative (rate of change)
-    const energyDerivative = energy - this.lastEnergy;
+    // Ignore the first frame to prevent false startup spikes.
+    const energyDerivative = this.hasPreviousEnergySample ? energy - this.lastEnergy : 0;
     this.lastEnergy = energy;
+    this.hasPreviousEnergySample = true;
 
     // Peak energy from recent history
     const peakEnergy = Math.max(...this.energyHistory, 0.1);

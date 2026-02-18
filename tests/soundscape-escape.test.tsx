@@ -53,4 +53,60 @@ describe("Soundscape page", () => {
 
     unmount();
   });
+
+  it("closes the help modal on Escape and restores focus", () => {
+    const { container, unmount } = renderSoundscape();
+
+    const helpButton = container.querySelector(
+      'button[aria-label="Show keyboard shortcuts"]'
+    ) as HTMLButtonElement;
+    expect(helpButton).toBeTruthy();
+
+    helpButton.focus();
+    act(() => {
+      helpButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
+    const closeButton = container.querySelector('button[aria-label="Close help"]') as HTMLButtonElement;
+    expect(document.activeElement).toBe(closeButton);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(helpButton);
+
+    unmount();
+  });
+
+  it("keeps keyboard focus trapped inside the help modal", () => {
+    const { container, unmount } = renderSoundscape();
+
+    const helpButton = container.querySelector(
+      'button[aria-label="Show keyboard shortcuts"]'
+    ) as HTMLButtonElement;
+
+    act(() => {
+      helpButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const closeButton = container.querySelector('button[aria-label="Close help"]') as HTMLButtonElement;
+    expect(document.activeElement).toBe(closeButton);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(closeButton);
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true })
+      );
+    });
+    expect(document.activeElement).toBe(closeButton);
+
+    unmount();
+  });
 });

@@ -17,6 +17,9 @@ export default function SoundscapePage() {
 
   // Ref to hold disconnect function from SoundscapeStudio
   const disconnectRef = useRef<(() => void) | null>(null);
+  const helpDialogRef = useRef<HTMLDivElement | null>(null);
+  const helpCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
 
   // Called by SoundscapeStudio to register its disconnect handler
   const handleRegisterDisconnect = useCallback((disconnectFn: () => void) => {
@@ -26,6 +29,10 @@ export default function SoundscapePage() {
   // Called by header disconnect button
   const handleDisconnect = useCallback(() => {
     disconnectRef.current?.();
+  }, []);
+
+  const closeHelp = useCallback(() => {
+    setShowHelp(false);
   }, []);
 
   // Handle fullscreen toggle
@@ -60,6 +67,60 @@ export default function SoundscapePage() {
       document.body.style.overflow = originalOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    if (!showHelp) {
+      return;
+    }
+
+    previouslyFocusedElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    helpCloseButtonRef.current?.focus();
+
+    const handleModalKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeHelp();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const dialog = helpDialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey) {
+        if (document.activeElement === first || !dialog.contains(document.activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleModalKeydown);
+    return () => {
+      document.removeEventListener("keydown", handleModalKeydown);
+      previouslyFocusedElementRef.current?.focus();
+    };
+  }, [closeHelp, showHelp]);
 
   return (
     <div className="h-screen flex flex-col bg-scope-bg overflow-hidden relative">
@@ -211,12 +272,14 @@ export default function SoundscapePage() {
       {showHelp && (
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowHelp(false)}
+          onClick={closeHelp}
           role="dialog"
           aria-modal="true"
           aria-labelledby="help-title"
         >
           <div 
+            ref={helpDialogRef}
+            tabIndex={-1}
             className="glass-radiant rounded-2xl p-6 max-w-md w-full animate-fade-in"
             onClick={(e) => e.stopPropagation()}
           >
@@ -229,8 +292,9 @@ export default function SoundscapePage() {
                 Keyboard Shortcuts
               </h2>
               <button
+                ref={helpCloseButtonRef}
                 type="button"
-                onClick={() => setShowHelp(false)}
+                onClick={closeHelp}
                 aria-label="Close help"
                 className="p-1.5 text-white/40 hover:text-white/70 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded"
               >

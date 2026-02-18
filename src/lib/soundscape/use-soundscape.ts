@@ -40,6 +40,17 @@ const clampPromptAccentWeight = (weight: number): number => {
   return Math.max(0.05, Math.min(1, weight));
 };
 
+const composePromptEntriesWithAccent = (basePrompt: string, accent: PromptAccent): PromptEntry[] => {
+  const entries: PromptEntry[] = [{ text: basePrompt, weight: 1.0 }];
+  if (accent.text.trim()) {
+    entries.push({
+      text: accent.text.trim(),
+      weight: clampPromptAccentWeight(accent.weight),
+    });
+  }
+  return entries;
+};
+
 // ============================================================================
 // Hook Interface
 // ============================================================================
@@ -134,7 +145,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
   const uiUpdateIntervalMs = 1000 / effectiveUiUpdateRate;
 
   // Ambient mode refs
-  const ambientIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isAmbientActiveRef = useRef(false);
 
   // Data channel ref (stored for ambient mode to use)
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -178,16 +189,85 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   const composePromptEntries = useCallback(
     (basePrompt: string): PromptEntry[] => {
-      const entries: PromptEntry[] = [{ text: basePrompt, weight: 1.0 }];
-      if (promptAccent.text.trim()) {
-        entries.push({
-          text: promptAccent.text.trim(),
-          weight: clampPromptAccentWeight(promptAccent.weight),
-        });
-      }
-      return entries;
+      return composePromptEntriesWithAccent(basePrompt, promptAccent);
     },
     [promptAccent]
+  );
+
+  const pushScopeParameters = useCallback(
+    ({
+      theme = currentThemeRef.current,
+      accent = promptAccent,
+      denoisingSteps = activeDenoisingSteps,
+      includeTransition = false,
+      requireAmbient = true,
+    }: {
+      theme?: Theme;
+      accent?: PromptAccent;
+      denoisingSteps?: number[];
+      includeTransition?: boolean;
+      requireAmbient?: boolean;
+    } = {}): boolean => {
+      if (requireAmbient && !isAmbientActiveRef.current) {
+        return false;
+      }
+
+      const channel = dataChannelRef.current;
+      if (!channel || channel.readyState !== "open") {
+        return false;
+      }
+
+      const basePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
+      const prompts = composePromptEntriesWithAccent(basePrompt, accent);
+      const safeDenoisingSteps = [...denoisingSteps];
+
+      const params: Record<string, unknown> = {
+        prompts,
+        denoising_step_list: safeDenoisingSteps,
+        noise_scale: 0.5,
+        manage_cache: true,
+        paused: false,
+      };
+
+      if (includeTransition) {
+        params.transition = {
+          target_prompts: prompts,
+          num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+          temporal_interpolation_method: "slerp",
+        };
+      }
+
+      try {
+        channel.send(JSON.stringify(params));
+      } catch (error) {
+        console.warn("[Soundscape] Failed to send Scope params:", error);
+        setState((prev) => ({
+          ...prev,
+          error: "Scope parameter sync failed — visuals may be out of date.",
+        }));
+        return false;
+      }
+
+      const scopeParams: ScopeParameters = {
+        prompts,
+        denoisingSteps: safeDenoisingSteps,
+        noiseScale: 0.5,
+        ...(includeTransition
+          ? {
+              transition: {
+                target_prompts: prompts,
+                num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+                temporal_interpolation_method: "slerp" as const,
+              },
+            }
+          : {}),
+      };
+
+      parametersRef.current = scopeParams;
+      setParameters(scopeParams);
+      return true;
+    },
+    [promptAccent, activeDenoisingSteps]
   );
 
   const applyEngineControls = useCallback(
@@ -213,23 +293,46 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     [debug]
   );
 
-  const setDenoisingProfile = useCallback((profileId: DenoisingProfileId) => {
-    if (!DENOISING_PROFILES[profileId]) {
-      return;
-    }
-    setDenoisingProfileId(profileId);
-  }, []);
+  const setDenoisingProfile = useCallback(
+    (profileId: DenoisingProfileId) => {
+      if (!DENOISING_PROFILES[profileId]) {
+        return;
+      }
+
+      const nextDenoisingSteps = [...DENOISING_PROFILES[profileId]];
+      setDenoisingProfileId(profileId);
+      mappingEngineRef.current?.setDenoisingSteps(nextDenoisingSteps);
+
+      // Keep ambient mode in sync when playback is paused.
+      pushScopeParameters({ denoisingSteps: nextDenoisingSteps });
+    },
+    [pushScopeParameters]
+  );
 
   const setReactivityProfile = useCallback((profileId: ReactivityProfileId) => {
     setReactivityProfileId(profileId);
+    mappingEngineRef.current?.setReactivityProfile(profileId);
   }, []);
 
-  const setPromptAccent = useCallback((text: string, weight = 0.25) => {
-    setPromptAccentState({
-      text: text.trim(),
-      weight: clampPromptAccentWeight(weight),
-    });
-  }, []);
+  const setPromptAccent = useCallback(
+    (text: string, weight = 0.25) => {
+      const nextAccent: PromptAccent = {
+        text: text.trim(),
+        weight: clampPromptAccentWeight(weight),
+      };
+
+      setPromptAccentState(nextAccent);
+      mappingEngineRef.current?.setPromptOverlay(
+        nextAccent.text
+          ? { text: nextAccent.text, weight: nextAccent.weight }
+          : null
+      );
+
+      // Keep ambient mode in sync when playback is paused.
+      pushScopeParameters({ accent: nextAccent });
+    },
+    [pushScopeParameters]
+  );
 
   // ============================================================================
   // Theme Management
@@ -280,62 +383,26 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       parametersRef.current = null;
 
       // Send theme change to Scope if connected (ambient or music mode)
-      if (dataChannelRef.current?.readyState === "open") {
-        // Build new theme prompt
-        const newBasePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
-        const newPrompts = composePromptEntries(newBasePrompt);
+      const didSendThemeTransition = pushScopeParameters({
+        theme,
+        includeTransition: true,
+        requireAmbient: false,
+      });
+      if (didSendThemeTransition) {
+        log(`Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
 
-        // Send with transition for smooth crossfade
-        const themeChangeParams = {
-          prompts: newPrompts,
-          denoising_step_list: [...activeDenoisingSteps],
-          noise_scale: 0.5,
-          transition: {
-            target_prompts: newPrompts,
-            num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-            temporal_interpolation_method: "slerp",
-          },
-          manage_cache: true,
-          paused: false,
-        };
-
-        try {
-          dataChannelRef.current.send(JSON.stringify(themeChangeParams));
-          log(`Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
-
-          // CRITICAL: Mark the transition as active in MappingEngine to prevent
-          // conflicting params from audio analysis during the transition
-          if (mappingEngineRef.current) {
-            mappingEngineRef.current.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
-          }
-        } catch (error) {
-          console.warn("[Soundscape] Theme change send failed:", error);
-          setState((prev) => ({
-            ...prev,
-            error: "Theme change failed to send — visual may not update.",
-          }));
+        // CRITICAL: Mark the transition as active in MappingEngine to prevent
+        // conflicting params from audio analysis during the transition
+        if (mappingEngineRef.current) {
+          mappingEngineRef.current.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
         }
-
-        // Update UI state
-        const scopeParams: ScopeParameters = {
-          prompts: newPrompts,
-          denoisingSteps: [...activeDenoisingSteps],
-          noiseScale: 0.5,
-          transition: {
-            target_prompts: newPrompts,
-            num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-            temporal_interpolation_method: "slerp" as const,
-          },
-        };
-        parametersRef.current = scopeParams;
-        setParameters(scopeParams);
       } else {
         log("Theme changed but no data channel - will apply when connected");
       }
 
       setState((prev) => ({ ...prev, activeTheme: theme }));
     },
-    [resolveTheme, composePromptEntries, activeDenoisingSteps, log]
+    [resolveTheme, pushScopeParameters, log]
   );
 
   // Note: Theme is initialized synchronously in useState above
@@ -409,7 +476,15 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       analyzerRef.current = null;
     }
     audioElementRef.current = null;
-    setState((prev) => ({ ...prev, playback: "idle" }));
+    lastUiUpdateRef.current = 0;
+    parametersRef.current = null;
+    setParameters(null);
+    setState((prev) => ({
+      ...prev,
+      playback: "idle",
+      analysis: null,
+      stats: null,
+    }));
     log("Audio disconnected");
   }, [log]);
 
@@ -424,6 +499,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
       if (parameterSenderRef.current) {
         parameterSenderRef.current.setDataChannel(channel);
+      }
+      if (!channel) {
+        isAmbientActiveRef.current = false;
       }
       setState((prev) => ({
         ...prev,
@@ -519,7 +597,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   const startAmbient = useCallback(() => {
     // Don't start if already running
-    if (ambientIntervalRef.current) {
+    if (isAmbientActiveRef.current) {
       log("Ambient: already running, skipping start");
       return;
     }
@@ -562,59 +640,25 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
      * latent cache maintain visual coherence. Theme changes are handled by setTheme().
      */
 
-    // Build and send initial ambient parameters
-    const basePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
-    const prompts = composePromptEntries(basePrompt);
-
-    const params = {
-      prompts,
-      denoising_step_list: [...activeDenoisingSteps],
-      noise_scale: 0.5,
-      transition: {
-        target_prompts: prompts,
-        num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-        temporal_interpolation_method: "slerp",
-      },
-      manage_cache: true,
-      paused: false,
-    };
-
-    try {
-      dataChannelRef.current.send(JSON.stringify(params));
-      log("Ambient: sent initial params for theme:", theme.name);
-    } catch (error) {
-      log("Ambient: failed to send initial params", error);
+    const didSendAmbientStart = pushScopeParameters({
+      theme,
+      includeTransition: true,
+      requireAmbient: false,
+    });
+    if (!didSendAmbientStart) {
+      log("Ambient: failed to send initial params");
       return;
     }
+    log("Ambient: sent initial params for theme:", theme.name);
 
-    // Update React state for UI
-    const scopeParams: ScopeParameters = {
-      prompts,
-      denoisingSteps: [...activeDenoisingSteps],
-      noiseScale: 0.5,
-      transition: {
-        target_prompts: prompts,
-        num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-        temporal_interpolation_method: "slerp" as const,
-      },
-    };
-    parametersRef.current = scopeParams;
-    setParameters(scopeParams);
-
-    // Mark ambient as running (no interval needed - just a flag)
-    // Using a dummy interval that does nothing, just to track state
-    ambientIntervalRef.current = setInterval(() => {
-      // No-op: We no longer send continuous reinforcement
-      // Theme changes are handled by setTheme() directly
-    }, 60000); // Very long interval since it does nothing
+    isAmbientActiveRef.current = true;
 
     setState((prev) => ({ ...prev, playback: "playing" }));
-  }, [effectiveUpdateRate, applyEngineControls, composePromptEntries, activeDenoisingSteps, log]);
+  }, [effectiveUpdateRate, applyEngineControls, pushScopeParameters, log]);
 
   const stopAmbient = useCallback(() => {
-    if (ambientIntervalRef.current) {
-      clearInterval(ambientIntervalRef.current);
-      ambientIntervalRef.current = null;
+    if (isAmbientActiveRef.current) {
+      isAmbientActiveRef.current = false;
       log("Ambient mode stopped");
     }
   }, [log]);

@@ -11,6 +11,7 @@ const SCOPE_API_URL = (
   "http://localhost:8000"
 ).replace(/\/$/, "");
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const HEADER_ALLOWLIST = ["content-type", "accept", "authorization"];
 
 /**
@@ -24,33 +25,141 @@ const HEADER_ALLOWLIST = ["content-type", "accept", "authorization"];
  * For production deployments, prefer connecting directly to Scope if CORS allows,
  * or ensure your proxy endpoint is protected by your hosting platform's auth.
  */
-const PROXY_ENABLED = process.env.NODE_ENV !== "production" || process.env.SCOPE_PROXY_ENABLE === "true";
+const PROXY_ENABLED = !IS_PRODUCTION || process.env.SCOPE_PROXY_ENABLE === "true";
 
-// Security: Allowlist of valid Scope API path prefixes
-// Prevents arbitrary endpoint access through the proxy
-const PATH_ALLOWLIST = [
-  "health",           // Health check (root-level)
-  "api/v1/hardware",  // Hardware info
-  "api/v1/pipeline",  // Pipeline management
-  "api/v1/pipelines", // Pipeline schemas
-  "api/v1/models",    // Model status/download endpoints
-  "api/v1/webrtc",    // WebRTC signaling
-  "api/v1/assets",    // Asset upload/list/serve endpoints
-  "api/v1/lora",      // LoRA management endpoints
-  "api/v1/plugins",   // Plugin API (if enabled server-side)
-  "plugins",          // Plugin API routes exposed at root
-  "api/v1/prompts",   // Prompt operations
-  "api/v1/session",   // Session management
-];
+// Security: strict endpoint matrix based on what the Soundscape app actually uses.
+const PATH_ALLOWLIST: Record<string, RegExp[]> = {
+  GET: [
+    /^health$/,
+    /^api\/v1\/hardware\/info$/,
+    /^api\/v1\/pipeline\/status$/,
+    /^api\/v1\/pipelines\/schemas$/,
+    /^api\/v1\/models\/status$/,
+    /^api\/v1\/lora\/list$/,
+    /^api\/v1\/plugins(?:\/[a-zA-Z0-9._~-]+)*$/,
+    /^plugins(?:\/[a-zA-Z0-9._~-]+)*$/,
+    /^api\/v1\/webrtc\/ice-servers$/,
+  ],
+  HEAD: [/^health$/],
+  POST: [
+    /^api\/v1\/pipeline\/load$/,
+    /^api\/v1\/webrtc\/offer$/,
+  ],
+  PATCH: [/^api\/v1\/webrtc\/offer\/[a-zA-Z0-9._~-]+$/],
+};
 
-function isPathAllowed(path: string): boolean {
-  // Normalize: remove leading/trailing slashes
-  const normalized = path.replace(/^\/+|\/+$/g, "");
-  // Reject path traversal attempts outright
-  if (normalized.includes("..")) {
+const SAFE_METHODS = new Set(["GET", "HEAD"]);
+const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_READS = 240;
+const RATE_LIMIT_MAX_WRITES = 90;
+const rateLimitStore = new Map<string, { windowStart: number; count: number }>();
+
+function normalizePathSegments(path: string[]): string[] | null {
+  const normalized: string[] = [];
+
+  for (const segment of path) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return null;
+    }
+
+    const trimmed = decoded.replace(/^\/+|\/+$/g, "");
+    if (!trimmed || trimmed === "." || trimmed.includes("..") || trimmed.includes("/") || trimmed.includes("\\")) {
+      return null;
+    }
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function isPathAllowed(method: string, path: string): boolean {
+  const rules = PATH_ALLOWLIST[method];
+  if (!rules || rules.length === 0) {
     return false;
   }
-  return PATH_ALLOWLIST.some((allowed) => normalized === allowed || normalized.startsWith(`${allowed}/`));
+  return rules.some((rule) => rule.test(path));
+}
+
+function isPrivateHost(hostname: string): boolean {
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+    return true;
+  }
+  if (/^10\.\d+\.\d+\.\d+$/.test(hostname)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(hostname)) return true;
+  return false;
+}
+
+function isUpstreamConfigSafe(): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(SCOPE_API_URL);
+  } catch {
+    return false;
+  }
+
+  if (!IS_PRODUCTION) {
+    return true;
+  }
+
+  if (parsed.protocol === "https:") {
+    return true;
+  }
+
+  return parsed.protocol === "http:" && isPrivateHost(parsed.hostname);
+}
+
+function isTrustedWriteOrigin(request: NextRequest): boolean {
+  if (!IS_PRODUCTION) {
+    return true;
+  }
+
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      return new URL(origin).origin === request.nextUrl.origin;
+    } catch {
+      return false;
+    }
+  }
+
+  // Browsers include this for same-origin fetches; reject unknown non-browser callers.
+  return request.headers.get("sec-fetch-site") === "same-origin";
+}
+
+function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0]?.trim() || "unknown";
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function isRateLimited(request: NextRequest): boolean {
+  const method = request.method.toUpperCase();
+  const limit = SAFE_METHODS.has(method) ? RATE_LIMIT_MAX_READS : RATE_LIMIT_MAX_WRITES;
+  const key = `${getClientIp(request)}:${method}`;
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.set(key, { windowStart: now, count: 1 });
+    return false;
+  }
+
+  if (entry.count >= limit) {
+    return true;
+  }
+
+  entry.count += 1;
+  rateLimitStore.set(key, entry);
+  return false;
 }
 
 // Timeout configuration (in milliseconds)
@@ -69,15 +178,37 @@ async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const method = request.method.toUpperCase();
   const { path } = await params;
-  const targetPath = path.join("/");
+  const normalizedSegments = normalizePathSegments(path);
+
+  if (!normalizedSegments) {
+    console.warn("[Scope Proxy] Blocked malformed path segments");
+    return NextResponse.json({ error: "Path not allowed" }, { status: 403 });
+  }
+
+  if (!PATH_ALLOWLIST[method]) {
+    return NextResponse.json(
+      { error: `Method ${method} not allowed` },
+      { status: 405 }
+    );
+  }
+
+  const targetPath = normalizedSegments.join("/");
 
   // Security: Validate path against allowlist before proxying
-  if (!isPathAllowed(targetPath)) {
+  if (!isPathAllowed(method, targetPath)) {
     console.warn(`[Scope Proxy] Blocked request to non-allowed path: ${targetPath}`);
     return NextResponse.json(
       { error: "Path not allowed" },
       { status: 403 }
+    );
+  }
+
+  if (!isUpstreamConfigSafe()) {
+    return NextResponse.json(
+      { error: "Invalid or insecure SCOPE_API_URL configuration for current environment" },
+      { status: 500 }
     );
   }
 
@@ -87,6 +218,23 @@ async function proxyRequest(
     return NextResponse.json(
       { error: "Scope proxy disabled in production. Set SCOPE_PROXY_ENABLE=true or use platform-level auth." },
       { status: 403 }
+    );
+  }
+
+  if (WRITE_METHODS.has(method) && !isTrustedWriteOrigin(request)) {
+    return NextResponse.json(
+      { error: "Write operations require same-origin browser context" },
+      { status: 403 }
+    );
+  }
+
+  if (isRateLimited(request)) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded for Scope proxy" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) },
+      }
     );
   }
 
@@ -165,6 +313,13 @@ async function proxyRequest(
 }
 
 export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  return proxyRequest(request, context);
+}
+
+export async function HEAD(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {

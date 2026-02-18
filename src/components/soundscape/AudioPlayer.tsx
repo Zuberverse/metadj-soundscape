@@ -64,6 +64,7 @@ export function AudioPlayer({
   const micStreamRef = useRef<MediaStream | null>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const retryButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -342,6 +343,12 @@ export function AudioPlayer({
     };
   }, [onAudioElement, stopMicStream]);
 
+  useEffect(() => {
+    if (micState === "error") {
+      retryButtonRef.current?.focus();
+    }
+  }, [micState]);
+
   const sourceSwitcher = (
     <div
       className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5"
@@ -532,7 +539,7 @@ export function AudioPlayer({
                 micState === "requesting" ? "text-white/45 animate-status-pulse" :
                 micState === "error" ? "text-amber-300/80" :
                 "text-white/35"
-              }`}>
+              }`} role={micState === "error" ? "alert" : "status"} aria-live={micState === "error" ? "assertive" : "polite"}>
                 {micState === "requesting" ? "Requesting permission..." :
                  micState === "active" ? "Listening" :
                  micState === "error" && micError ? micError :
@@ -540,7 +547,9 @@ export function AudioPlayer({
               </p>
               {micState === "error" && (
                 <button
+                  ref={retryButtonRef}
                   type="button"
+                  aria-label="Retry microphone access"
                   onClick={() => void handleSourceChange("mic")}
                   className="text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:text-scope-cyan/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded px-1"
                 >
@@ -691,13 +700,13 @@ export function AudioPlayer({
               micState === "requesting" ? "text-white/45 animate-status-pulse" :
               micState === "active" ? "text-scope-purple/70" :
               "text-white/35"
-            }`}>
+            }`} role="status" aria-live="polite">
               {micState === "requesting" ? "Requesting microphone permission..." :
                micState === "active" ? "Live microphone analysis active" :
                "Microphone ready"}
             </p>
             {micError && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" role="alert" aria-live="assertive">
                 <p className="text-[10px] text-amber-300/80 font-medium">
                   {micError.includes("Permission") || micError.includes("denied")
                     ? "Microphone access denied. Check browser permissions and try again."
@@ -706,7 +715,9 @@ export function AudioPlayer({
                     : micError}
                 </p>
                 <button
+                  ref={retryButtonRef}
                   type="button"
+                  aria-label="Retry microphone access"
                   onClick={() => void handleSourceChange("mic")}
                   className="text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:text-scope-cyan/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded px-1"
                 >

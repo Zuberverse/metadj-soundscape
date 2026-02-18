@@ -7,7 +7,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useSoundscape } from "./use-soundscape";
 import { PRESET_THEMES } from "./themes";
-import { DEFAULT_THEME_ID } from "./constants";
+import { DEFAULT_THEME_ID, DENOISING_PROFILES } from "./constants";
 
 // ============================================================================
 // Mock Dependencies
@@ -247,10 +247,17 @@ describe("useSoundscape", () => {
     it("disconnects audio and resets state", async () => {
       const { result } = renderHook(() => useSoundscape());
       const audioElement = createMockAudioElement();
+      const dataChannel = createMockDataChannel("open");
 
       await act(async () => {
         await result.current.connectAudio(audioElement);
       });
+
+      act(() => {
+        result.current.setDataChannel(dataChannel);
+        result.current.startAmbient();
+      });
+      expect(result.current.parameters).not.toBeNull();
 
       act(() => {
         result.current.disconnectAudio();
@@ -258,6 +265,7 @@ describe("useSoundscape", () => {
 
       expect(mockAnalyzerInstance.destroy).toHaveBeenCalled();
       expect(result.current.state.playback).toBe("idle");
+      expect(result.current.parameters).toBeNull();
     });
   });
 
@@ -412,6 +420,50 @@ describe("useSoundscape", () => {
       expect(dataChannel.send).toHaveBeenCalledTimes(sendCallCount);
 
       vi.useRealTimers();
+    });
+
+    it("syncs denoising profile updates while ambient mode is active", () => {
+      const { result } = renderHook(() => useSoundscape());
+      const dataChannel = createMockDataChannel("open");
+      const sendMock = dataChannel.send as ReturnType<typeof vi.fn>;
+
+      act(() => {
+        result.current.setDataChannel(dataChannel);
+        result.current.startAmbient();
+      });
+
+      sendMock.mockClear();
+
+      act(() => {
+        result.current.setDenoisingProfile("quality");
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as { denoising_step_list: number[] };
+      expect(payload.denoising_step_list).toEqual([...DENOISING_PROFILES.quality]);
+    });
+
+    it("syncs prompt accent updates while ambient mode is active", () => {
+      const { result } = renderHook(() => useSoundscape());
+      const dataChannel = createMockDataChannel("open");
+      const sendMock = dataChannel.send as ReturnType<typeof vi.fn>;
+
+      act(() => {
+        result.current.setDataChannel(dataChannel);
+        result.current.startAmbient();
+      });
+
+      sendMock.mockClear();
+
+      act(() => {
+        result.current.setPromptAccent("volumetric fog", 0.4);
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as {
+        prompts: Array<{ text: string; weight: number }>;
+      };
+      expect(payload.prompts.some((entry) => entry.text === "volumetric fog" && entry.weight === 0.4)).toBe(true);
     });
   });
 

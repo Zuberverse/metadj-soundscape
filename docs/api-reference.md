@@ -1,6 +1,6 @@
 # Scope API Reference (Soundscape)
 
-**Last Modified**: 2026-02-12 20:28 EST
+**Last Modified**: 2026-02-18 10:19 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -19,7 +19,7 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 - **Scope Server (local)**: `http://localhost:8000`
 - **Scope Server (RunPod)**: `https://your-instance-id-8000.proxy.runpod.net`
 
-**Note**: The Soundscape client uses the proxy route by default. In production, enable it with `SCOPE_PROXY_ENABLE=true` and protect access.
+**Note**: The Soundscape client uses the proxy route by default. In production, enable it with `SCOPE_PROXY_ENABLE=true`. The proxy enforces strict method/path allowlisting, same-origin validation for write calls, and request rate limiting.
 
 ---
 
@@ -131,17 +131,12 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
 
 ---
 
-## Additional Endpoints (Proxied, not on MVP path)
+## Additional Read Endpoints (Proxied)
 
-- `GET /api/v1/hardware` — GPU/VRAM summary
+- `GET /api/v1/hardware/info` — GPU/VRAM summary
 - `GET /api/v1/models/status` — Model readiness
-- `POST /api/v1/models/download` — Trigger model download
-- `GET|POST /api/v1/assets` — Asset upload/list
-- `GET /api/v1/assets/{path}` — Serve specific asset
-- `GET /api/v1/lora/list` — LoRA management
-- `GET /api/v1/plugins` (fallback: `GET /plugins`) — Plugin API
-- `GET /api/v1/prompts` — Prompt operations
-- `DELETE /api/v1/session/{id}` — Session teardown
+- `GET /api/v1/lora/list` — LoRA inventory
+- `GET /api/v1/plugins` (fallback: `GET /plugins`) — Plugin discovery
 
 ---
 

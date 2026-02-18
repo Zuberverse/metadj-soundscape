@@ -1,6 +1,6 @@
 # Soundscape Technical Mechanics
 
-**Last Modified**: 2026-02-12 20:28 EST
+**Last Modified**: 2026-02-18 10:19 EST
 **Status**: Active
 
 ## Purpose
@@ -53,6 +53,7 @@ When playback is paused but Scope remains connected:
 - Soundscape sends a single ambient prompt payload with transition
 - Scope latent cache maintains continuity
 - Theme changes still send transition payloads
+- Denoising and prompt accent updates are re-sent immediately while ambient mode is active
 
 ## Audio Sources
 
@@ -89,7 +90,7 @@ Optional beat-synced rotation:
 HUD derives health from dropped frames and sampled FPS.
 
 - **Healthy**: dropped frames < 5% and FPS >= 10
-- **Watch**: dropped frames >= 5% or FPS < 10
+- **Warning**: dropped frames >= 5% or FPS < 10
 - **Critical**: dropped frames >= 12% or FPS < 7
 
 ## Continuity Constraints
