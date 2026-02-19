@@ -3,6 +3,7 @@
  * Video-first layout with collapsible controls
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -166,6 +167,11 @@ export function SoundscapeStudio({
   const showControlsButtonRef = useRef<HTMLButtonElement | null>(null);
   const hideControlsButtonRef = useRef<HTMLButtonElement | null>(null);
   const pendingToggleFocusRef = useRef<"show-controls" | "hide-controls" | null>(null);
+  const scopePcRef = useRef<RTCPeerConnection | null>(null);
+  const scopeDataChannelRef = useRef<RTCDataChannel | null>(null);
+  const attemptedNoFrameRecoveryRef = useRef(false);
+  const codecStrategyRef = useRef<"vp8-preferred" | "browser-default">("vp8-preferred");
+  const connectionProfileRef = useRef<"modern" | "legacy-minimal">("modern");
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [showControlsInternal, setShowControlsInternal] = useState(true);
@@ -481,7 +487,7 @@ export function SoundscapeStudio({
 
         const resolvedPreprocessor =
           selectedPreprocessor !== NO_PREPROCESSOR &&
-          preprocessors.some((pipeline) => pipeline.id === selectedPreprocessor)
+            preprocessors.some((pipeline) => pipeline.id === selectedPreprocessor)
             ? selectedPreprocessor
             : NO_PREPROCESSOR;
 
@@ -526,24 +532,29 @@ export function SoundscapeStudio({
     }
 
     if (scopeStream) {
+      console.log("[Scope] Attaching stream to video element");
+
+      // Monitor track unmute - video may arrive muted and unmute when frames flow
+      const tracks = scopeStream.getVideoTracks();
+      tracks.forEach(track => {
+        console.log("[Scope] Video track initial state:", { muted: track.muted, readyState: track.readyState });
+        if (track.muted) {
+          const handleUnmute = () => {
+            console.log("[Scope] Video track unmuted - frames should be flowing");
+            void videoElement.play().catch(() => { });
+          };
+          track.addEventListener("unmute", handleUnmute, { once: true });
+        }
+      });
+
       videoElement.srcObject = scopeStream;
-      const playPromise = videoElement.play();
-      if (playPromise && typeof playPromise.then === "function") {
-        playPromise
-          .then(() => {
-            setVideoAutoplayBlocked(false);
-          })
-          .catch((err) => {
-            setVideoAutoplayBlocked(true);
-            console.warn("[Soundscape] Video autoplay blocked:", err.message);
-          });
-      } else {
-        setVideoAutoplayBlocked(false);
-      }
+      videoElement.play().catch((err) => {
+        console.warn("[Soundscape] Video autoplay blocked:", err.message);
+        setVideoAutoplayBlocked(true);
+      });
       return;
     }
 
-    setVideoAutoplayBlocked(false);
     if (videoElement.srcObject) {
       videoElement.pause();
       videoElement.srcObject = null;
@@ -559,14 +570,10 @@ export function SoundscapeStudio({
     if (hasHydratedFromStorage.current) return;
     hasHydratedFromStorage.current = true;
     try {
-      const storedPipeline = window.localStorage.getItem("soundscape.pipeline");
-      if (storedPipeline) {
-        setSelectedPipeline(storedPipeline);
-      }
-      const storedPreprocessor = window.localStorage.getItem("soundscape.preprocessor");
-      if (storedPreprocessor) {
-        setSelectedPreprocessor(storedPreprocessor);
-      }
+      // Pipeline and preprocessor are NOT restored here — they are validated
+      // against server-reported schemas in refreshScopeDiagnostics() which runs
+      // on mount. Blindly restoring stale values causes a visible flash when
+      // diagnostics resolves them back to valid IDs.
       const storedDenoisingProfile = window.localStorage.getItem("soundscape.denoisingProfile");
       if (storedDenoisingProfile && storedDenoisingProfile in DENOISING_PROFILES) {
         setDenoisingProfile(storedDenoisingProfile as DenoisingProfileId);
@@ -630,6 +637,9 @@ export function SoundscapeStudio({
 
   useEffect(() => {
     if (!scopeStream) {
+      attemptedNoFrameRecoveryRef.current = false;
+      codecStrategyRef.current = "vp8-preferred";
+      connectionProfileRef.current = "modern";
       previousFrameSampleRef.current = null;
       setVideoStats({ width: 0, height: 0, totalFrames: null, droppedFrames: null, fps: null });
       return;
@@ -724,14 +734,36 @@ export function SoundscapeStudio({
       ...currentTheme.styleModifiers,
       "calm atmosphere, gentle flow",
     ].join(", ");
-    return {
+    const params = {
+      pipeline_ids: pipelineIdsForConnect,
+      input_mode: "text" as const,
       prompts: composePromptEntries(basePrompt),
-      noise_scale: currentTheme.ranges.noiseScale.min,
+      prompt_interpolation_method: "linear" as const,
       denoising_step_list: [...activeDenoisingSteps],
       manage_cache: true,
-      paused: false,
+      kv_cache_attention_bias: 0.3,
+      recording: false,
     };
-  }, [activeDenoisingSteps, composePromptEntries, currentTheme]);
+    console.log("[Scope] initialParameters:", JSON.stringify(params, null, 2));
+    return params;
+  }, [activeDenoisingSteps, composePromptEntries, currentTheme, pipelineIdsForConnect]);
+
+  const legacyInitialParameters = useMemo(() => {
+    if (!currentTheme) return undefined;
+    const basePrompt = [
+      currentTheme.basePrompt,
+      ...currentTheme.styleModifiers,
+      "calm atmosphere, gentle flow",
+    ].join(", ");
+    const params = {
+      pipeline_ids: pipelineIdsForConnect,
+      input_mode: "text" as const,
+      prompts: composePromptEntries(basePrompt),
+      manage_cache: true,
+    };
+    console.log("[Scope] legacyInitialParameters:", JSON.stringify(params, null, 2));
+    return params;
+  }, [composePromptEntries, currentTheme, pipelineIdsForConnect]);
 
   const stopPlaybackForDisconnect = useCallback(() => {
     stop();
@@ -782,18 +814,31 @@ export function SoundscapeStudio({
     maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
     reconnectBaseDelay: RECONNECT_BASE_DELAY_MS,
     setupPeerConnection: (connection) => {
-      connection.addTransceiver("video");
+      scopePcRef.current = connection;
+      // Scope uses aiortc which requires VP8 codec — VP9/AV1/H264 cause "connected but black" video.
+      // Direction must be sendrecv — recvonly prevents aiortc from starting its frame output loop.
+      const transceiver = connection.addTransceiver("video", { direction: "sendrecv" });
+      const codecs = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
+      const vp8Codecs = codecs.filter(c => c.mimeType.toLowerCase() === "video/vp8");
+      if (vp8Codecs.length > 0) {
+        transceiver.setCodecPreferences(vp8Codecs);
+      } else {
+        console.warn("[Scope] VP8 not in receiver capabilities — codec negotiation left to browser, video may be black");
+      }
     },
     onStream: (stream) => {
+      console.log("[Scope] Stream received, video tracks:", stream.getVideoTracks().length);
       setScopeStream(stream);
     },
     onDataChannelOpen: (channel) => {
+      scopeDataChannelRef.current = channel;
       setDataChannel(channel);
       if (!isPlaying) {
         startAmbient();
       }
     },
     onDataChannelClose: () => {
+      scopeDataChannelRef.current = null;
       setDataChannel(null);
       stopAmbient();
     },
@@ -817,11 +862,11 @@ export function SoundscapeStudio({
         ? "Checking Scope readiness..."
         : scopeHealth === null
           ? "Scope readiness not loaded yet. Click Refresh to check server status."
-        : !hasPipelineSelection
-          ? "Select a main pipeline before connecting."
-          : scopeHealth?.status !== "ok"
-            ? "Scope server offline. Start Scope and refresh readiness."
-            : null;
+          : !hasPipelineSelection
+            ? "Select a main pipeline before connecting."
+            : scopeHealth?.status !== "ok"
+              ? "Scope server offline. Start Scope and refresh readiness."
+              : null;
   const scopeReadiness = useMemo(() => {
     if (scopeHealth?.status === "ok") {
       return { label: "Online", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
@@ -863,6 +908,53 @@ export function SoundscapeStudio({
       (window as unknown as { debugPeerConnection: RTCPeerConnection }).debugPeerConnection = peerConnection;
     }
   }, [peerConnection]);
+
+  useEffect(() => {
+    if (!scopeStream || connectionState !== "connected") {
+      return;
+    }
+
+    // Give the pipeline generous warmup time before attempting recovery.
+    // A freshly-loaded pipeline needs time to generate the first frame —
+    // triggering reset_cache or legacy reconnect too early causes the server's
+    // input loop to error when the PC is closed underneath it.
+    const timeoutId = setTimeout(() => {
+      const video = videoRef.current;
+      if (!video || attemptedNoFrameRecoveryRef.current) {
+        return;
+      }
+
+      const hasDecodedFrame = video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+      const hasDimensions = video.videoWidth > 0 && video.videoHeight > 0;
+
+      if (hasDecodedFrame && hasDimensions) {
+        return;
+      }
+
+      attemptedNoFrameRecoveryRef.current = true;
+      codecStrategyRef.current = "browser-default";
+      connectionProfileRef.current = "legacy-minimal";
+      console.warn("[Scope] Connected without decoded frames after 20s. Retrying once with legacy-minimal profile.");
+      void connect({
+        pipelineId: selectedPipeline,
+        pipelineIds: pipelineIdsForConnect,
+        loadParams,
+        initialParameters: legacyInitialParameters,
+      });
+    }, 20000);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    scopeStream,
+    connectionState,
+    connect,
+    selectedPipeline,
+    pipelineIdsForConnect,
+    loadParams,
+    legacyInitialParameters,
+  ]);
 
   const handleDisconnectScope = useCallback((userInitiated = false) => {
     disconnect(true);
@@ -1150,409 +1242,327 @@ export function SoundscapeStudio({
   // ====================================================================
 
   return (
-    <div className="h-full flex flex-col relative z-10">
-      {/* VIDEO HERO */}
-      <div className="flex-1 min-h-0 relative bg-black z-0">
-        {scopeStream ? (
-          /* Connected: Video with telemetry overlay */
-          <div className="absolute inset-0 p-3 pt-2 pb-12 md:p-4 md:pt-2 md:pb-14 flex items-center justify-center">
-            {/* Telemetry overlay -- dismissible */}
-            {showTelemetry && (
-              <div className="absolute top-3 left-3 md:left-4 glass bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 z-20 max-w-[280px] animate-fade-in">
-                <p className="sr-only" role="status" aria-live="polite">
-                  Scope stream connected. Active pipeline {activePipelineChain}.
-                </p>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-scope-cyan/80">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-scope-cyan animate-pulse" aria-hidden="true" />
-                    <span className="font-semibold">Live</span>
-                  </div>
-                  <button
-                    ref={hideTelemetryButtonRef}
-                    type="button"
-                    onClick={handleHideTelemetry}
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] text-white/50 hover:text-white/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded-lg flex items-center justify-center"
-                    aria-label="Hide telemetry overlay"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="space-y-1 text-[10px] tabular-nums">
-                  <div className="flex justify-between"><span className="text-white/65">Pipeline</span><span className="text-white/75 font-medium truncate ml-2 max-w-[140px]">{activePipelineChain}</span></div>
-                  <div className="flex justify-between"><span className="text-white/65">Resolution</span><span className="text-white/75 font-medium">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
-                  <div className="flex justify-between"><span className="text-white/65">FPS</span><span className="text-white/75 font-medium">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
-                  <div className="flex justify-between"><span className="text-white/65">Drop Rate</span><span className="text-white/75 font-medium">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-white/65">Performance</span>
-                    <span className={`font-semibold flex items-center gap-1.5 ${performanceStatus.color}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${performanceStatus.dotColor}`} aria-hidden="true" />
-                      {performanceStatus.label}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-2.5 pt-2 border-t border-white/8 flex items-center gap-1.5">
-                  {!isRecording ? (
-                    <button type="button" onClick={startRecordingClip} aria-label="Start recording clip" className="rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-red-200 hover:bg-red-500/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300">Record</button>
-                  ) : (
-                    <button type="button" onClick={stopRecordingClip} aria-label="Stop recording clip" className="rounded-lg border border-red-400/35 bg-red-500/20 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-red-100 hover:bg-red-500/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 animate-status-pulse">Stop</button>
-                  )}
-                  {recordedClipUrl && (
-                    <a href={recordedClipUrl} download={`soundscape-clip-${Date.now()}.webm`} className="rounded-lg border border-scope-cyan/25 bg-scope-cyan/10 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:bg-scope-cyan/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Download</a>
-                  )}
-                  {recordedClipSeconds !== null && <span className="text-[9px] text-white/55 ml-1">{recordedClipSeconds.toFixed(1)}s</span>}
-                </div>
-                {recordingError && <p className="text-[9px] text-amber-300/90 mt-1" role="alert" aria-live="assertive">{recordingError}</p>}
-              </div>
-            )}
+    <div className="h-full w-full flex flex-col relative z-0 bg-black overflow-hidden font-sans">
+      {/* ALWAYS-PRESENT VIDEO LAYER (solves WebRTC mounting issues on Safari/iOS) */}
+      <div
+        className={`absolute inset-0 z-0 flex items-center justify-center transition-opacity duration-1000 ${scopeStream ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+      >
+        <div className="absolute inset-0 p-4 md:p-8 flex items-center justify-center">
+          {/* Magical fantastical frame - sized to video aspect ratio */}
+          <div
+            className="relative shadow-[0_0_80px_rgba(6,182,212,0.15)] transition-all duration-700"
+            style={{
+              aspectRatio: `${aspectRatio.resolution.width} / ${aspectRatio.resolution.height}`,
+              maxWidth: '100%',
+              maxHeight: '100%',
+              width: aspectRatio.mode === '16:9' ? '100%' : 'auto',
+              height: aspectRatio.mode === '9:16' ? '100%' : 'auto',
+            }}
+          >
+            {/* Outer glow layers */}
+            <div className={`absolute -inset-4 rounded-[2.5rem] bg-gradient-to-r from-scope-purple/40 via-scope-cyan/30 to-scope-magenta/40 blur-2xl opacity-70 ${isPlaying ? 'animate-pulse' : ''}`} />
+            <div className="absolute -inset-1 rounded-[2rem] bg-gradient-to-br from-scope-cyan/50 via-transparent to-scope-purple/50 blur-lg" />
 
-            {/* Show telemetry button when hidden */}
-            {!showTelemetry && (
-              <button
-                ref={showTelemetryButtonRef}
-                type="button"
-                onClick={handleShowTelemetry}
-                className="absolute top-3 left-3 md:left-4 z-20 min-h-[44px] min-w-[44px] px-2.5 py-2.5 glass bg-black/50 rounded-lg border border-white/10 text-white/55 hover:text-white/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
-                aria-label="Show telemetry overlay"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </button>
-            )}
+            {/* Frame border with gradient */}
+            <div className="absolute inset-0 rounded-[1.75rem] p-[2px] bg-gradient-to-br from-scope-cyan/80 via-scope-purple/60 to-scope-magenta/80">
+              <div className="w-full h-full rounded-[calc(1.75rem-2px)] bg-black/90" />
+            </div>
 
-            {/* Video frame */}
-            <div
-              className="relative"
-              style={{
-                aspectRatio: `${aspectRatio.resolution.width} / ${aspectRatio.resolution.height}`,
-                maxWidth: '100%',
-                maxHeight: '100%',
-                width: aspectRatio.mode === '16:9' ? '100%' : 'auto',
-                height: aspectRatio.mode === '9:16' ? '100%' : 'auto',
-              }}
-            >
-              <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-scope-purple/25 via-scope-cyan/15 to-scope-magenta/25 blur-xl opacity-50 animate-pulse" aria-hidden="true" />
-              <div className="absolute -inset-0.5 rounded-[1.25rem] bg-gradient-to-br from-scope-cyan/30 via-transparent to-scope-purple/30 blur-md" aria-hidden="true" />
-              <div className="absolute inset-0 rounded-xl p-[2px] bg-gradient-to-br from-scope-cyan/50 via-scope-purple/30 to-scope-magenta/50">
-                <div className="w-full h-full rounded-[calc(0.75rem-2px)] bg-black/90" />
-              </div>
-              <div className="absolute inset-[2px] rounded-[calc(0.75rem-2px)] overflow-hidden bg-black">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  style={sharpenEnabled ? { filter: "contrast(1.08) saturate(1.05)", imageRendering: "crisp-edges" } : undefined}
-                />
-              </div>
-              {videoAutoplayBlocked && (
-                <button type="button" onClick={() => { void handleResumeVideoPlayback(); }} className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 rounded-xl glass bg-black/70 border border-white/20 text-xs uppercase tracking-wider text-white/85 hover:bg-black/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">
-                  Tap to start video
+            {/* Video container */}
+            <div className="absolute inset-[3px] rounded-[calc(1.75rem-3px)] overflow-hidden bg-black ring-1 ring-white/10">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+                style={sharpenEnabled ? {
+                  filter: "contrast(1.1) saturate(1.1)",
+                  imageRendering: "crisp-edges",
+                } : undefined}
+              />
+            </div>
+
+            {videoAutoplayBlocked && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-[calc(1.75rem-3px)] z-30">
+                <button type="button" onClick={() => { void handleResumeVideoPlayback(); }} className="px-8 py-4 rounded-full glass-radiant bg-scope-cyan/20 border border-scope-cyan/50 text-sm uppercase tracking-widest text-white shadow-[0_0_30px_rgba(6,182,212,0.4)] hover:bg-scope-cyan/30 hover:scale-105 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan font-bold">
+                  Tap to Start Stream
                 </button>
-              )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* TELEMETRY OVERLAY */}
+      {scopeStream && showTelemetry && (
+        <div className="absolute top-4 left-4 glass-radiant bg-black/70 backdrop-blur-md border border-white/10 rounded-2xl p-4 z-40 w-64 animate-fade-in shadow-2xl">
+          <p className="sr-only" role="status" aria-live="polite">
+            Scope stream connected. Active pipeline {activePipelineChain}.
+          </p>
+          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-scope-cyan/90 font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" aria-hidden="true" />
+              Live Telemetry
+            </div>
+            <button
+              ref={hideTelemetryButtonRef}
+              type="button"
+              onClick={handleHideTelemetry}
+              className="w-8 h-8 text-white/40 hover:text-white/90 hover:bg-white/10 transition-all duration-200 rounded-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-scope-cyan"
+              aria-label="Hide telemetry"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="space-y-2 text-[11px] tabular-nums font-medium">
+            <div className="flex justify-between"><span className="text-white/50">Pipeline</span><span className="text-white/90 truncate ml-2">{activePipelineChain}</span></div>
+            <div className="flex justify-between"><span className="text-white/50">Resolution</span><span className="text-white/90">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
+            <div className="flex justify-between"><span className="text-white/50">FPS</span><span className="text-white/90">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
+            <div className="flex justify-between"><span className="text-white/50">Drop Rate</span><span className="text-white/90">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
+            <div className="flex justify-between items-center pt-1 mt-1 border-t border-white/5">
+              <span className="text-white/50">Status</span>
+              <span className={`font-bold flex items-center gap-1.5 ${performanceStatus.color}`}>
+                <span className={`w-2 h-2 rounded-full ${performanceStatus.dotColor}`} aria-hidden="true" />
+                {performanceStatus.label}
+              </span>
             </div>
           </div>
-        ) : isConnecting ? (
-          /* Connecting state */
-          <div className="absolute inset-0 flex items-center justify-center px-4 py-6">
-            <div className="glass-radiant text-center p-8 rounded-2xl max-w-sm w-full animate-fade-in">
-              <div className="mb-5 flex justify-center">
-                <svg width="48" height="48" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-[0_0_12px_rgba(6,182,212,0.4)] animate-pulse" aria-hidden="true">
-                  <path d="M28 22V52" stroke="url(#initGrad)" strokeWidth="3.5" strokeLinecap="round" />
-                  <path d="M52 18V48" stroke="url(#initGrad)" strokeWidth="3.5" strokeLinecap="round" />
+          <div className="mt-4 pt-3 border-t border-white/10 flex gap-2">
+            {!isRecording ? (
+              <button type="button" onClick={startRecordingClip} className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 py-2 text-[10px] uppercase tracking-widest font-bold text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all focus:outline-none focus:ring-2 focus:ring-red-500">Record</button>
+            ) : (
+              <button type="button" onClick={stopRecordingClip} className="flex-1 rounded-lg border border-red-500/50 bg-red-500/30 py-2 text-[10px] uppercase tracking-widest font-bold text-red-100 hover:bg-red-500/40 transition-all animate-pulse focus:outline-none focus:ring-2 focus:ring-red-500">Stop REC</button>
+            )}
+            {recordedClipUrl && (
+              <a href={recordedClipUrl} download={`clip-${Date.now()}.webm`} className="flex-1 text-center rounded-lg border border-scope-cyan/30 bg-scope-cyan/10 py-2 text-[10px] uppercase tracking-widest font-bold text-scope-cyan hover:bg-scope-cyan/20 hover:border-scope-cyan/50 transition-all focus:outline-none focus:ring-2 focus:ring-scope-cyan">Save</a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {scopeStream && !showTelemetry && (
+        <button
+          ref={showTelemetryButtonRef}
+          type="button"
+          onClick={handleShowTelemetry}
+          className="absolute top-4 left-4 z-40 w-12 h-12 glass bg-black/50 backdrop-blur-md rounded-full border border-white/10 text-white/50 hover:text-white/90 hover:border-scope-cyan/50 transition-all shadow-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-scope-cyan"
+          aria-label="Show telemetry"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+        </button>
+      )}
+
+      {/* FOREGROUND UI STATES */}
+      <div className={`absolute inset-0 z-20 transition-all duration-700 ${scopeStream ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
+
+        {/* Background Ambience when disconnected */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.1),rgba(0,0,0,0.8)_60%)] pointer-events-none" />
+
+        {isConnecting ? (
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <div className="glass-radiant p-10 rounded-3xl max-w-sm w-full text-center border border-scope-cyan/20 shadow-[0_0_50px_rgba(6,182,212,0.15)] animate-fade-in relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-scope-cyan/10 to-transparent opacity-50 pointer-events-none" />
+              <div className="mb-8 flex justify-center relative">
+                <div className="absolute inset-0 rounded-full bg-scope-cyan/20 blur-xl animate-pulse" />
+                <svg width="60" height="60" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="relative z-10 drop-shadow-[0_0_15px_rgba(6,182,212,0.6)] animate-pulse">
+                  <path d="M28 22V52" stroke="url(#initGrad)" strokeWidth="4" strokeLinecap="round" />
+                  <path d="M52 18V48" stroke="url(#initGrad)" strokeWidth="4" strokeLinecap="round" />
                   <path d="M28 22L52 18" stroke="url(#initGrad)" strokeWidth="4" strokeLinecap="round" />
-                  <path d="M28 28L52 24" stroke="url(#initGrad)" strokeWidth="3" strokeLinecap="round" />
-                  <ellipse cx="22" cy="54" rx="7" ry="5" fill="url(#initGrad)" transform="rotate(-20 22 54)" />
-                  <ellipse cx="46" cy="50" rx="7" ry="5" fill="url(#initGrad)" transform="rotate(-20 46 50)" />
+                  <ellipse cx="22" cy="54" rx="8" ry="6" fill="url(#initGrad)" transform="rotate(-20 22 54)" />
+                  <ellipse cx="46" cy="50" rx="8" ry="6" fill="url(#initGrad)" transform="rotate(-20 46 50)" />
                   <defs><linearGradient id="initGrad" x1="16" y1="14" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stopColor="#06b6d4" /><stop offset="0.5" stopColor="#8b5cf6" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
                 </svg>
               </div>
-              <h2 className="text-lg text-white mb-2 tracking-wide" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                {connectionState === "reconnecting" ? "Reconnecting" : "Connecting"}
+              <h2 className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-3 tracking-widest font-bold" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
+                {connectionState === "reconnecting" ? "RECONNECTING" : "INITIALIZING"}
               </h2>
-              <p className="text-scope-cyan/80 text-sm font-medium mb-4" role="status" aria-live="polite">{statusMessage || "Establishing connection..."}</p>
-              {connectionState === "reconnecting" && <p className="text-[10px] text-white/65 mb-3">Attempt {reconnectAttempts + 1} of {MAX_RECONNECT_ATTEMPTS}</p>}
-              <div className="w-40 h-1 bg-white/5 rounded-full mx-auto overflow-hidden"><div className="h-full bg-gradient-to-r from-scope-purple via-scope-cyan to-scope-magenta animate-pulse rounded-full w-2/3" /></div>
+              <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-wider">{statusMessage || "Establishing secure stream..."}</p>
+              <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                <div className="h-full bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta animate-pulse rounded-full w-[80%]" />
+              </div>
             </div>
           </div>
         ) : (
-          /* Disconnected: Pre-connect setup */
-          <div className={`absolute inset-0 overflow-hidden z-20 ${showControls ? "pb-12 md:pb-14" : "pb-3 md:pb-4"}`}>
-            <div className="absolute inset-0 px-3 py-3 sm:px-4 sm:py-4 md:py-5">
-              <div className="mx-auto h-full w-full max-w-2xl glass-radiant rounded-2xl animate-fade-in relative z-20 flex flex-col overflow-hidden">
-                <div className="shrink-0 px-4 pt-5 pb-4 sm:px-6 sm:pt-6 sm:pb-5 text-center">
-                  <h2 className="text-xl sm:text-2xl text-white mb-1.5 tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                    Soundscape
-                  </h2>
-                  <p className="text-white/60 mb-4 text-sm">Real-time AI visuals from your audio</p>
-                  <div>
-                    <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] mb-2 font-semibold">Output Format</p>
-                    <div className="flex justify-center"><AspectRatioToggle current={aspectRatio} onChange={setAspectRatio} disabled={false} /></div>
-                  </div>
+          <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-6 justify-center items-center pointer-events-auto overflow-y-auto">
+
+            {/* Left Column: Intro & Branding */}
+            <div className="flex-1 w-full max-w-lg lg:pr-12 animate-fade-in">
+              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-scope-cyan/30 bg-scope-cyan/10">
+                <span className="w-2 h-2 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+                <span className="text-[10px] font-bold text-scope-cyan uppercase tracking-widest">MetaDJ Nexus</span>
+              </div>
+              <h1 className="text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/50 mb-6 font-bold tracking-tight drop-shadow-lg" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
+                Soundscape
+              </h1>
+              <p className="text-lg text-white/60 mb-10 leading-relaxed font-light">
+                Transform your audio into breathtaking real-time visual experiences powered by Daydream Scope. Ready the pipeline and connect your stream.
+              </p>
+
+              <div className="hidden md:block">
+                <div className="flex items-center gap-4 text-sm text-white/40 uppercase tracking-widest font-semibold mb-6">
+                  <span>Aspect Ratio</span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
                 </div>
+                <AspectRatioToggle current={aspectRatio} onChange={setAspectRatio} disabled={false} />
+              </div>
+            </div>
 
-                <div
-                  className="min-h-0 flex-1 overflow-y-auto custom-scrollbar scroll-contain px-4 pb-4 sm:px-6"
-                  style={{ touchAction: "pan-y" }}
-                >
-                  <div className="space-y-2 text-left">
-                    {/* Scope Readiness */}
-                    <CollapsibleSection
-                      title="Scope Readiness"
-                      defaultOpen={true}
-                      badge={
-                        <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${scopeReadiness.textClass}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${scopeReadiness.dotClass}`} />
-                          {scopeReadiness.label}
-                        </span>
-                      }
-                    >
-                      <div className="space-y-3" aria-busy={isDiagnosticsLoading}>
-                        <div className="flex items-center justify-end">
-                          <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading || isConnecting} className="px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold rounded-lg bg-white/5 text-white/75 border border-white/10 hover:bg-white/8 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">
-                            {isDiagnosticsLoading ? "Checking..." : "Refresh"}
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
-                          <span className="text-white/65">Server</span>
-                          <span className={`${scopeReadiness.textClass} font-semibold`}>{scopeReadiness.label}</span>
-                          <span className="text-white/65">Pipeline State</span>
-                          <span className="text-white/70">{pipelineStatus?.status ?? "unknown"}</span>
-                          <span className="text-white/65">Version</span>
-                          <span className="text-white/70">{scopeHealth?.version ?? "n/a"}</span>
-                          <span className="text-white/65">GPU</span>
-                          <span className="text-white/70 truncate">{scopeCapabilities.hardwareSummary}</span>
-                          <span className="text-white/65">VRAM</span>
-                          <span className="text-white/70">{scopeCapabilities.totalVramGb ? `${scopeCapabilities.freeVramGb?.toFixed(1) ?? "?"}/${scopeCapabilities.totalVramGb.toFixed(1)} GB` : "n/a"}</span>
-                          <span className="text-white/65">Models</span>
-                          <span className={scopeCapabilities.modelReady === true ? "text-scope-cyan font-semibold" : scopeCapabilities.modelReady === false ? "text-amber-300 font-semibold" : "text-white/60"}>
-                            {scopeCapabilities.modelReady === null ? "Unknown" : scopeCapabilities.modelReady ? "Ready" : "Not ready"}
-                          </span>
-                        </div>
-                        {isScopeOffline && (
-                          <div className="rounded-xl border border-amber-300/25 bg-amber-400/8 p-3 space-y-2">
-                            <p className="text-[10px] uppercase tracking-wider text-amber-200 font-semibold">Scope Offline</p>
-                            <p className="text-[10px] text-amber-100/80 leading-relaxed">Audio analysis and theme switching work locally. Start the Scope server to stream visuals.</p>
-                            <button type="button" onClick={handleCopyScopeCommand} className="rounded-lg border border-amber-300/30 bg-black/20 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-amber-100 hover:bg-black/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
-                              {copyCommandStatus === "copied" ? "Copied" : "Copy health command"}
-                            </button>
-                          </div>
-                        )}
-                        {diagnosticsError && <p className="text-[10px] text-amber-300/80 font-medium" role="alert">{diagnosticsError}</p>}
-                        {lastScopeCheckAt && <p className="text-[10px] text-white/65">Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}</p>}
-                      </div>
-                    </CollapsibleSection>
-
-                    {/* Pipeline Selection */}
-                    <CollapsibleSection title="Pipeline" defaultOpen={true}>
-                      <div className="space-y-3">
-                        <div>
-                          <label htmlFor="pipeline-select" className="block text-[10px] text-white/65 uppercase tracking-wider font-medium mb-1.5">Main Pipeline</label>
-                          <select id="pipeline-select" value={selectedPipeline} disabled={isConnecting} onChange={(e) => setSelectedPipeline(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-sm text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed">
-                            {mainPipelineOptions.map((p) => <option key={p.id} value={p.id} className="bg-scope-bg">{p.name}</option>)}
-                          </select>
-                        </div>
-                        {preprocessorOptions.length > 0 && (
-                          <div>
-                            <label htmlFor="preprocessor-select" className="block text-[10px] text-white/65 uppercase tracking-wider font-medium mb-1.5">Preprocessor</label>
-                            <select id="preprocessor-select" value={selectedPreprocessor} disabled={isConnecting} onChange={(e) => setSelectedPreprocessor(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-sm text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed">
-                              <option value={NO_PREPROCESSOR} className="bg-scope-bg">None</option>
-                              {preprocessorOptions.map((p) => <option key={p.id} value={p.id} className="bg-scope-bg">{p.name}</option>)}
-                            </select>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedPipelineDescriptor.supportsVace === true && <span className="rounded-md bg-scope-cyan/8 border border-scope-cyan/20 px-2 py-1 text-[10px] text-scope-cyan font-medium">VACE</span>}
-                          {selectedPipelineDescriptor.supportsLora === true && <span className="rounded-md bg-scope-purple/8 border border-scope-purple/20 px-2 py-1 text-[10px] text-scope-purple font-medium">LoRA</span>}
-                          {typeof selectedPipelineDescriptor.estimatedVramGb === "number" && <span className="rounded-md bg-white/5 border border-white/10 px-2 py-1 text-[10px] text-white/60 font-medium">{selectedPipelineDescriptor.estimatedVramGb} GB</span>}
-                        </div>
-                      </div>
-                    </CollapsibleSection>
-
-                    {/* Generation Controls -- collapsed by default */}
-                    <CollapsibleSection title="Generation Controls" defaultOpen={false}>
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="text-[10px] text-white/65 font-medium">
-                            Denoising
-                            <select value={denoisingProfileId} disabled={isConnecting} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
-                              <option value="speed" className="bg-scope-bg">Speed</option>
-                              <option value="balanced" className="bg-scope-bg">Balanced</option>
-                              <option value="quality" className="bg-scope-bg">Quality</option>
-                            </select>
-                          </label>
-                          <label className="text-[10px] text-white/65 font-medium">
-                            Reactivity
-                            <select value={reactivityProfileId} disabled={isConnecting} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
-                              <option value="cinematic" className="bg-scope-bg">Cinematic</option>
-                              <option value="balanced" className="bg-scope-bg">Balanced</option>
-                              <option value="kinetic" className="bg-scope-bg">Kinetic</option>
-                            </select>
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="text-[10px] text-white/65 font-medium">
-                            Auto Theme
-                            <select value={autoThemeEnabled ? "on" : "off"} disabled={isConnecting} onChange={(e) => setAutoThemeEnabled(e.target.value === "on")} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
-                              <option value="off" className="bg-scope-bg">Off</option>
-                              <option value="on" className="bg-scope-bg">On</option>
-                            </select>
-                          </label>
-                          <label className="text-[10px] text-white/65 font-medium" title="Number of beats before automatically switching to the next theme">
-                            Section Beats
-                            <select value={autoThemeSectionBeats} disabled={!autoThemeEnabled || isConnecting} onChange={(e) => setAutoThemeSectionBeats(Number(e.target.value))} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
-                              {AUTO_THEME_SECTION_BEAT_OPTIONS.map((option) => (
-                                <option key={option} value={option} className="bg-scope-bg">{option} beats</option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        <p className="text-[10px] text-white/60">
-                          Runs while Scope is connected and audio is playing.
-                        </p>
-                        <label className="block text-[10px] text-white/65 font-medium">
-                          Prompt Accent
-                          <input type="text" value={promptAccent.text} onChange={(e) => handlePromptAccentTextChange(e.target.value)} disabled={isConnecting} maxLength={500} placeholder="volumetric haze, prismatic bloom..." className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white placeholder:text-white/25 focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40" />
-                        </label>
-                        <label className="block text-[10px] text-white/65 font-medium">
-                          Accent Weight ({promptAccent.weight.toFixed(2)})
-                          <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} disabled={isConnecting} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="mt-1 w-full accent-scope-cyan" aria-label={`Accent weight: ${promptAccent.weight.toFixed(2)}`} />
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {PROMPT_ACCENT_PRESETS.map((preset) => (
-                            <button key={preset} type="button" onClick={() => handleApplyPromptAccentPreset(preset)} disabled={isConnecting} className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[9px] uppercase tracking-wider font-medium text-white/60 hover:bg-white/10 hover:text-white/80 disabled:opacity-40 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">+ {preset}</button>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-white/65">Active denoising: [{activeDenoisingSteps.join(", ")}]</p>
-                      </div>
-                    </CollapsibleSection>
-                  </div>
-
-                  {/* Error display */}
-                  {scopeErrorTitle && (
-                    <div className="mt-4 glass bg-red-500/8 border border-red-500/20 rounded-xl p-4 text-left relative animate-fade-in" role="alert">
-                      <button type="button" onClick={clearError} className="absolute top-2.5 right-2.5 p-1 text-red-400/50 hover:text-red-400 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label="Dismiss error">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
-                      <p className="text-red-400 font-semibold text-sm pr-6">{scopeErrorTitle}</p>
-                      {scopeErrorDescription && <p className="text-red-400/70 text-xs mt-1">{scopeErrorDescription}</p>}
-                      {scopeErrorSuggestion && <p className="text-white/65 text-xs mt-2 italic">{scopeErrorSuggestion}</p>}
-                      {reconnectAttempts >= MAX_RECONNECT_ATTEMPTS && (
-                        <button type="button" onClick={retry} className="mt-3 text-sm text-scope-cyan hover:underline font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded">Retry Connection</button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="shrink-0 border-t border-white/8 px-4 py-3 sm:px-6 sm:py-4 text-center bg-black/20">
-                  <div className="hidden sm:flex items-center justify-center gap-3 mb-3">
-                    <span className="text-[10px] uppercase tracking-wider text-white/65">
-                      <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">Space</kbd> play/pause
-                    </span>
-                    <span className="text-white/60">|</span>
-                    <span className="text-[10px] uppercase tracking-wider text-white/65">
-                      <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">1-9</kbd> themes
-                    </span>
-                  </div>
-                  <button type="button" onClick={() => { void handleConnectScope(); }} disabled={!canConnect} className="w-full sm:w-auto px-8 py-3.5 glass bg-scope-cyan/15 hover:bg-scope-cyan/25 text-scope-cyan border border-scope-cyan/35 rounded-xl text-sm uppercase tracking-[0.12em] font-semibold transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                    {isConnecting ? "Connecting..." : "Connect"}
+            {/* Right Column: Configuration Panel */}
+            <div className="w-full max-w-md glass-radiant rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+              <div className="p-6 border-b border-white/5 bg-white/[0.02]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm uppercase tracking-widest text-white/80 font-bold">System Status</h3>
+                  <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading} className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg bg-white/5 text-whitehover:bg-white/10 hover:text-white transition-all border border-white/10 hover:border-scope-cyan/30 focus:outline-none focus:ring-2 focus:ring-scope-cyan">
+                    {isDiagnosticsLoading ? "Scanning..." : "Refresh"}
                   </button>
-                  {!canConnect && !isConnecting && connectBlockedReason && (
-                    <p className="text-[10px] text-amber-200/80 mt-2" role="status" aria-live="polite">{connectBlockedReason}</p>
-                  )}
-                  <p className="text-[10px] text-white/60 mt-2 font-medium">{activePipelineChain}</p>
                 </div>
+
+                <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${scopeReadiness.dotClass} shadow-[0_0_10px_currentColor]`} />
+                    <span className={`text-sm font-bold uppercase tracking-wider ${scopeReadiness.textClass}`}>{scopeReadiness.label}</span>
+                  </div>
+                  <span className="text-xs text-white/40 font-mono">{scopeCapabilities.totalVramGb ? `${scopeCapabilities.totalVramGb.toFixed(1)} GB VRAM` : "Scanning..."}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 text-xs text-scope-cyan/70 uppercase tracking-widest font-semibold">
+                    <span>Pipeline Config</span>
+                    <div className="h-px flex-1 bg-gradient-to-r from-scope-cyan/20 to-transparent" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Main Pipeline</span>
+                      <select value={selectedPipeline} onChange={(e) => setSelectedPipeline(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none">
+                        {mainPipelineOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </label>
+
+                    {preprocessorOptions.length > 0 && (
+                      <label className="block">
+                        <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Preprocessor</span>
+                        <select value={selectedPreprocessor} onChange={(e) => setSelectedPreprocessor(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none">
+                          <option value={NO_PREPROCESSOR}>None</option>
+                          {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 text-xs text-scope-purple/70 uppercase tracking-widest font-semibold">
+                    <span>Generation Profile</span>
+                    <div className="h-px flex-1 bg-gradient-to-r from-scope-purple/20 to-transparent" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Denoising</span>
+                      <select value={denoisingProfileId} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-purple/50 outline-none appearance-none">
+                        <option value="speed">Speed</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="quality">Quality</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Reactivity</span>
+                      <select value={reactivityProfileId} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-purple/50 outline-none appearance-none">
+                        <option value="cinematic">Cinematic</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="kinetic">Kinetic</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <div className="flex justify-between items-end mb-2">
+                      <span className="text-[10px] text-white/50 uppercase tracking-widest font-bold">Accent Weight</span>
+                      <span className="text-[10px] text-white/80 font-mono bg-white/10 px-1.5 py-0.5 rounded">{promptAccent.weight.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="w-full accent-scope-purple" />
+                  </label>
+                </div>
+
+                {scopeErrorTitle && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 relative animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                    <button type="button" onClick={clearError} className="absolute top-2 right-2 text-red-400 hover:text-red-300">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                    <p className="text-red-400 font-bold text-xs uppercase tracking-wider mb-1">{scopeErrorTitle}</p>
+                    {scopeErrorDescription && <p className="text-red-200/80 text-[11px] leading-relaxed">{scopeErrorDescription}</p>}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 bg-black/40 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => { void handleConnectScope(); }}
+                  disabled={!canConnect}
+                  className={`w-full py-4 rounded-xl text-sm uppercase tracking-widest font-bold transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-scope-cyan overflow-hidden relative group ${canConnect
+                    ? 'bg-scope-cyan text-black hover:bg-white hover:shadow-[0_0_30px_rgba(6,182,212,0.6)]'
+                    : 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed'
+                    }`}
+                >
+                  {canConnect && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shimmer" />}
+                  <span className="relative z-10">{isConnecting ? "Connecting..." : "Initiate Connection"}</span>
+                </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Toggle Controls Button -- visible whenever controls are hidden */}
-        {!showControls && (
-          <button
-            ref={showControlsButtonRef}
-            type="button" 
-            onClick={handleShowControls}
-            aria-expanded={showControls} 
-            aria-controls="soundscape-controls" 
-            className="absolute bottom-4 right-4 z-30 px-4 py-2.5 min-h-[44px] glass bg-scope-cyan/10 hover:bg-scope-cyan/20 text-scope-cyan hover:text-scope-cyan/90 text-[10px] font-semibold uppercase tracking-wider rounded-xl border border-scope-cyan/30 hover:border-scope-cyan/50 shadow-lg shadow-scope-cyan/10 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
-            Show Controls
-          </button>
         )}
       </div>
 
-      {/* CONTROLS DOCK */}
-      {showControls && (
-        <div id="soundscape-controls" className="relative z-30 flex-none glass-radiant border-t border-white/8">
-          <div className="px-4 pt-2 flex justify-end">
-            <button ref={hideControlsButtonRef} type="button" onClick={handleHideControls} aria-expanded={showControls} aria-controls="soundscape-controls" className="px-3 py-2 min-h-[44px] bg-white/5 hover:bg-white/8 text-white/70 hover:text-white/90 text-[9px] font-semibold uppercase tracking-wider rounded-lg border border-white/8 hover:border-white/15 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black">
-              Hide Controls
-            </button>
+      {/* FLOATING CONTROLS DOCK - Redesigned for Glass-Neon Parity */}
+      <div className={`absolute bottom-0 md:bottom-6 left-0 right-0 z-40 w-full px-2 md:px-6 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
+        <div className="glass-radiant rounded-3xl p-3 md:p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col md:flex-row gap-4 md:items-center">
+
+          <div className="flex-1 min-w-0 bg-black/20 rounded-2xl p-2 border border-white/5">
+            <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
           </div>
-          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:gap-5">
-            {/* Music Source */}
-            <div className="flex items-center gap-2.5 md:min-w-[280px]">
-              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/80 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Music</h3>
-              <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
-            </div>
 
-            <div className="hidden md:block w-px h-8 bg-white/8 mt-1" aria-hidden="true" />
+          <div className="h-px md:h-12 w-full md:w-px bg-white/10 rounded-full" />
 
-            {/* Theme Selector */}
-            <div className="flex-1 flex items-center gap-2.5 min-w-0">
-              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/80 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Theme</h3>
-              <div className="flex-1 min-w-0 space-y-1">
-                <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
-                {connectionState !== "connected" && (
-                  <p className="text-[9px] text-white/70 uppercase tracking-wider font-medium">
-                    Theme applies on next connect
-                  </p>
-                )}
-              </div>
-            </div>
+          <div className="w-full md:w-64 flex-shrink-0 bg-black/20 rounded-2xl p-2 border border-white/5">
+            <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
+          </div>
 
-            <div className="hidden xl:block w-px h-8 bg-white/8 mt-1" aria-hidden="true" />
+          <div className="h-px md:h-12 w-full md:w-px bg-white/10 rounded-full" />
 
-            {/* Analysis + status - collapsible on mobile */}
-            <div className="w-full xl:w-auto xl:min-w-[280px] space-y-1.5">
-              {/* Status summary - always visible */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
-                <span className="text-white/70 font-semibold">{activePipelineChain}</span>
-                <span className="text-white/70 font-medium capitalize">{denoisingProfileId} / {reactivityProfileId}</span>
-                <span
-                  className={`inline-flex items-center gap-1.5 font-semibold ${connectionSummary.textClass}`}
-                  title={statusMessage || undefined}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${connectionSummary.dotClass}`} aria-hidden="true" />
-                  {connectionSummary.label}
-                </span>
-                {autoThemeEnabled && (
-                  <span className="text-scope-cyan font-semibold">
-                    Auto: {autoThemeSectionBeats}b • {isPlaying && connectionState === "connected"
-                      ? "Running"
-                      : connectionState !== "connected"
-                        ? "Waiting for Scope"
-                        : "Waiting for audio"}
-                  </span>
-                )}
-              </div>
-              {/* Analysis meter - only when audio is active */}
+          <div className="w-full md:w-auto flex-shrink-0 flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <span className={`flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold ${connectionSummary.textClass}`}>
+                <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
+                {connectionSummary.label}
+              </span>
               {isPlaying && (
-                <div className="pt-1">
+                <div className="ml-4 pl-4 border-l border-white/10 hidden xl:block">
                   <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
                 </div>
               )}
             </div>
+            <button type="button" onClick={handleHideControls} className="md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 border border-white/10 hover:bg-white/10 outline-none">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Floating Toggle Controls Button (when dock is hidden) */}
+      <button
+        type="button"
+        onClick={handleShowControls}
+        className={`absolute bottom-6 right-6 z-40 px-6 py-4 rounded-full glass bg-black/40 backdrop-blur-md border border-white/10 text-white/70 hover:text-white hover:border-scope-cyan/50 hover:bg-black/60 shadow-xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] font-bold text-xs uppercase tracking-widest flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${!showControls ? 'translate-y-0 opacity-100' : 'translate-y-16 opacity-0 pointer-events-none'}`}
+      >
+        <svg className="w-4 h-4 text-scope-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+        Studio Controls
+      </button>
     </div>
   );
 }

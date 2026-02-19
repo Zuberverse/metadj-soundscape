@@ -115,10 +115,12 @@ export class ScopeClient {
     }
 
     const root = data as Record<string, unknown>;
-    const candidate =
-      root.schemas && typeof root.schemas === "object" && !Array.isArray(root.schemas)
-        ? (root.schemas as Record<string, unknown>)
-        : root;
+    const wrapper =
+      (root.pipelines && typeof root.pipelines === "object" && !Array.isArray(root.pipelines) && root.pipelines) ||
+      (root.schemas && typeof root.schemas === "object" && !Array.isArray(root.schemas) && root.schemas);
+    const candidate = wrapper
+      ? (wrapper as Record<string, unknown>)
+      : root;
 
     const normalized: Record<string, Record<string, unknown>> = {};
     for (const [id, schema] of Object.entries(candidate)) {

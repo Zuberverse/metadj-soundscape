@@ -173,7 +173,7 @@ export function useScopeConnection(
     reconnectOnDataChannelClose = false,
     reconnectOnStreamStopped = false,
     shouldReconnect,
-    videoTrackTimeoutMs = 15000,
+    videoTrackTimeoutMs = 30000,
     disconnectGracePeriodMs = 1500,
   } = options;
 
@@ -198,6 +198,25 @@ export function useScopeConnection(
   const isRecoveringRef = useRef(false);
   const preparedPipelineSignatureRef = useRef<string | null>(null);
   const shouldForcePipelinePrepareRef = useRef(false);
+
+  // Callback refs — keep external callbacks in refs so they don't cascade
+  // through useCallback dependency chains and cause spurious cleanup/reconnect.
+  const onStreamRef = useRef(onStream);
+  const onDataChannelOpenRef = useRef(onDataChannelOpen);
+  const onDataChannelCloseRef = useRef(onDataChannelClose);
+  const onDataChannelMessageRef = useRef(onDataChannelMessage);
+  const onConnectionInterruptedRef = useRef(onConnectionInterrupted);
+  const onDisconnectRef = useRef(onDisconnect);
+  const setupPeerConnectionRef = useRef(setupPeerConnection);
+  const shouldReconnectRef = useRef(shouldReconnect);
+  onStreamRef.current = onStream;
+  onDataChannelOpenRef.current = onDataChannelOpen;
+  onDataChannelCloseRef.current = onDataChannelClose;
+  onDataChannelMessageRef.current = onDataChannelMessage;
+  onConnectionInterruptedRef.current = onConnectionInterrupted;
+  onDisconnectRef.current = onDisconnect;
+  setupPeerConnectionRef.current = setupPeerConnection;
+  shouldReconnectRef.current = shouldReconnect;
 
   // Clear reconnect timer
   const clearReconnectTimer = useCallback(() => {
@@ -253,9 +272,9 @@ export function useScopeConnection(
     peerConnectionRef.current = null;
 
     if (hadDataChannel) {
-      onDataChannelClose?.();
+      onDataChannelCloseRef.current?.();
     }
-  }, [clearReconnectTimer, clearVideoTrackTimeout, clearDisconnectGraceTimer, onDataChannelClose]);
+  }, [clearReconnectTimer, clearVideoTrackTimeout, clearDisconnectGraceTimer]);
 
   const completeDisconnect = useCallback(
     ({
@@ -278,7 +297,7 @@ export function useScopeConnection(
       isRecoveringRef.current = false;
       cleanup();
       if (notifyDisconnect) {
-        onDisconnect?.(reason);
+        onDisconnectRef.current?.(reason);
       }
       setReconnectAttempts(0);
       isConnectingRef.current = false;
@@ -288,7 +307,7 @@ export function useScopeConnection(
         setError(null);
       }
     },
-    [cleanup, onDisconnect]
+    [cleanup]
   );
 
   // Disconnect
@@ -316,9 +335,9 @@ export function useScopeConnection(
       if (isRecoveringRef.current) {
         return;
       }
-      if (shouldReconnect && !shouldReconnect(reason)) {
+      if (shouldReconnectRef.current && !shouldReconnectRef.current(reason)) {
         cleanup();
-        onDisconnect?.(reason);
+        onDisconnectRef.current?.(reason);
         setError(createScopeError("CONNECTION_LOST", reason, false));
         setStatusMessage("Connection stopped");
         setConnectionState("failed");
@@ -327,7 +346,7 @@ export function useScopeConnection(
 
       isRecoveringRef.current = true;
       cleanup();
-      onConnectionInterrupted?.(reason);
+      onConnectionInterruptedRef.current?.(reason);
       setReconnectAttempts((prev) => {
         const next = prev + 1;
         if (next > maxReconnectAttempts) {
@@ -335,7 +354,7 @@ export function useScopeConnection(
           setConnectionState("failed");
           setStatusMessage("Connection failed");
           isRecoveringRef.current = false;
-          onDisconnect?.(`${reason}. Max retries exceeded.`);
+          onDisconnectRef.current?.(`${reason}. Max retries exceeded.`);
           return prev;
         }
 
@@ -357,9 +376,6 @@ export function useScopeConnection(
       maxReconnectAttempts,
       reconnectBaseDelay,
       clearReconnectTimer,
-      shouldReconnect,
-      onConnectionInterrupted,
-      onDisconnect,
     ]
   );
 
@@ -473,12 +489,13 @@ export function useScopeConnection(
         initialParameters: resolvedInitialParameters,
         setupPeerConnection: (connection) => {
           peerConnectionRef.current = connection;
-          setupPeerConnection?.(connection);
+          setupPeerConnectionRef.current?.(connection);
         },
         onTrack: (event) => {
           if (!isCurrentAttempt()) {
             return;
           }
+
           if (event.track.kind !== "video") {
             return;
           }
@@ -490,7 +507,7 @@ export function useScopeConnection(
             shouldForcePipelinePrepareRef.current = false;
             clearDisconnectGraceTimer();
             clearVideoTrackTimeout();
-            onStream?.(stream);
+            onStreamRef.current?.(stream);
             setStatusMessage("Connected");
             setConnectionState("connected");
             setReconnectAttempts(0);
@@ -539,11 +556,11 @@ export function useScopeConnection(
           options: { ordered: true },
           onOpen: (channel) => {
             dataChannelRef.current = channel;
-            onDataChannelOpen?.(channel);
+            onDataChannelOpenRef.current?.(channel);
           },
           onClose: () => {
             dataChannelRef.current = null;
-            onDataChannelClose?.();
+            onDataChannelCloseRef.current?.();
             if (reconnectOnDataChannelClose) {
               handleConnectionLost("Data channel closed");
             }
@@ -576,7 +593,7 @@ export function useScopeConnection(
               }
               // SyntaxError = not JSON, pass through to consumer
             }
-            onDataChannelMessage?.(event);
+            onDataChannelMessageRef.current?.(event);
           },
         } satisfies ScopeDataChannelConfig,
       });
@@ -639,7 +656,7 @@ export function useScopeConnection(
       setConnectionState("failed");
       setStatusMessage("Connection failed");
       cleanup();
-      onDisconnect?.(scopeError.message);
+      onDisconnectRef.current?.(scopeError.message);
     } finally {
       if (connectAttemptRef.current === connectAttemptId) {
         isConnectingRef.current = false;
@@ -651,12 +668,6 @@ export function useScopeConnection(
     pipelineIds,
     loadParams,
     initialParameters,
-    setupPeerConnection,
-    onStream,
-    onDataChannelOpen,
-    onDataChannelClose,
-    onDataChannelMessage,
-    onDisconnect,
     handleConnectionLost,
     completeDisconnect,
     cleanup,
@@ -673,13 +684,19 @@ export function useScopeConnection(
     connectRef.current = connect;
   }, [connect]);
 
+  // Unmount-only cleanup: use a ref to always call the latest cleanup
+  // without depending on it. Previously, [cleanup] as a dep caused the
+  // teardown to fire on every callback-identity change, which incremented
+  // connectAttemptRef and silently killed active connect() attempts.
+  const cleanupRef = useRef(cleanup);
+  cleanupRef.current = cleanup;
   useEffect(() => {
     return () => {
       connectAttemptRef.current += 1;
-      cleanup();
+      cleanupRef.current();
       isConnectingRef.current = false;
     };
-  }, [cleanup]);
+  }, []);
 
   // Clear error
   const clearError = useCallback(() => {

@@ -970,13 +970,9 @@ export class ParameterSender {
     }
 
     const formatted: Record<string, unknown> = {
-      // Always send prompts - this is the target state
       prompts: params.prompts.map((p) => ({ text: p.text, weight: p.weight })),
       denoising_step_list: params.denoisingSteps,
-      noise_scale: params.noiseScale,
-      noise_controller: false, // We control noise manually
-      manage_cache: true, // Let Scope manage its latent cache
-      paused: false, // Ensure generation is running
+      manage_cache: true,
     };
 
     // Note: reset_cache NEVER sent - we use smooth transitions only to avoid hard cuts

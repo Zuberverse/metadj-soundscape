@@ -1,6 +1,6 @@
 # Scope API Reference (Soundscape)
 
-**Last Modified**: 2026-02-18 10:19 ET
+**Last Modified**: 2026-02-19 11:49 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -93,13 +93,21 @@ Document the Scope API surface used by MetaDJ Soundscape. This is a focused subs
   "sdp": "...",
   "type": "offer",
   "initialParameters": {
+    "input_mode": "text",
     "prompts": [{ "text": "...", "weight": 1.0 }],
-    "denoising_step_list": [1000, 750, 500, 250],
+    "prompt_interpolation_method": "linear",
+    "denoising_step_list": [700, 500],
     "manage_cache": true,
-    "paused": false
+    "kv_cache_attention_bias": 0.3,
+    "recording": false
   }
 }
 ```
+
+**Notes**:
+- `input_mode` is required in v0.1.4+: `"text"` for T2V, `"video"` for V2V.
+- `paused` must NOT be in initialParameters — it is data-channel-only.
+- `noise_scale`/`noise_controller` are video mode only — omit in text mode.
 
 **Response**:
 ```json
@@ -148,10 +156,8 @@ Soundscape sends parameter updates over a `parameters` data channel at ~30 Hz.
 ```json
 {
   "prompts": [{ "text": "...", "weight": 1.0 }],
-  "denoising_step_list": [1000, 750, 500, 250],
-  "noise_scale": 0.55,
+  "denoising_step_list": [700, 500],
   "manage_cache": true,
-  "paused": false,
   "transition": {
     "target_prompts": [{ "text": "...", "weight": 1.0 }],
     "num_steps": 5,
@@ -159,3 +165,7 @@ Soundscape sends parameter updates over a `parameters` data channel at ~30 Hz.
   }
 }
 ```
+
+**Notes**:
+- `paused: false/true` can be sent here to pause/resume generation.
+- `noise_scale` and `noise_controller` should only be sent when in video input mode.

@@ -1,6 +1,6 @@
 # Architecture - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-18 10:19 ET
+**Last Modified**: 2026-02-19 12:01 EST
 **Status**: Active
 
 ## Purpose
@@ -42,8 +42,8 @@ Primary implementation: `src/lib/scope/use-scope-connection.ts`
 
 1. Health check (`/health`)
 2. Pipeline prepare (`/api/v1/pipeline/load` + wait for loaded state)
-3. WebRTC offer/answer session
-4. ICE candidate exchange
+3. WebRTC offer/answer session (VP8 codec forced via `setCodecPreferences`, `recvonly` direction — required for aiortc)
+4. ICE candidate exchange (trickle ICE with candidate queuing)
 5. Data channel open (`parameters`)
 6. First video track received -> connection state becomes `connected`
 

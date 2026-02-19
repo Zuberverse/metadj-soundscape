@@ -41,6 +41,7 @@ const clampPromptAccentWeight = (weight: number): number => {
 };
 
 const composePromptEntriesWithAccent = (basePrompt: string, accent: PromptAccent): PromptEntry[] => {
+  // Scope prompt weights are normalized floats (0..1), where 1.0 is full weight.
   const entries: PromptEntry[] = [{ text: basePrompt, weight: 1.0 }];
   if (accent.text.trim()) {
     entries.push({
@@ -245,9 +246,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       const safeDenoisingSteps = [...denoisingSteps];
 
       const params: Record<string, unknown> = {
+        input_mode: "text",
         prompts,
         denoising_step_list: safeDenoisingSteps,
-        noise_scale: 0.5,
         manage_cache: true,
         paused: false,
       };
@@ -277,12 +278,12 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         noiseScale: 0.5,
         ...(includeTransition
           ? {
-              transition: {
-                target_prompts: prompts,
-                num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-                temporal_interpolation_method: "slerp" as const,
-              },
-            }
+            transition: {
+              target_prompts: prompts,
+              num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+              temporal_interpolation_method: "slerp" as const,
+            },
+          }
           : {}),
       };
 
@@ -730,9 +731,13 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       Date.now() - recentThemeTransitionSentAtRef.current < RECENT_THEME_TRANSITION_GRACE_MS;
 
     if (!replayedQueuedThemeTransition && !transitionedRecently) {
+      // Don't include transition on initial ambient push — the initialParameters (sent
+      // with the WebRTC offer) already set the prompt. There's nothing to SLERP from on
+      // a fresh connection, and sending a transition before the first frame is generated
+      // can confuse Scope's interpolation state.
       const didSendAmbientStart = pushScopeParameters({
         theme,
-        includeTransition: true,
+        includeTransition: false,
         requireAmbient: false,
       });
       if (!didSendAmbientStart) {

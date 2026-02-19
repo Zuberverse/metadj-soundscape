@@ -6,8 +6,8 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "dev": "next dev -p ${PORT:-3500}",
-    "dev:turbo": "next dev --turbopack -p ${PORT:-3500}",
+    "dev": "next dev --experimental-https -p ${PORT:-3500}",
+    "dev:turbo": "next dev --turbopack --experimental-https -p ${PORT:-3500}",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3500}",
     "lint": "eslint --max-warnings=0 .",

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Scope WebRTC Test</title>
+  <style>
+    body { background: #111; color: #0ff; font-family: monospace; padding: 20px; }
+    video { width: 576px; height: 320px; background: #000; border: 2px solid #0ff; display: block; margin: 20px 0; }
+    #log { white-space: pre-wrap; font-size: 12px; max-height: 400px; overflow-y: auto; background: #000; padding: 10px; border: 1px solid #333; }
+    button { background: #0ff; color: #000; border: none; padding: 10px 20px; font-size: 14px; cursor: pointer; font-family: monospace; margin: 5px; }
+    .active { background: #4f4; }
+    .error { color: #f44; }
+    .success { color: #4f4; }
+    .warn { color: #fa0; }
+    select { background: #222; color: #0ff; border: 1px solid #0ff; padding: 8px; font-family: monospace; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>Scope WebRTC Test v3</h2>
+  <div style="margin-bottom: 15px;">
+    <label>API Target: </label>
+    <select id="apiTarget">
+      <option value="direct">DIRECT to RunPod (bypass proxy)</option>
+      <option value="proxy">PROXY via /api/scope</option>
+    </select>
+  </div>
+  <button onclick="runTest()">Connect to Scope</button>
+  <button onclick="location.reload()">Reset</button>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="log"></div>
+
+  <script>
+    const DIRECT_URL = 'https://qjgxt087vo2lcj-8000.proxy.runpod.net';
+    const PROXY_URL = '/api/scope';
+    const video = document.getElementById('video');
+    const logEl = document.getElementById('log');
+
+    function getBase() {
+      return document.getElementById('apiTarget').value === 'direct' ? DIRECT_URL : PROXY_URL;
+    }
+
+    function log(msg, cls) {
+      const line = document.createElement('div');
+      line.textContent = '[' + new Date().toISOString().slice(11,23) + '] ' + msg;
+      if (cls) line.className = cls;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    function clearLog() {
+      while (logEl.firstChild) {
+        logEl.removeChild(logEl.firstChild);
+      }
+    }
+
+    async function runTest() {
+      const SCOPE = getBase();
+      const mode = document.getElementById('apiTarget').value;
+      clearLog();
+
+      try {
+        log('=== Mode: ' + mode.toUpperCase() + ' -> ' + SCOPE + ' ===', 'warn');
+
+        // Step 1: Health + Pipeline
+        log('1. Health check...');
+        const health = await fetch(SCOPE + '/health').then(r => r.json());
+        log('   Status: ' + health.status + ', Version: ' + health.version, 'success');
+
+        const pipeline = await fetch(SCOPE + '/api/v1/pipeline/status').then(r => r.json());
+        log('   Pipeline: ' + pipeline.pipeline_id + ', Status: ' + pipeline.status, pipeline.status === 'loaded' ? 'success' : 'error');
+
+        if (pipeline.status !== 'loaded') {
+          log('   Pipeline not loaded! Loading longlive...', 'warn');
+          await fetch(SCOPE + '/api/v1/pipeline/load', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pipeline_ids: ['longlive'], load_params: { height: 320, width: 576, vace_enabled: false } }),
+          });
+          log('   Waiting for pipeline load (up to 60s)...', 'warn');
+          for (var i = 0; i < 12; i++) {
+            await new Promise(function(r) { setTimeout(r, 5000); });
+            var s = await fetch(SCOPE + '/api/v1/pipeline/status').then(r => r.json());
+            log('   ... ' + s.status);
+            if (s.status === 'loaded') { log('   Pipeline loaded!', 'success'); break; }
+            if (s.status === 'error') { log('   Pipeline error: ' + s.error, 'error'); return; }
+          }
+        }
+
+        // Step 2: ICE servers
+        log('2. Getting ICE servers...');
+        var iceConfig = await fetch(SCOPE + '/api/v1/webrtc/ice-servers').then(r => r.json());
+        log('   Got ' + iceConfig.iceServers.length + ' ICE server configs', 'success');
+
+        // Step 3: Create RTCPeerConnection
+        log('3. Creating RTCPeerConnection...');
+        var pc = new RTCPeerConnection({ iceServers: iceConfig.iceServers });
+        window._pc = pc;
+
+        pc.onconnectionstatechange = function() {
+          var state = pc.connectionState;
+          log('   PeerConnection: ' + state, state === 'connected' ? 'success' : state === 'failed' ? 'error' : '');
+        };
+        pc.oniceconnectionstatechange = function() {
+          var state = pc.iceConnectionState;
+          log('   ICE connection: ' + state, (state === 'connected' || state === 'completed') ? 'success' : state === 'failed' ? 'error' : '');
+        };
+
+        // Step 4: ICE candidate handler (BEFORE setLocalDescription)
+        var sessionId = null;
+        var pendingCandidates = [];
+        var candidateCount = 0;
+
+        pc.onicecandidate = function(event) {
+          if (!event.candidate) {
+            log('   ICE gathering complete (' + candidateCount + ' total)', 'success');
+            return;
+          }
+          candidateCount++;
+          var payload = {
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+            sdpMLineIndex: event.candidate.sdpMLineIndex,
+          };
+          var type = event.candidate.candidate.includes('relay') ? 'RELAY' :
+                     event.candidate.candidate.includes('srflx') ? 'SRFLX' : 'HOST';
+          if (candidateCount <= 5) {
+            log('   ICE [' + candidateCount + '] ' + type + ': ' + event.candidate.candidate.slice(0, 60) + '...');
+          }
+
+          if (sessionId) {
+            fetch(SCOPE + '/api/v1/webrtc/offer/' + sessionId, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ candidates: [payload] }),
+            }).catch(function(e) { log('   PATCH error: ' + e.message, 'error'); });
+          } else {
+            pendingCandidates.push(payload);
+          }
+        };
+
+        // Step 5: Track handler
+        log('4. Setting up track handler...');
+        pc.ontrack = function(event) {
+          log('   GOT TRACK: kind=' + event.track.kind + ', muted=' + event.track.muted, 'success');
+          var stream = event.streams[0] || new MediaStream([event.track]);
+          video.srcObject = stream;
+          video.play().then(function() { log('   video.play() OK', 'success'); }).catch(function(e) { log('   video.play() FAIL: ' + e.message, 'error'); });
+
+          event.track.onunmute = function() {
+            log('   Track UNMUTED!', 'success');
+            video.play().catch(function() {});
+          };
+          event.track.onmute = function() { log('   Track MUTED', 'warn'); };
+
+          var checkCount = 0;
+          var frameCheck = setInterval(function() {
+            checkCount++;
+            var w = video.videoWidth, h = video.videoHeight;
+            var q = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+            var total = q ? q.totalVideoFrames : 'n/a';
+            log('   [' + checkCount + '] Frames: ' + total + ', ' + w + 'x' + h + ', readyState=' + video.readyState);
+            if (typeof total === 'number' && total > 0) {
+              log('   ========== VIDEO IS WORKING ==========', 'success');
+              clearInterval(frameCheck);
+            }
+            if (checkCount >= 15) {
+              log('   30s timeout - no frames received', 'error');
+              clearInterval(frameCheck);
+              pc.getStats().then(function(stats) {
+                stats.forEach(function(s) {
+                  if (s.type === 'candidate-pair' && s.nominated) {
+                    log('   Active pair: ' + s.localCandidateId + ' -> ' + s.remoteCandidateId + ' state=' + s.state);
+                  }
+                  if (s.type === 'inbound-rtp' && s.kind === 'video') {
+                    log('   Inbound RTP: ' + s.packetsReceived + ' pkts, ' + s.bytesReceived + ' bytes, ' + (s.framesReceived || 0) + ' frames');
+                  }
+                });
+              });
+            }
+          }, 2000);
+        };
+
+        // Step 6: Video transceiver + VP8
+        log('5. Adding video transceiver (sendrecv + VP8)...');
+        var transceiver = pc.addTransceiver('video');
+        var codecs = RTCRtpReceiver.getCapabilities('video') ? RTCRtpReceiver.getCapabilities('video').codecs : [];
+        var vp8 = codecs.filter(function(c) { return c.mimeType.toLowerCase() === 'video/vp8'; });
+        if (vp8.length > 0) {
+          transceiver.setCodecPreferences(vp8);
+          log('   VP8 forced (' + vp8.length + ' codecs)', 'success');
+        } else {
+          log('   VP8 NOT AVAILABLE', 'error');
+        }
+
+        // Step 7: Data channel
+        log('6. Creating data channel...');
+        var dc = pc.createDataChannel('parameters', { ordered: true });
+        dc.onopen = function() {
+          log('   Data channel OPEN', 'success');
+          var params = {
+            input_mode: 'text',
+            prompts: [{ text: 'abstract flowing neon colors, cosmic energy, ethereal light trails', weight: 1.0 }],
+            denoising_step_list: [1000, 750, 500, 250],
+            manage_cache: true,
+            paused: false,
+          };
+          dc.send(JSON.stringify(params));
+          log('   Sent text-mode params', 'success');
+        };
+        dc.onclose = function() { log('   Data channel CLOSED', 'error'); };
+        dc.onmessage = function(e) {
+          try {
+            var msg = JSON.parse(e.data);
+            log('   DC msg: ' + (msg.type || 'update'));
+          } catch(ex) {
+            log('   DC msg (raw): ' + String(e.data).slice(0, 100));
+          }
+        };
+
+        // Step 8: Create offer
+        log('7. Creating SDP offer...');
+        var offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        log('   SDP (' + offer.sdp.length + ' bytes)', 'success');
+
+        // Step 9: Send offer
+        log('8. Sending offer (' + mode.toUpperCase() + ')...');
+        var initialParameters = {
+          input_mode: 'text',
+          prompts: [{ text: 'abstract flowing neon colors, cosmic energy, ethereal light trails', weight: 1.0 }],
+          prompt_interpolation_method: 'linear',
+          denoising_step_list: [1000, 750, 500, 250],
+          manage_cache: true,
+          kv_cache_attention_bias: 0.3,
+          recording: false,
+        };
+
+        var answerResp = await fetch(SCOPE + '/api/v1/webrtc/offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sdp: pc.localDescription.sdp,
+            type: pc.localDescription.type,
+            initialParameters: initialParameters,
+          }),
+        });
+
+        if (!answerResp.ok) {
+          var errText = await answerResp.text();
+          log('   Offer FAILED: ' + answerResp.status + ' - ' + errText, 'error');
+          return;
+        }
+
+        var answer = await answerResp.json();
+        sessionId = answer.sessionId;
+        log('   Answer OK (session: ' + sessionId + ')', 'success');
+
+        // Flush pending ICE candidates
+        if (pendingCandidates.length > 0) {
+          log('   Flushing ' + pendingCandidates.length + ' ICE candidates...');
+          var flushResp = await fetch(SCOPE + '/api/v1/webrtc/offer/' + sessionId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidates: pendingCandidates }),
+          });
+          log('   Flush: ' + (flushResp.ok ? 'OK' : 'FAILED ' + flushResp.status), flushResp.ok ? 'success' : 'error');
+          pendingCandidates.length = 0;
+        }
+
+        await pc.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
+        log('   Remote description set', 'success');
+
+        log('9. Waiting for ICE + video...', 'warn');
+
+      } catch (err) {
+        log('FATAL: ' + err.message, 'error');
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>

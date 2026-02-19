@@ -1,6 +1,6 @@
 # Scope Technical Overview
 
-**Last Modified**: 2026-02-19 09:12 EST
+**Last Modified**: 2026-02-19 11:49 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -17,7 +17,7 @@ Project-specific technical assumptions for MetaDJ Soundscape. Canonical Scope an
 - **Input mode**: Text-to-video (no VACE or asset uploads in MVP).
 - **Transport**: WebRTC offer flow with data channel parameter updates (see `docs/architecture.md`).
 - **API shape**: Use `pipeline_ids` request body for pipeline loading; legacy `pipeline_id` only as compatibility fallback.
-- **Upstream baseline**: Scope stable is `v0.1.3` (published 2026-02-13).
+- **Upstream baseline**: Scope stable is `v0.1.4` (published 2026-02-19).
 
 ## Project-Specific Locations
 
