@@ -433,6 +433,10 @@ export class ScopeClient {
       if (!response.ok) {
         return [];
       }
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        return [];
+      }
       const data = await response.json();
       return normalizePlugins(data);
     };

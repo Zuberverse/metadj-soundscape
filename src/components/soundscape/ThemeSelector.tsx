@@ -111,6 +111,8 @@ export function ThemeSelector({
       const nextTheme = themes[targetIndex];
       if (nextTheme) {
         handlePresetSelect(nextTheme.id);
+        const themeButtons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="radio"]');
+        themeButtons[targetIndex]?.focus();
       }
     },
     [currentTheme?.id, disabled, handlePresetSelect, themes]
@@ -140,12 +142,12 @@ export function ThemeSelector({
                 aria-label={`${theme.name} theme${isActive ? " (active)" : ""}`}
                 tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
                 className={`
-                  flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] rounded-lg text-[10px] font-semibold whitespace-nowrap
+                  flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] rounded-lg text-[10px] font-semibold whitespace-nowrap
                   transition-colors duration-300
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
                   ${isActive
                     ? "bg-white/12 text-white border border-white/20"
-                    : "bg-white/5 text-white/55 border border-transparent hover:bg-white/8 hover:text-white/75"}
+                    : "bg-white/5 text-white/75 border border-transparent hover:bg-white/8 hover:text-white/90"}
                   ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
                 `}
               >
@@ -232,7 +234,7 @@ export function ThemeSelector({
                 {/* Keyboard shortcut hint */}
                 {index < 9 && (
                   <span
-                    className="absolute top-2 right-2.5 text-[9px] text-white/45 font-mono tabular-nums"
+                    className="absolute top-2 right-2.5 text-[9px] text-white/70 font-mono tabular-nums"
                     aria-hidden="true"
                   >
                     {index + 1}

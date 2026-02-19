@@ -49,7 +49,12 @@ function flushPromises() {
 
 function renderHarness(
   scopeClient: ScopeClient,
-  options: { videoTrackTimeoutMs?: number } = {}
+  options: {
+    videoTrackTimeoutMs?: number;
+    maxReconnectAttempts?: number;
+    reconnectBaseDelay?: number;
+    disconnectGracePeriodMs?: number;
+  } = {}
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -60,8 +65,8 @@ function renderHarness(
       scopeClient,
       pipelineId: "longlive",
       loadParams: {},
-      maxReconnectAttempts: 1,
-      reconnectBaseDelay: 20,
+      maxReconnectAttempts: options.maxReconnectAttempts ?? 1,
+      reconnectBaseDelay: options.reconnectBaseDelay ?? 20,
       ...options,
     });
 
@@ -226,6 +231,234 @@ describe("useScopeConnection", () => {
     });
 
     expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(2);
+    expect(prepareScopePipelineMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("does not reconnect when a transient disconnect recovers within grace period", async () => {
+    vi.useFakeTimers();
+    const disposers: Array<ReturnType<typeof vi.fn>> = [];
+
+    createScopeWebRtcSessionMock.mockImplementation(async (options) => {
+      const pc = createFakePeerConnection();
+      lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
+
+      if (options.setupPeerConnection) {
+        options.setupPeerConnection(pc as unknown as RTCPeerConnection);
+      }
+
+      if (options.onConnectionStateChange) {
+        pc.onconnectionstatechange = () => {
+          options.onConnectionStateChange?.(pc as unknown as RTCPeerConnection);
+        };
+      }
+
+      if (options.onTrack) {
+        options.onTrack({
+          track: { kind: "video" } as MediaStreamTrack,
+          streams: [{} as MediaStream],
+        } as unknown as RTCTrackEvent);
+      }
+
+      const dispose = vi.fn();
+      disposers.push(dispose);
+
+      return {
+        pc: pc as unknown as RTCPeerConnection,
+        dataChannel: undefined,
+        sessionId: `session-${disposers.length}`,
+        dispose,
+      };
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { container, unmount } = renderHarness(scopeClient, {
+      disconnectGracePeriodMs: 40,
+      reconnectBaseDelay: 10,
+    });
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness();
+    });
+
+    const state = container.querySelector('[data-testid="state"]');
+    expect(state?.getAttribute("data-connection")).toBe("connected");
+
+    act(() => {
+      if (!lastPeerConnection?.onconnectionstatechange) {
+        throw new Error("Missing connection state handler");
+      }
+      lastPeerConnection.connectionState = "disconnected";
+      lastPeerConnection.onconnectionstatechange();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+      await flushPromises();
+    });
+
+    act(() => {
+      if (!lastPeerConnection?.onconnectionstatechange) {
+        throw new Error("Missing connection state handler");
+      }
+      lastPeerConnection.connectionState = "connected";
+      lastPeerConnection.onconnectionstatechange();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+      await flushPromises();
+    });
+
+    expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(1);
+    expect(prepareScopePipelineMock).toHaveBeenCalledTimes(1);
+    expect(disposers[0]).not.toHaveBeenCalled();
+    expect(state?.getAttribute("data-connection")).toBe("connected");
+
+    unmount();
+  });
+
+  it("continues reconnect attempts when a reconnect connect() call fails", async () => {
+    vi.useFakeTimers();
+    let sessionCall = 0;
+
+    createScopeWebRtcSessionMock.mockImplementation(async (options) => {
+      sessionCall += 1;
+
+      if (sessionCall === 2) {
+        throw new Error("offer failed");
+      }
+
+      const pc = createFakePeerConnection();
+      lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
+
+      if (options.setupPeerConnection) {
+        options.setupPeerConnection(pc as unknown as RTCPeerConnection);
+      }
+
+      if (options.onConnectionStateChange) {
+        pc.onconnectionstatechange = () => {
+          options.onConnectionStateChange?.(pc as unknown as RTCPeerConnection);
+        };
+      }
+
+      if (options.onTrack) {
+        options.onTrack({
+          track: { kind: "video" } as MediaStreamTrack,
+          streams: [{} as MediaStream],
+        } as unknown as RTCTrackEvent);
+      }
+
+      return {
+        pc: pc as unknown as RTCPeerConnection,
+        dataChannel: undefined,
+        sessionId: `session-${sessionCall}`,
+      };
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { container, unmount } = renderHarness(scopeClient, {
+      maxReconnectAttempts: 2,
+      reconnectBaseDelay: 10,
+    });
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness();
+    });
+
+    const state = container.querySelector('[data-testid="state"]');
+    expect(state?.getAttribute("data-connection")).toBe("connected");
+    expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      if (!lastPeerConnection?.onconnectionstatechange) {
+        throw new Error("Missing connection state handler");
+      }
+      lastPeerConnection.connectionState = "failed";
+      lastPeerConnection.onconnectionstatechange();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15);
+      await flushPromises();
+    });
+
+    expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(2);
+    expect(state?.getAttribute("data-connection")).toBe("reconnecting");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30);
+      await flushPromises();
+    });
+
+    expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(3);
+    expect(prepareScopePipelineMock).toHaveBeenCalledTimes(2);
+    expect(state?.getAttribute("data-connection")).toBe("connected");
+
+    unmount();
+  });
+
+  it("disposes active session before opening a new one on repeated connect()", async () => {
+    const disposers: Array<ReturnType<typeof vi.fn>> = [];
+
+    createScopeWebRtcSessionMock.mockImplementation(async (options) => {
+      const pc = createFakePeerConnection();
+      lastPeerConnection = pc;
+      lastTrackHandler = options.onTrack;
+
+      if (options.setupPeerConnection) {
+        options.setupPeerConnection(pc as unknown as RTCPeerConnection);
+      }
+
+      if (options.onTrack) {
+        options.onTrack({
+          track: { kind: "video" } as MediaStreamTrack,
+          streams: [{} as MediaStream],
+        } as unknown as RTCTrackEvent);
+      }
+
+      const dispose = vi.fn();
+      disposers.push(dispose);
+
+      return {
+        pc: pc as unknown as RTCPeerConnection,
+        dataChannel: undefined,
+        sessionId: `session-${disposers.length}`,
+        dispose,
+      };
+    });
+
+    const scopeClient = {
+      checkHealth: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as unknown as ScopeClient;
+
+    const { unmount } = renderHarness(scopeClient);
+
+    await act(async () => {
+      if (!connectHarness) {
+        throw new Error("Missing connect harness");
+      }
+      await connectHarness();
+      await connectHarness();
+    });
+
+    expect(createScopeWebRtcSessionMock).toHaveBeenCalledTimes(2);
+    expect(disposers[0]).toHaveBeenCalledTimes(1);
 
     unmount();
   });

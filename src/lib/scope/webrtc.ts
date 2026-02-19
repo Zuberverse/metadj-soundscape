@@ -43,6 +43,7 @@ export async function createScopeWebRtcSession(
   let dataChannel: RTCDataChannel | undefined;
   let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let isRetryFlushInProgress = false;
+  let disposed = false;
 
   const clearRetryTimeout = () => {
     if (retryTimeoutId) {
@@ -52,7 +53,15 @@ export async function createScopeWebRtcSession(
   };
 
   const disposeSession = () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
     clearRetryTimeout();
+    sessionId = null;
+    pendingCandidates.length = 0;
+    retryCandidates.length = 0;
+    isRetryFlushInProgress = false;
     pc.removeEventListener("connectionstatechange", handleConnectionCleanup);
     pc.onicecandidate = null;
     pc.ontrack = null;
@@ -80,12 +89,12 @@ export async function createScopeWebRtcSession(
   pc.addEventListener("connectionstatechange", handleConnectionCleanup);
 
   const scheduleRetryFlush = () => {
-    if (retryTimeoutId || !sessionId || retryCandidates.length === 0) {
+    if (disposed || retryTimeoutId || !sessionId || retryCandidates.length === 0) {
       return;
     }
     retryTimeoutId = setTimeout(async () => {
       retryTimeoutId = null;
-      if (!sessionId || retryCandidates.length === 0 || isRetryFlushInProgress) {
+      if (disposed || !sessionId || retryCandidates.length === 0 || isRetryFlushInProgress) {
         return;
       }
 
@@ -93,6 +102,10 @@ export async function createScopeWebRtcSession(
       const batch = retryCandidates.splice(0, retryCandidates.length);
       const ok = await scopeClient.addIceCandidates(sessionId, batch);
       isRetryFlushInProgress = false;
+
+      if (disposed) {
+        return;
+      }
 
       if (!ok) {
         retryCandidates.unshift(...batch);
@@ -104,6 +117,7 @@ export async function createScopeWebRtcSession(
 
   try {
     pc.onicecandidate = async (event) => {
+      if (disposed) return;
       if (!event.candidate) return;
 
       const payload: IceCandidatePayload = {
@@ -114,6 +128,7 @@ export async function createScopeWebRtcSession(
 
       if (sessionId) {
         const ok = await scopeClient.addIceCandidates(sessionId, [payload]);
+        if (disposed) return;
         if (!ok) {
           retryCandidates.push(payload);
           console.warn("[Scope] Failed to send ICE candidate (queued for retry)");

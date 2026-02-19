@@ -1,6 +1,6 @@
 # Daydream Scope Overview (Soundscape)
 
-**Last Modified**: 2026-02-10 11:51 ET
+**Last Modified**: 2026-02-19 09:12 EST
 **Status**: Active Reference + Historical Context
 
 ## Overview
@@ -17,10 +17,11 @@ This file captures the Scope context relevant to MetaDJ Soundscape and points to
 - Scope releases: https://github.com/daydreamlive/scope/releases
 - RunPod template: https://runpod.io/console/deploy?template=daydream-scope
 
-## Verified Release State (2026-02-10)
+## Verified Release State (2026-02-19)
 
-- Latest stable Scope release: `v0.1.0` (published 2026-02-09).
-- No stable `v1.0` release is published as of this date.
+- Latest stable Scope release: `v0.1.3` (published 2026-02-13).
+- First stable: `v0.1.0` (published 2026-02-09).
+- Since v0.1.0: NDI input (v0.1.2), SageAttention validation, flexible VACE combinations, plugin stability, websocket improvements.
 
 ## Soundscape Integration Notes
 

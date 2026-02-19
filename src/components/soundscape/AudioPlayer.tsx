@@ -67,6 +67,7 @@ export function AudioPlayer({
   const retryButtonRef = useRef<HTMLButtonElement | null>(null);
   const demoSourceButtonRef = useRef<HTMLButtonElement | null>(null);
   const micSourceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const compactVolumeButtonRef = useRef<HTMLButtonElement | null>(null);
   const compactVolumePanelId = useId();
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -335,6 +336,18 @@ export function AudioPlayer({
     audioRef.current.muted = newMuted;
   }, [isMuted]);
 
+  const handleVolumePanelKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      setShowVolumeSlider(false);
+      compactVolumeButtonRef.current?.focus();
+    },
+    []
+  );
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -428,6 +441,7 @@ export function AudioPlayer({
   const volumeControl = (
     <div className="relative">
       <button
+        ref={compactVolumeButtonRef}
         type="button"
         onClick={() => setShowVolumeSlider(!showVolumeSlider)}
         onMouseEnter={() => setShowVolumeSlider(true)}
@@ -436,7 +450,7 @@ export function AudioPlayer({
         aria-expanded={showVolumeSlider}
         aria-controls={compactVolumePanelId}
         aria-haspopup="dialog"
-        className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
       >
         {isMuted || volume === 0 ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -460,15 +474,17 @@ export function AudioPlayer({
       {showVolumeSlider && (
         <div
           id={compactVolumePanelId}
-          role="group"
+          role="dialog"
+          aria-modal="false"
           aria-label="Volume controls"
           className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 glass bg-black/80 rounded-xl border border-white/10"
           onMouseLeave={() => setShowVolumeSlider(false)}
+          onKeyDown={handleVolumePanelKeyDown}
         >
           <button
             type="button"
             onClick={toggleMute}
-            className="mb-2 w-full rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wider text-white/80 hover:bg-white/10 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+            className="mb-2 w-full min-h-[44px] rounded-md border border-white/15 bg-white/5 px-2.5 py-2 text-[10px] uppercase tracking-wider text-white/80 hover:bg-white/10 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
           >
             {isMuted || volume === 0 ? "Unmute" : "Mute"}
           </button>
@@ -500,7 +516,7 @@ export function AudioPlayer({
           disabled={disabled}
           aria-label={isPlaying ? "Pause audio" : "Play audio"}
           className={`
-            w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border
+            w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border
             focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
             ${isPlaying
               ? "bg-scope-purple/25 text-white border-scope-purple/40 shadow-[0_0_10px_rgba(139,92,246,0.25)]"
@@ -529,7 +545,7 @@ export function AudioPlayer({
           disabled={disabled}
           aria-label="Restart track"
           className={`
-            w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border
+            w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border
             bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80
             focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
             ${disabled ? "opacity-40 cursor-not-allowed" : ""}
@@ -559,15 +575,11 @@ export function AudioPlayer({
           
           {/* Mini progress bar for compact mode */}
           {sourceMode === "demo" && duration > 0 && (
-            <div 
+            <div
               ref={progressBarRef}
-              className="relative h-1 bg-white/10 rounded-full cursor-pointer group"
+              className="relative h-1.5 rounded-full cursor-pointer group overflow-hidden bg-white/10"
               onClick={handleProgressBarClick}
             >
-              <div 
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100"
-                style={{ width: `${(currentTime / duration) * 100}%` }}
-              />
               <input
                 type="range"
                 min={0}
@@ -575,8 +587,12 @@ export function AudioPlayer({
                 value={currentTime}
                 onChange={handleSeek}
                 disabled={disabled}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="peer absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 aria-label="Seek audio position"
+              />
+              <div
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-scope-purple to-scope-cyan rounded-full transition-all duration-100 peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-black"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
               />
             </div>
           )}
@@ -784,7 +800,7 @@ export function AudioPlayer({
               type="button"
               onClick={toggleMute}
               aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white/80 transition-colors"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center text-white/60 hover:text-white/85 border border-white/15 bg-white/5 hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
             >
               {isMuted || volume === 0 ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -1,6 +1,6 @@
 # Daydream Scope Platform Reference
 
-**Last Modified**: 2026-02-10 11:51 ET
+**Last Modified**: 2026-02-19 09:14 EST
 **Status**: Project Delta
 
 ## Purpose
@@ -20,4 +20,5 @@ Project-specific notes for Daydream Scope in MetaDJ Soundscape. Canonical platfo
 
 ## Delta Log
 
+- 2026-02-19: Synced to Scope `v0.1.3` (published 2026-02-13). New since v0.1.0: NDI input, flexible VACE combinations, SageAttention validation, plugin stability.
 - 2026-02-10: Synced to Scope `v0.1.0` docs/release state (no `v1.0` stable published).

@@ -22,6 +22,7 @@ export default function SoundscapePage() {
   const helpCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
   const mainContentRef = useRef<HTMLElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   // Called by SoundscapeStudio to register its disconnect handler
   const handleRegisterDisconnect = useCallback((disconnectFn: () => void) => {
@@ -125,16 +126,21 @@ export default function SoundscapePage() {
 
   useEffect(() => {
     const main = mainContentRef.current;
+    const header = headerRef.current;
     if (!main) return;
 
     if (showHelp) {
       main.setAttribute("inert", "");
       main.setAttribute("aria-hidden", "true");
+      header?.setAttribute("inert", "");
+      header?.setAttribute("aria-hidden", "true");
       return;
     }
 
     main.removeAttribute("inert");
     main.removeAttribute("aria-hidden");
+    header?.removeAttribute("inert");
+    header?.removeAttribute("aria-hidden");
   }, [showHelp]);
 
   return (
@@ -147,6 +153,7 @@ export default function SoundscapePage() {
 
       {/* Header */}
       <header
+        ref={headerRef}
         className="relative z-50 flex items-center justify-between px-4 md:px-6 h-14 border-b border-white/8 glass"
         role="banner"
       >
@@ -321,7 +328,7 @@ export default function SoundscapePage() {
                 type="button"
                 onClick={closeHelp}
                 aria-label="Close help"
-                className="p-1.5 text-white/40 hover:text-white/70 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded"
+                className="min-h-[44px] min-w-[44px] p-2 text-white/55 hover:text-white/85 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded-lg flex items-center justify-center"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

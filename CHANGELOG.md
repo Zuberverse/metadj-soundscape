@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-18 22:24 EST
+**Last Modified**: 2026-02-18 22:45 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -40,8 +40,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Soundscape hook regression tests for ambient-mode parameter sync after denoising/prompt accent updates.
 - Audio analyzer regression test for first-frame `energyDerivative` startup stabilization.
 - Scope proxy regression tests for production same-origin write enforcement.
+- Scope proxy regression test coverage for oversized request-body rejection.
+- Scope connection regression coverage for reconnect retries after intermediate reconnect-setup failure.
+- Scope connection regression coverage ensuring active session disposers run before repeated connect attempts.
 
 ### Changed
+- Scope proxy now requires a write token by default in production (`SCOPE_PROXY_REQUIRE_WRITE_TOKEN=true`) and returns a clear server-misconfiguration error when production writes are enabled without `SCOPE_PROXY_WRITE_TOKEN`.
+- Scope proxy now enforces configurable request-body size limits for write methods (`SCOPE_PROXY_MAX_BODY_BYTES`, default 512 KB) with explicit `413` responses for oversized payloads.
+- Scope connection now cleans up active WebRTC/data-channel resources before repeated `connect()` calls, preventing orphaned sessions.
+- Reconnect flows now continue retry budgeting when a reconnect attempt fails during setup instead of terminating immediately on first reconnect failure.
+- WebRTC session disposal now invalidates retry state/session IDs to prevent post-disposal ICE retry timers and candidate PATCH activity.
+- Accessibility polish pass: telemetry/control toggles preserve keyboard focus across mount/unmount transitions, key controls use 44px minimum targets, compact theme keyboard navigation now moves focus with selection, and compact volume controls now use dialog semantics with Escape handling.
+- Help modal background shielding now includes header inert/aria-hidden state while open.
 - Scope proxy write hardening now requires a strict same-origin `Origin` header in production (no `sec-fetch-site` fallback), supports optional write token enforcement (`SCOPE_PROXY_WRITE_TOKEN`), and no longer forwards client `Authorization` headers upstream.
 - Scope proxy production safety now requires a server-side `SCOPE_API_URL` (prevents relying on `NEXT_PUBLIC_SCOPE_API_URL` fallback in production), with clearer error messaging for invalid upstream config.
 - Scope proxy rate limiting now supports forwarded-IP trust controls (`SCOPE_PROXY_TRUST_FORWARDED_IP`, optional `SCOPE_PROXY_IP_HEADER`) and bounded in-memory eviction/cleanup to prevent unbounded key growth.

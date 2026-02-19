@@ -16,11 +16,20 @@ const SCOPE_API_URL = (
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const HEADER_ALLOWLIST = ["content-type", "accept"];
 const WRITE_AUTH_TOKEN = process.env.SCOPE_PROXY_WRITE_TOKEN?.trim() || "";
+const REQUIRE_WRITE_TOKEN_IN_PROD = process.env.SCOPE_PROXY_REQUIRE_WRITE_TOKEN !== "false";
 const WRITE_AUTH_HEADER = (process.env.SCOPE_PROXY_WRITE_TOKEN_HEADER || "x-scope-proxy-token")
   .trim()
   .toLowerCase();
 const TRUST_FORWARDED_IP = !IS_PRODUCTION || process.env.SCOPE_PROXY_TRUST_FORWARDED_IP === "true";
 const FORWARDED_IP_HEADER = process.env.SCOPE_PROXY_IP_HEADER?.trim().toLowerCase();
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 512 * 1024;
+const MAX_REQUEST_BODY_BYTES = (() => {
+  const value = Number.parseInt(process.env.SCOPE_PROXY_MAX_BODY_BYTES ?? "", 10);
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  }
+  return value;
+})();
 
 /**
  * Proxy Security Configuration
@@ -65,6 +74,18 @@ const RATE_LIMIT_MAX_WRITES = 90;
 const RATE_LIMIT_MAX_KEYS = 2000;
 const rateLimitStore = new Map<string, { windowStart: number; count: number }>();
 let lastRateLimitSweep = 0;
+
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super("Request body too large");
+  }
+}
+
+class InvalidJsonBodyError extends Error {
+  constructor() {
+    super("Invalid JSON in request body");
+  }
+}
 
 function normalizePathSegments(path: string[]): string[] | null {
   const normalized: string[] = [];
@@ -158,8 +179,11 @@ function safeStringEqual(left: string, right: string): boolean {
 }
 
 function isWriteAuthorized(request: NextRequest): boolean {
-  if (!IS_PRODUCTION || !WRITE_AUTH_TOKEN) {
+  if (!IS_PRODUCTION) {
     return true;
+  }
+  if (!WRITE_AUTH_TOKEN) {
+    return !REQUIRE_WRITE_TOKEN_IN_PROD;
   }
 
   const providedToken = request.headers.get(WRITE_AUTH_HEADER);
@@ -258,6 +282,54 @@ function getTimeoutForPath(path: string): number {
   return DEFAULT_TIMEOUT;
 }
 
+function parseContentLength(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function assertBodyWithinLimit(byteLength: number): void {
+  if (byteLength > MAX_REQUEST_BODY_BYTES) {
+    throw new RequestBodyTooLargeError();
+  }
+}
+
+async function readRequestBody(request: NextRequest): Promise<BodyInit | undefined> {
+  if (request.method === "GET" || request.method === "HEAD") {
+    return undefined;
+  }
+
+  const declaredContentLength = parseContentLength(request.headers.get("content-length"));
+  if (declaredContentLength !== null) {
+    assertBodyWithinLimit(declaredContentLength);
+  }
+
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const rawBody = await request.text();
+    assertBodyWithinLimit(new TextEncoder().encode(rawBody).byteLength);
+
+    if (!rawBody.trim()) {
+      return undefined;
+    }
+
+    try {
+      return JSON.stringify(JSON.parse(rawBody));
+    } catch {
+      throw new InvalidJsonBodyError();
+    }
+  }
+
+  const binaryBody = await request.arrayBuffer();
+  assertBodyWithinLimit(binaryBody.byteLength);
+  return binaryBody.byteLength > 0 ? binaryBody : undefined;
+}
+
 async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -312,6 +384,16 @@ async function proxyRequest(
     );
   }
 
+  if (WRITE_METHODS.has(method) && IS_PRODUCTION && REQUIRE_WRITE_TOKEN_IN_PROD && !WRITE_AUTH_TOKEN) {
+    return NextResponse.json(
+      {
+        error:
+          "Scope proxy write operations require SCOPE_PROXY_WRITE_TOKEN in production. Configure the server token or explicitly set SCOPE_PROXY_REQUIRE_WRITE_TOKEN=false.",
+      },
+      { status: 503 }
+    );
+  }
+
   if (WRITE_METHODS.has(method) && !isWriteAuthorized(request)) {
     return NextResponse.json(
       {
@@ -341,20 +423,24 @@ async function proxyRequest(
   }
 
   let body: BodyInit | undefined;
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    const contentType = request.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      try {
-        body = JSON.stringify(await request.json());
-      } catch {
-        return NextResponse.json(
-          { error: "Invalid JSON in request body" },
-          { status: 400 }
-        );
-      }
-    } else {
-      body = await request.arrayBuffer();
+  try {
+    body = await readRequestBody(request);
+  } catch (error) {
+    if (error instanceof InvalidJsonBodyError) {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      );
     }
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json(
+        {
+          error: `Request body exceeds proxy limit of ${MAX_REQUEST_BODY_BYTES} bytes`,
+        },
+        { status: 413 }
+      );
+    }
+    throw error;
   }
 
   // Create AbortController for timeout

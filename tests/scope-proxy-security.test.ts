@@ -136,6 +136,7 @@ describe("Scope proxy security", () => {
       NODE_ENV: "production",
       SCOPE_PROXY_ENABLE: "true",
       SCOPE_API_URL: "https://scope.example",
+      SCOPE_PROXY_REQUIRE_WRITE_TOKEN: "false",
     });
 
     const { POST } = await import("../src/app/api/scope/[...path]/route");
@@ -162,6 +163,34 @@ describe("Scope proxy security", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects production writes when write token is required but missing on server", async () => {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      SCOPE_PROXY_ENABLE: "true",
+      SCOPE_API_URL: "https://scope.example",
+    });
+
+    const { POST } = await import("../src/app/api/scope/[...path]/route");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("https://soundscape.example/api/scope/api/v1/pipeline/load", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://soundscape.example",
+      },
+      body: JSON.stringify({ pipeline_ids: ["longlive"] }),
+    });
+
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["api", "v1", "pipeline", "load"] }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("requires write auth token when configured", async () => {
@@ -223,5 +252,31 @@ describe("Scope proxy security", () => {
     expect(forwardedHeaders.get("authorization")).toBeNull();
     expect(forwardedHeaders.get("x-custom-header")).toBeNull();
     expect(forwardedHeaders.get("cookie")).toBeNull();
+  });
+
+  it("rejects oversized write payloads", async () => {
+    Object.assign(process.env, {
+      SCOPE_PROXY_MAX_BODY_BYTES: "32",
+    });
+
+    const { POST } = await import("../src/app/api/scope/[...path]/route");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/scope/api/v1/pipeline/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pipeline_ids: ["longlive"],
+        prompt: "this payload is intentionally larger than the configured body limit",
+      }),
+    });
+
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["api", "v1", "pipeline", "load"] }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

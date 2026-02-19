@@ -51,6 +51,14 @@ const composePromptEntriesWithAccent = (basePrompt: string, accent: PromptAccent
   return entries;
 };
 
+const RECENT_THEME_TRANSITION_GRACE_MS = 350;
+
+interface PendingThemeTransition {
+  theme: Theme;
+  accent: PromptAccent;
+  denoisingSteps: number[];
+}
+
 // ============================================================================
 // Hook Interface
 // ============================================================================
@@ -181,11 +189,26 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   const [parameters, setParameters] = useState<ScopeParameters | null>(null);
   const parametersRef = useRef<ScopeParameters | null>(null);
+  const lastPublishedBeatTimeRef = useRef(0);
+  const promptAccentRef = useRef<PromptAccent>(promptAccent);
+  const activeDenoisingStepsRef = useRef<number[]>([
+    ...(DENOISING_PROFILES[DEFAULT_DENOISING_PROFILE_ID] ?? []),
+  ]);
+  const pendingThemeTransitionRef = useRef<PendingThemeTransition | null>(null);
+  const recentThemeTransitionSentAtRef = useRef(0);
   const activeDenoisingSteps = useMemo(
     () =>
       [...(DENOISING_PROFILES[denoisingProfileId] ?? DENOISING_PROFILES[DEFAULT_DENOISING_PROFILE_ID])],
     [denoisingProfileId]
   );
+
+  useEffect(() => {
+    promptAccentRef.current = promptAccent;
+  }, [promptAccent]);
+
+  useEffect(() => {
+    activeDenoisingStepsRef.current = [...activeDenoisingSteps];
+  }, [activeDenoisingSteps]);
 
   const composePromptEntries = useCallback(
     (basePrompt: string): PromptEntry[] => {
@@ -269,6 +292,41 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     },
     [promptAccent, activeDenoisingSteps]
   );
+
+  const queueThemeTransitionReplay = useCallback((theme: Theme) => {
+    pendingThemeTransitionRef.current = {
+      theme,
+      accent: {
+        text: promptAccentRef.current.text,
+        weight: promptAccentRef.current.weight,
+      },
+      denoisingSteps: [...activeDenoisingStepsRef.current],
+    };
+  }, []);
+
+  const replayQueuedThemeTransition = useCallback((): boolean => {
+    const pendingTransition = pendingThemeTransitionRef.current;
+    if (!pendingTransition) {
+      return false;
+    }
+
+    const replayed = pushScopeParameters({
+      theme: pendingTransition.theme,
+      accent: pendingTransition.accent,
+      denoisingSteps: pendingTransition.denoisingSteps,
+      includeTransition: true,
+      requireAmbient: false,
+    });
+
+    if (!replayed) {
+      return false;
+    }
+
+    pendingThemeTransitionRef.current = null;
+    recentThemeTransitionSentAtRef.current = Date.now();
+    mappingEngineRef.current?.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
+    return true;
+  }, [pushScopeParameters]);
 
   const applyEngineControls = useCallback(
     (engine: MappingEngine) => {
@@ -398,6 +456,8 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         requireAmbient: false,
       });
       if (didSendThemeTransition) {
+        pendingThemeTransitionRef.current = null;
+        recentThemeTransitionSentAtRef.current = Date.now();
         log(`Sent theme transition to Scope: ${theme.name} (${AMBIENT_THEME_CHANGE_TRANSITION_STEPS} frames)`);
 
         // CRITICAL: Mark the transition as active in MappingEngine to prevent
@@ -406,12 +466,13 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
           mappingEngineRef.current.markExternalTransitionActive(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
         }
       } else {
+        queueThemeTransitionReplay(theme);
         log("Theme changed but no data channel - will apply when connected");
       }
 
       setState((prev) => ({ ...prev, activeTheme: theme }));
     },
-    [resolveTheme, pushScopeParameters, log]
+    [resolveTheme, pushScopeParameters, queueThemeTransitionReplay, log]
   );
 
   // Note: Theme is initialized synchronously in useState above
@@ -430,6 +491,8 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
           log("Audio element already connected");
           return;
         }
+
+        disposeParameterSender();
 
         if (analyzerRef.current) {
           analyzerRef.current.destroy();
@@ -476,7 +539,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         throw error;
       }
     },
-    [effectiveUpdateRate, applyEngineControls, log] // Removed currentTheme - we use currentThemeRef instead
+    [effectiveUpdateRate, applyEngineControls, disposeParameterSender, log] // Removed currentTheme - we use currentThemeRef instead
   );
 
   const disconnectAudio = useCallback(() => {
@@ -487,6 +550,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     disposeParameterSender();
     audioElementRef.current = null;
     lastUiUpdateRef.current = 0;
+    lastPublishedBeatTimeRef.current = 0;
     parametersRef.current = null;
     setParameters(null);
     setState((prev) => ({
@@ -510,6 +574,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       if (parameterSenderRef.current) {
         parameterSenderRef.current.setDataChannel(channel);
       }
+      if (channel?.readyState === "open") {
+        replayQueuedThemeTransition();
+      }
       if (!channel) {
         isAmbientActiveRef.current = false;
       }
@@ -519,7 +586,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       }));
       log(channel ? "Data channel connected" : "Data channel cleared");
     },
-    [log]
+    [replayQueuedThemeTransition, log]
   );
 
   useEffect(() => {
@@ -539,6 +606,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     (analysis: AnalysisState) => {
       const now = performance.now();
       const shouldUpdateUi = now - lastUiUpdateRef.current >= uiUpdateIntervalMs;
+      const latestBeatTime = analysis.beat.lastBeatTime || 0;
+      const shouldPublishBeatUpdate =
+        latestBeatTime > 0 && latestBeatTime !== lastPublishedBeatTimeRef.current;
 
       // Debug: Log that analysis is running every ~3 seconds (at 30Hz UI rate)
       analysisFrameCountRef.current++;
@@ -559,11 +629,16 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         }
       }
 
-      if (shouldUpdateUi) {
-        // Update UI state at a lower rate to avoid jank
+      if (shouldUpdateUi || shouldPublishBeatUpdate) {
+        // Beat updates bypass UI throttling so beat-driven features remain reliable.
         setState((prev) => ({ ...prev, analysis }));
         setParameters(parametersRef.current);
-        lastUiUpdateRef.current = now;
+        if (shouldUpdateUi) {
+          lastUiUpdateRef.current = now;
+        }
+        if (shouldPublishBeatUpdate) {
+          lastPublishedBeatTimeRef.current = latestBeatTime;
+        }
       }
     },
     [uiUpdateIntervalMs, debug, log]
@@ -650,21 +725,31 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
      * latent cache maintain visual coherence. Theme changes are handled by setTheme().
      */
 
-    const didSendAmbientStart = pushScopeParameters({
-      theme,
-      includeTransition: true,
-      requireAmbient: false,
-    });
-    if (!didSendAmbientStart) {
-      log("Ambient: failed to send initial params");
-      return;
+    const replayedQueuedThemeTransition = replayQueuedThemeTransition();
+    const transitionedRecently =
+      Date.now() - recentThemeTransitionSentAtRef.current < RECENT_THEME_TRANSITION_GRACE_MS;
+
+    if (!replayedQueuedThemeTransition && !transitionedRecently) {
+      const didSendAmbientStart = pushScopeParameters({
+        theme,
+        includeTransition: true,
+        requireAmbient: false,
+      });
+      if (!didSendAmbientStart) {
+        log("Ambient: failed to send initial params");
+        return;
+      }
+      log("Ambient: sent initial params for theme:", theme.name);
+    } else if (replayedQueuedThemeTransition) {
+      log("Ambient: reused queued theme transition");
+    } else {
+      log("Ambient: transition already sent recently, skipping duplicate bootstrap send");
     }
-    log("Ambient: sent initial params for theme:", theme.name);
 
     isAmbientActiveRef.current = true;
 
     setState((prev) => ({ ...prev, playback: "playing" }));
-  }, [effectiveUpdateRate, applyEngineControls, pushScopeParameters, log]);
+  }, [effectiveUpdateRate, applyEngineControls, replayQueuedThemeTransition, pushScopeParameters, log]);
 
   const stopAmbient = useCallback(() => {
     if (isAmbientActiveRef.current) {

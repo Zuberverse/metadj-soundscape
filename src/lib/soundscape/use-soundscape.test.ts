@@ -7,7 +7,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useSoundscape } from "./use-soundscape";
 import { PRESET_THEMES } from "./themes";
-import { DEFAULT_THEME_ID, DENOISING_PROFILES } from "./constants";
+import {
+  AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+  DEFAULT_THEME_ID,
+  DENOISING_PROFILES,
+} from "./constants";
+import type { AnalysisState } from "./types";
 
 // ============================================================================
 // Mock Dependencies
@@ -78,6 +83,38 @@ function createMockDataChannel(readyState: RTCDataChannelState = "open"): RTCDat
     send: vi.fn(),
     close: vi.fn(),
   } as unknown as RTCDataChannel;
+}
+
+function createMockAnalysis(overrides: {
+  features?: Partial<AnalysisState["features"]>;
+  beat?: Partial<AnalysisState["beat"]>;
+  derived?: Partial<AnalysisState["derived"]>;
+} = {}): AnalysisState {
+  return {
+    features: {
+      rms: 0.2,
+      spectralCentroid: 1200,
+      spectralFlatness: 0.2,
+      spectralRolloff: 1800,
+      zcr: 0.1,
+      ...overrides.features,
+    },
+    beat: {
+      bpm: 124,
+      confidence: 0.9,
+      lastBeatTime: 0,
+      isBeat: false,
+      ...overrides.beat,
+    },
+    derived: {
+      energy: 0.5,
+      brightness: 0.5,
+      texture: 0.5,
+      energyDerivative: 0.05,
+      peakEnergy: 0.7,
+      ...overrides.derived,
+    },
+  };
 }
 
 // ============================================================================
@@ -195,6 +232,67 @@ describe("useSoundscape", () => {
       // MappingEngine.setTheme should be called when it exists
       // (engine is created on connectAudio, but setTheme updates the state regardless)
       expect(result.current.currentTheme.id).toBe("neon-foundry");
+    });
+
+    it("queues a transition while channel is closed and replays it once channel opens", async () => {
+      const { result } = renderHook(() => useSoundscape());
+      const audioElement = createMockAudioElement();
+      const closedChannel = createMockDataChannel("closed");
+      const openChannel = createMockDataChannel("open");
+      const sendMock = openChannel.send as ReturnType<typeof vi.fn>;
+
+      await act(async () => {
+        await result.current.connectAudio(audioElement);
+      });
+
+      act(() => {
+        result.current.setDataChannel(closedChannel);
+        result.current.setTheme("neon-foundry");
+      });
+
+      expect(sendMock).not.toHaveBeenCalled();
+
+      act(() => {
+        result.current.setDataChannel(openChannel);
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as {
+        prompts: Array<{ text: string; weight: number }>;
+        transition?: { num_steps: number; temporal_interpolation_method: string };
+      };
+      expect(payload.prompts[0]?.text).toContain(result.current.currentTheme.basePrompt);
+      expect(payload.transition?.num_steps).toBe(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
+      expect(payload.transition?.temporal_interpolation_method).toBe("slerp");
+      expect(mockMappingEngineInstance.markExternalTransitionActive).toHaveBeenCalledWith(
+        AMBIENT_THEME_CHANGE_TRANSITION_STEPS
+      );
+    });
+
+    it("replays only the latest queued theme transition after reconnect", () => {
+      const { result } = renderHook(() => useSoundscape());
+      const closedChannel = createMockDataChannel("closed");
+      const openChannel = createMockDataChannel("open");
+      const sendMock = openChannel.send as ReturnType<typeof vi.fn>;
+      const latestTheme = PRESET_THEMES.find((theme) => theme.id === "digital-forest");
+
+      expect(latestTheme).toBeDefined();
+
+      act(() => {
+        result.current.setDataChannel(closedChannel);
+        result.current.setTheme("neon-foundry");
+        result.current.setTheme("digital-forest");
+      });
+
+      act(() => {
+        result.current.setDataChannel(openChannel);
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as {
+        prompts: Array<{ text: string; weight: number }>;
+      };
+      expect(payload.prompts[0]?.text).toContain(latestTheme?.basePrompt ?? "");
     });
   });
 
@@ -347,6 +445,48 @@ describe("useSoundscape", () => {
       // Should not crash and should not change playback state
       expect(result.current.state.playback).toBe("idle");
     });
+
+    it("publishes beat updates even when UI update interval has not elapsed", async () => {
+      let analysisHandler: ((analysis: AnalysisState) => void) | null = null;
+      mockAnalyzerInstance.start.mockImplementationOnce((callback: (analysis: AnalysisState) => void) => {
+        analysisHandler = callback;
+      });
+      const nowSpy = vi.spyOn(performance, "now");
+      nowSpy.mockReturnValue(120);
+      nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(120);
+
+      const { result } = renderHook(() => useSoundscape({ uiUpdateRate: 0.2 }));
+      const audioElement = createMockAudioElement();
+
+      await act(async () => {
+        await result.current.connectAudio(audioElement);
+      });
+
+      await act(async () => {
+        await result.current.start();
+      });
+
+      expect(analysisHandler).not.toBeNull();
+
+      act(() => {
+        analysisHandler?.(
+          createMockAnalysis({
+            beat: { isBeat: false, lastBeatTime: 0 },
+          })
+        );
+      });
+      expect(result.current.state.analysis).toBeNull();
+
+      act(() => {
+        analysisHandler?.(
+          createMockAnalysis({
+            beat: { isBeat: true, lastBeatTime: 4321 },
+          })
+        );
+      });
+
+      expect(result.current.state.analysis?.beat.lastBeatTime).toBe(4321);
+    });
   });
 
   describe("ambient mode", () => {
@@ -466,6 +606,30 @@ describe("useSoundscape", () => {
         prompts: Array<{ text: string; weight: number }>;
       };
       expect(payload.prompts.some((entry) => entry.text === "volumetric fog" && entry.weight === 0.4)).toBe(true);
+    });
+
+    it("does not send a duplicate ambient bootstrap transition after replaying a queued theme", () => {
+      const { result } = renderHook(() => useSoundscape());
+      const closedChannel = createMockDataChannel("closed");
+      const openChannel = createMockDataChannel("open");
+      const sendMock = openChannel.send as ReturnType<typeof vi.fn>;
+
+      act(() => {
+        result.current.setDataChannel(closedChannel);
+        result.current.setTheme("neon-foundry");
+      });
+
+      act(() => {
+        result.current.setDataChannel(openChannel);
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        result.current.startAmbient();
+      });
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
     });
   });
 

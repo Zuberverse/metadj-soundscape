@@ -43,6 +43,11 @@ const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
 const WARNING_DROPPED_FRAME_PERCENT = 5;
 const CRITICAL_DROPPED_FRAME_PERCENT = 12;
 const WARNING_FPS_THRESHOLD = 10;
+const AUTO_THEME_BPM_CONFIDENCE_THRESHOLD = 0.45;
+const AUTO_THEME_BEAT_ESTIMATE_MIN_BPM = 60;
+const AUTO_THEME_BEAT_ESTIMATE_MAX_BPM = 200;
+const AUTO_THEME_MAX_ESTIMATED_BEAT_INCREMENT = 8;
+const AUTO_THEME_SECTION_BEAT_OPTIONS = [16, 32, 64] as const;
 
 type DiagnosticsRefreshResult = {
   isHealthy: boolean;
@@ -93,11 +98,11 @@ function CollapsibleSection({
         className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-inset"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">{title}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">{title}</span>
           {badge}
         </div>
         <svg
-          className={`w-3.5 h-3.5 text-white/30 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          className={`w-3.5 h-3.5 text-white/60 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -156,6 +161,11 @@ export function SoundscapeStudio({
   const recordingStartRef = useRef<number | null>(null);
   const processedBeatTimestampRef = useRef<number>(0);
   const autoThemeBeatCounterRef = useRef(0);
+  const hideTelemetryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const showTelemetryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const showControlsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const hideControlsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pendingToggleFocusRef = useRef<"show-controls" | "hide-controls" | null>(null);
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [showControlsInternal, setShowControlsInternal] = useState(true);
@@ -171,6 +181,30 @@ export function SoundscapeStudio({
       setShowControlsInternal(prev => !prev);
     }
   }, [onControlsToggle]);
+
+  const handleShowControls = useCallback(() => {
+    pendingToggleFocusRef.current = "hide-controls";
+    handleToggleControls();
+  }, [handleToggleControls]);
+
+  const handleHideControls = useCallback(() => {
+    pendingToggleFocusRef.current = "show-controls";
+    handleToggleControls();
+  }, [handleToggleControls]);
+
+  const handleHideTelemetry = useCallback(() => {
+    setShowTelemetry(false);
+    requestAnimationFrame(() => {
+      showTelemetryButtonRef.current?.focus();
+    });
+  }, []);
+
+  const handleShowTelemetry = useCallback(() => {
+    setShowTelemetry(true);
+    requestAnimationFrame(() => {
+      hideTelemetryButtonRef.current?.focus();
+    });
+  }, []);
 
   const handleRegisterAudioControls = useCallback((controls: AudioPlayerControls | null) => {
     transportControlsRef.current = controls;
@@ -520,7 +554,10 @@ export function SoundscapeStudio({
     void refreshScopeDiagnostics();
   }, [refreshScopeDiagnostics]);
 
+  const hasHydratedFromStorage = useRef(false);
   useEffect(() => {
+    if (hasHydratedFromStorage.current) return;
+    hasHydratedFromStorage.current = true;
     try {
       const storedPipeline = window.localStorage.getItem("soundscape.pipeline");
       if (storedPipeline) {
@@ -545,6 +582,16 @@ export function SoundscapeStudio({
           ? storedAccentWeight
           : 0.25;
       setPromptAccent(storedAccentText, validAccentWeight);
+      const storedAutoThemeEnabled = window.localStorage.getItem("soundscape.autoTheme.enabled");
+      if (storedAutoThemeEnabled === "true" || storedAutoThemeEnabled === "false") {
+        setAutoThemeEnabled(storedAutoThemeEnabled === "true");
+      }
+      const storedAutoThemeSectionBeats = Number(
+        window.localStorage.getItem("soundscape.autoTheme.sectionBeats") ?? ""
+      );
+      if (AUTO_THEME_SECTION_BEAT_OPTIONS.includes(storedAutoThemeSectionBeats as 16 | 32 | 64)) {
+        setAutoThemeSectionBeats(storedAutoThemeSectionBeats);
+      }
     } catch {
       // localStorage unavailable (e.g., Safari private browsing)
     }
@@ -572,6 +619,14 @@ export function SoundscapeStudio({
       window.localStorage.setItem("soundscape.promptAccent.weight", String(promptAccent.weight));
     } catch { /* storage unavailable */ }
   }, [promptAccent]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("soundscape.autoTheme.enabled", String(autoThemeEnabled)); } catch { /* storage unavailable */ }
+  }, [autoThemeEnabled]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("soundscape.autoTheme.sectionBeats", String(autoThemeSectionBeats)); } catch { /* storage unavailable */ }
+  }, [autoThemeSectionBeats]);
 
   useEffect(() => {
     if (!scopeStream) {
@@ -626,6 +681,23 @@ export function SoundscapeStudio({
   useEffect(() => {
     onConnectionChange?.(!!scopeStream);
   }, [scopeStream, onConnectionChange]);
+
+  useEffect(() => {
+    if (pendingToggleFocusRef.current === "show-controls" && !showControls) {
+      requestAnimationFrame(() => {
+        showControlsButtonRef.current?.focus();
+      });
+      pendingToggleFocusRef.current = null;
+      return;
+    }
+
+    if (pendingToggleFocusRef.current === "hide-controls" && showControls) {
+      requestAnimationFrame(() => {
+        hideControlsButtonRef.current?.focus();
+      });
+      pendingToggleFocusRef.current = null;
+    }
+  }, [showControls]);
 
   const loadParams = useMemo(() => {
     const params: Record<string, unknown> = {
@@ -743,11 +815,38 @@ export function SoundscapeStudio({
       ? null
       : isDiagnosticsLoading
         ? "Checking Scope readiness..."
+        : scopeHealth === null
+          ? "Scope readiness not loaded yet. Click Refresh to check server status."
         : !hasPipelineSelection
           ? "Select a main pipeline before connecting."
           : scopeHealth?.status !== "ok"
             ? "Scope server offline. Start Scope and refresh readiness."
             : null;
+  const scopeReadiness = useMemo(() => {
+    if (scopeHealth?.status === "ok") {
+      return { label: "Online", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
+    }
+
+    if (scopeHealth === null || isDiagnosticsLoading) {
+      return { label: "Checking", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+    }
+
+    return { label: "Offline", textClass: "text-red-300", dotClass: "bg-red-400" };
+  }, [scopeHealth, isDiagnosticsLoading]);
+  const connectionSummary = useMemo(() => {
+    switch (connectionState) {
+      case "connected":
+        return { label: "Live", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
+      case "connecting":
+        return { label: "Connecting", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+      case "reconnecting":
+        return { label: "Reconnecting", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+      case "failed":
+        return { label: "Failed", textClass: "text-red-300", dotClass: "bg-red-400" };
+      default:
+        return { label: "Standby", textClass: "text-white/70", dotClass: "bg-white/50" };
+    }
+  }, [connectionState]);
   const scopeErrorTitle = error?.userFriendly?.title ?? null;
   const scopeErrorDescription = error?.userFriendly?.description ?? null;
   const scopeErrorSuggestion = error?.userFriendly?.suggestion ?? null;
@@ -825,7 +924,7 @@ export function SoundscapeStudio({
 
   const performanceStatus = useMemo(() => {
     if (dropPercentage === null && videoStats.fps === null) {
-      return { label: "Sampling", color: "text-white/50", dotColor: "bg-white/30" };
+      return { label: "Sampling", color: "text-white/70", dotColor: "bg-white/50" };
     }
     if (
       (dropPercentage !== null && dropPercentage >= CRITICAL_DROPPED_FRAME_PERCENT) ||
@@ -1009,11 +1108,34 @@ export function SoundscapeStudio({
     }
 
     const beat = soundscapeState.analysis.beat;
-    if (!beat.isBeat || !beat.lastBeatTime) return;
+    if (!beat.lastBeatTime) return;
     if (beat.lastBeatTime === processedBeatTimestampRef.current) return;
 
+    const previousBeatTimestamp = processedBeatTimestampRef.current;
     processedBeatTimestampRef.current = beat.lastBeatTime;
-    autoThemeBeatCounterRef.current += 1;
+
+    let beatIncrement = 1;
+    const hasReliableTempo =
+      typeof beat.bpm === "number" &&
+      Number.isFinite(beat.bpm) &&
+      beat.confidence >= AUTO_THEME_BPM_CONFIDENCE_THRESHOLD &&
+      beat.bpm >= AUTO_THEME_BEAT_ESTIMATE_MIN_BPM &&
+      beat.bpm <= AUTO_THEME_BEAT_ESTIMATE_MAX_BPM;
+    const bpmForEstimate = hasReliableTempo ? beat.bpm : null;
+
+    if (bpmForEstimate !== null && previousBeatTimestamp > 0) {
+      const beatIntervalMs = 60000 / bpmForEstimate;
+      const elapsedMs = beat.lastBeatTime - previousBeatTimestamp;
+      beatIncrement = Math.max(
+        1,
+        Math.min(
+          AUTO_THEME_MAX_ESTIMATED_BEAT_INCREMENT,
+          Math.round(elapsedMs / beatIntervalMs)
+        )
+      );
+    }
+
+    autoThemeBeatCounterRef.current += beatIncrement;
 
     if (autoThemeBeatCounterRef.current % autoThemeSectionBeats !== 0) return;
 
@@ -1046,9 +1168,10 @@ export function SoundscapeStudio({
                     <span className="font-semibold">Live</span>
                   </div>
                   <button
+                    ref={hideTelemetryButtonRef}
                     type="button"
-                    onClick={() => setShowTelemetry(false)}
-                    className="p-1 text-white/30 hover:text-white/60 transition-colors duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-scope-cyan rounded"
+                    onClick={handleHideTelemetry}
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] text-white/50 hover:text-white/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded-lg flex items-center justify-center"
                     aria-label="Hide telemetry overlay"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -1057,12 +1180,12 @@ export function SoundscapeStudio({
                   </button>
                 </div>
                 <div className="space-y-1 text-[10px] tabular-nums">
-                  <div className="flex justify-between"><span className="text-white/40">Pipeline</span><span className="text-white/75 font-medium truncate ml-2 max-w-[140px]">{activePipelineChain}</span></div>
-                  <div className="flex justify-between"><span className="text-white/40">Resolution</span><span className="text-white/75 font-medium">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
-                  <div className="flex justify-between"><span className="text-white/40">FPS</span><span className="text-white/75 font-medium">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
-                  <div className="flex justify-between"><span className="text-white/40">Drop Rate</span><span className="text-white/75 font-medium">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
+                  <div className="flex justify-between"><span className="text-white/65">Pipeline</span><span className="text-white/75 font-medium truncate ml-2 max-w-[140px]">{activePipelineChain}</span></div>
+                  <div className="flex justify-between"><span className="text-white/65">Resolution</span><span className="text-white/75 font-medium">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
+                  <div className="flex justify-between"><span className="text-white/65">FPS</span><span className="text-white/75 font-medium">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
+                  <div className="flex justify-between"><span className="text-white/65">Drop Rate</span><span className="text-white/75 font-medium">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
                   <div className="flex justify-between items-center">
-                    <span className="text-white/40">Performance</span>
+                    <span className="text-white/65">Performance</span>
                     <span className={`font-semibold flex items-center gap-1.5 ${performanceStatus.color}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${performanceStatus.dotColor}`} aria-hidden="true" />
                       {performanceStatus.label}
@@ -1071,12 +1194,12 @@ export function SoundscapeStudio({
                 </div>
                 <div className="mt-2.5 pt-2 border-t border-white/8 flex items-center gap-1.5">
                   {!isRecording ? (
-                    <button type="button" onClick={startRecordingClip} aria-label="Start recording clip" className="rounded-lg border border-red-400/25 bg-red-500/10 px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold text-red-200 hover:bg-red-500/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300">Record</button>
+                    <button type="button" onClick={startRecordingClip} aria-label="Start recording clip" className="rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-red-200 hover:bg-red-500/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300">Record</button>
                   ) : (
-                    <button type="button" onClick={stopRecordingClip} aria-label="Stop recording clip" className="rounded-lg border border-red-400/35 bg-red-500/20 px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold text-red-100 hover:bg-red-500/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 animate-status-pulse">Stop</button>
+                    <button type="button" onClick={stopRecordingClip} aria-label="Stop recording clip" className="rounded-lg border border-red-400/35 bg-red-500/20 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-red-100 hover:bg-red-500/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 animate-status-pulse">Stop</button>
                   )}
                   {recordedClipUrl && (
-                    <a href={recordedClipUrl} download={`soundscape-clip-${Date.now()}.webm`} className="rounded-lg border border-scope-cyan/25 bg-scope-cyan/10 px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:bg-scope-cyan/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Download</a>
+                    <a href={recordedClipUrl} download={`soundscape-clip-${Date.now()}.webm`} className="rounded-lg border border-scope-cyan/25 bg-scope-cyan/10 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:bg-scope-cyan/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Download</a>
                   )}
                   {recordedClipSeconds !== null && <span className="text-[9px] text-white/55 ml-1">{recordedClipSeconds.toFixed(1)}s</span>}
                 </div>
@@ -1086,7 +1209,13 @@ export function SoundscapeStudio({
 
             {/* Show telemetry button when hidden */}
             {!showTelemetry && (
-              <button type="button" onClick={() => setShowTelemetry(true)} className="absolute top-3 left-3 md:left-4 z-20 p-2 glass bg-black/50 rounded-lg border border-white/10 text-white/40 hover:text-white/70 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan" aria-label="Show telemetry overlay">
+              <button
+                ref={showTelemetryButtonRef}
+                type="button"
+                onClick={handleShowTelemetry}
+                className="absolute top-3 left-3 md:left-4 z-20 min-h-[44px] min-w-[44px] px-2.5 py-2.5 glass bg-black/50 rounded-lg border border-white/10 text-white/55 hover:text-white/80 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+                aria-label="Show telemetry overlay"
+              >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
@@ -1145,7 +1274,7 @@ export function SoundscapeStudio({
                 {connectionState === "reconnecting" ? "Reconnecting" : "Connecting"}
               </h2>
               <p className="text-scope-cyan/80 text-sm font-medium mb-4" role="status" aria-live="polite">{statusMessage || "Establishing connection..."}</p>
-              {connectionState === "reconnecting" && <p className="text-[10px] text-white/40 mb-3">Attempt {reconnectAttempts + 1} of {MAX_RECONNECT_ATTEMPTS}</p>}
+              {connectionState === "reconnecting" && <p className="text-[10px] text-white/65 mb-3">Attempt {reconnectAttempts + 1} of {MAX_RECONNECT_ATTEMPTS}</p>}
               <div className="w-40 h-1 bg-white/5 rounded-full mx-auto overflow-hidden"><div className="h-full bg-gradient-to-r from-scope-purple via-scope-cyan to-scope-magenta animate-pulse rounded-full w-2/3" /></div>
             </div>
           </div>
@@ -1175,30 +1304,30 @@ export function SoundscapeStudio({
                       title="Scope Readiness"
                       defaultOpen={true}
                       badge={
-                        <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${scopeHealth?.status === "ok" ? "text-scope-cyan" : "text-red-300"}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${scopeHealth?.status === "ok" ? "bg-scope-cyan" : "bg-red-400"}`} />
-                          {scopeHealth?.status === "ok" ? "Online" : "Offline"}
+                        <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${scopeReadiness.textClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${scopeReadiness.dotClass}`} />
+                          {scopeReadiness.label}
                         </span>
                       }
                     >
                       <div className="space-y-3" aria-busy={isDiagnosticsLoading}>
                         <div className="flex items-center justify-end">
-                          <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading || isConnecting} className="px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold rounded-lg bg-white/5 text-white/60 border border-white/10 hover:bg-white/8 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">
+                          <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading || isConnecting} className="px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold rounded-lg bg-white/5 text-white/75 border border-white/10 hover:bg-white/8 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">
                             {isDiagnosticsLoading ? "Checking..." : "Refresh"}
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
-                          <span className="text-white/40">Server</span>
-                          <span className={scopeHealth?.status === "ok" ? "text-scope-cyan font-semibold" : "text-red-300 font-semibold"}>{scopeHealth?.status === "ok" ? "Online" : "Offline"}</span>
-                          <span className="text-white/40">Pipeline State</span>
+                          <span className="text-white/65">Server</span>
+                          <span className={`${scopeReadiness.textClass} font-semibold`}>{scopeReadiness.label}</span>
+                          <span className="text-white/65">Pipeline State</span>
                           <span className="text-white/70">{pipelineStatus?.status ?? "unknown"}</span>
-                          <span className="text-white/40">Version</span>
+                          <span className="text-white/65">Version</span>
                           <span className="text-white/70">{scopeHealth?.version ?? "n/a"}</span>
-                          <span className="text-white/40">GPU</span>
+                          <span className="text-white/65">GPU</span>
                           <span className="text-white/70 truncate">{scopeCapabilities.hardwareSummary}</span>
-                          <span className="text-white/40">VRAM</span>
+                          <span className="text-white/65">VRAM</span>
                           <span className="text-white/70">{scopeCapabilities.totalVramGb ? `${scopeCapabilities.freeVramGb?.toFixed(1) ?? "?"}/${scopeCapabilities.totalVramGb.toFixed(1)} GB` : "n/a"}</span>
-                          <span className="text-white/40">Models</span>
+                          <span className="text-white/65">Models</span>
                           <span className={scopeCapabilities.modelReady === true ? "text-scope-cyan font-semibold" : scopeCapabilities.modelReady === false ? "text-amber-300 font-semibold" : "text-white/60"}>
                             {scopeCapabilities.modelReady === null ? "Unknown" : scopeCapabilities.modelReady ? "Ready" : "Not ready"}
                           </span>
@@ -1207,13 +1336,13 @@ export function SoundscapeStudio({
                           <div className="rounded-xl border border-amber-300/25 bg-amber-400/8 p-3 space-y-2">
                             <p className="text-[10px] uppercase tracking-wider text-amber-200 font-semibold">Scope Offline</p>
                             <p className="text-[10px] text-amber-100/80 leading-relaxed">Audio analysis and theme switching work locally. Start the Scope server to stream visuals.</p>
-                            <button type="button" onClick={handleCopyScopeCommand} className="rounded-lg border border-amber-300/30 bg-black/20 px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold text-amber-100 hover:bg-black/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
+                            <button type="button" onClick={handleCopyScopeCommand} className="rounded-lg border border-amber-300/30 bg-black/20 px-3 py-2 min-h-[44px] text-[9px] uppercase tracking-wider font-semibold text-amber-100 hover:bg-black/30 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
                               {copyCommandStatus === "copied" ? "Copied" : "Copy health command"}
                             </button>
                           </div>
                         )}
                         {diagnosticsError && <p className="text-[10px] text-amber-300/80 font-medium" role="alert">{diagnosticsError}</p>}
-                        {lastScopeCheckAt && <p className="text-[10px] text-white/45">Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}</p>}
+                        {lastScopeCheckAt && <p className="text-[10px] text-white/65">Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}</p>}
                       </div>
                     </CollapsibleSection>
 
@@ -1221,14 +1350,14 @@ export function SoundscapeStudio({
                     <CollapsibleSection title="Pipeline" defaultOpen={true}>
                       <div className="space-y-3">
                         <div>
-                          <label htmlFor="pipeline-select" className="block text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Main Pipeline</label>
+                          <label htmlFor="pipeline-select" className="block text-[10px] text-white/65 uppercase tracking-wider font-medium mb-1.5">Main Pipeline</label>
                           <select id="pipeline-select" value={selectedPipeline} disabled={isConnecting} onChange={(e) => setSelectedPipeline(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-sm text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed">
                             {mainPipelineOptions.map((p) => <option key={p.id} value={p.id} className="bg-scope-bg">{p.name}</option>)}
                           </select>
                         </div>
                         {preprocessorOptions.length > 0 && (
                           <div>
-                            <label htmlFor="preprocessor-select" className="block text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Preprocessor</label>
+                            <label htmlFor="preprocessor-select" className="block text-[10px] text-white/65 uppercase tracking-wider font-medium mb-1.5">Preprocessor</label>
                             <select id="preprocessor-select" value={selectedPreprocessor} disabled={isConnecting} onChange={(e) => setSelectedPreprocessor(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-sm text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed">
                               <option value={NO_PREPROCESSOR} className="bg-scope-bg">None</option>
                               {preprocessorOptions.map((p) => <option key={p.id} value={p.id} className="bg-scope-bg">{p.name}</option>)}
@@ -1247,7 +1376,7 @@ export function SoundscapeStudio({
                     <CollapsibleSection title="Generation Controls" defaultOpen={false}>
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
-                          <label className="text-[10px] text-white/45 font-medium">
+                          <label className="text-[10px] text-white/65 font-medium">
                             Denoising
                             <select value={denoisingProfileId} disabled={isConnecting} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
                               <option value="speed" className="bg-scope-bg">Speed</option>
@@ -1255,7 +1384,7 @@ export function SoundscapeStudio({
                               <option value="quality" className="bg-scope-bg">Quality</option>
                             </select>
                           </label>
-                          <label className="text-[10px] text-white/45 font-medium">
+                          <label className="text-[10px] text-white/65 font-medium">
                             Reactivity
                             <select value={reactivityProfileId} disabled={isConnecting} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
                               <option value="cinematic" className="bg-scope-bg">Cinematic</option>
@@ -1265,27 +1394,30 @@ export function SoundscapeStudio({
                           </label>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <label className="text-[10px] text-white/45 font-medium">
+                          <label className="text-[10px] text-white/65 font-medium">
                             Auto Theme
                             <select value={autoThemeEnabled ? "on" : "off"} disabled={isConnecting} onChange={(e) => setAutoThemeEnabled(e.target.value === "on")} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
                               <option value="off" className="bg-scope-bg">Off</option>
                               <option value="on" className="bg-scope-bg">On</option>
                             </select>
                           </label>
-                          <label className="text-[10px] text-white/45 font-medium" title="Number of beats before automatically switching to the next theme">
+                          <label className="text-[10px] text-white/65 font-medium" title="Number of beats before automatically switching to the next theme">
                             Section Beats
                             <select value={autoThemeSectionBeats} disabled={!autoThemeEnabled || isConnecting} onChange={(e) => setAutoThemeSectionBeats(Number(e.target.value))} className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40">
-                              <option value={16} className="bg-scope-bg">16 beats</option>
-                              <option value={32} className="bg-scope-bg">32 beats</option>
-                              <option value={64} className="bg-scope-bg">64 beats</option>
+                              {AUTO_THEME_SECTION_BEAT_OPTIONS.map((option) => (
+                                <option key={option} value={option} className="bg-scope-bg">{option} beats</option>
+                              ))}
                             </select>
                           </label>
                         </div>
-                        <label className="block text-[10px] text-white/45 font-medium">
+                        <p className="text-[10px] text-white/60">
+                          Runs while Scope is connected and audio is playing.
+                        </p>
+                        <label className="block text-[10px] text-white/65 font-medium">
                           Prompt Accent
                           <input type="text" value={promptAccent.text} onChange={(e) => handlePromptAccentTextChange(e.target.value)} disabled={isConnecting} maxLength={500} placeholder="volumetric haze, prismatic bloom..." className="mt-1 w-full px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white placeholder:text-white/25 focus:outline-none focus:border-scope-cyan/40 transition-colors duration-200 disabled:opacity-40" />
                         </label>
-                        <label className="block text-[10px] text-white/45 font-medium">
+                        <label className="block text-[10px] text-white/65 font-medium">
                           Accent Weight ({promptAccent.weight.toFixed(2)})
                           <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} disabled={isConnecting} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="mt-1 w-full accent-scope-cyan" aria-label={`Accent weight: ${promptAccent.weight.toFixed(2)}`} />
                         </label>
@@ -1294,7 +1426,7 @@ export function SoundscapeStudio({
                             <button key={preset} type="button" onClick={() => handleApplyPromptAccentPreset(preset)} disabled={isConnecting} className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[9px] uppercase tracking-wider font-medium text-white/60 hover:bg-white/10 hover:text-white/80 disabled:opacity-40 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">+ {preset}</button>
                           ))}
                         </div>
-                        <p className="text-[10px] text-white/30">Active denoising: [{activeDenoisingSteps.join(", ")}]</p>
+                        <p className="text-[10px] text-white/65">Active denoising: [{activeDenoisingSteps.join(", ")}]</p>
                       </div>
                     </CollapsibleSection>
                   </div>
@@ -1307,7 +1439,7 @@ export function SoundscapeStudio({
                       </button>
                       <p className="text-red-400 font-semibold text-sm pr-6">{scopeErrorTitle}</p>
                       {scopeErrorDescription && <p className="text-red-400/70 text-xs mt-1">{scopeErrorDescription}</p>}
-                      {scopeErrorSuggestion && <p className="text-white/40 text-xs mt-2 italic">{scopeErrorSuggestion}</p>}
+                      {scopeErrorSuggestion && <p className="text-white/65 text-xs mt-2 italic">{scopeErrorSuggestion}</p>}
                       {reconnectAttempts >= MAX_RECONNECT_ATTEMPTS && (
                         <button type="button" onClick={retry} className="mt-3 text-sm text-scope-cyan hover:underline font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan rounded">Retry Connection</button>
                       )}
@@ -1317,11 +1449,11 @@ export function SoundscapeStudio({
 
                 <div className="shrink-0 border-t border-white/8 px-4 py-3 sm:px-6 sm:py-4 text-center bg-black/20">
                   <div className="hidden sm:flex items-center justify-center gap-3 mb-3">
-                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    <span className="text-[10px] uppercase tracking-wider text-white/65">
                       <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">Space</kbd> play/pause
                     </span>
-                    <span className="text-white/35">|</span>
-                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    <span className="text-white/60">|</span>
+                    <span className="text-[10px] uppercase tracking-wider text-white/65">
                       <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">1-9</kbd> themes
                     </span>
                   </div>
@@ -1340,9 +1472,10 @@ export function SoundscapeStudio({
 
         {/* Toggle Controls Button -- visible whenever controls are hidden */}
         {!showControls && (
-          <button 
+          <button
+            ref={showControlsButtonRef}
             type="button" 
-            onClick={handleToggleControls} 
+            onClick={handleShowControls}
             aria-expanded={showControls} 
             aria-controls="soundscape-controls" 
             className="absolute bottom-4 right-4 z-30 px-4 py-2.5 min-h-[44px] glass bg-scope-cyan/10 hover:bg-scope-cyan/20 text-scope-cyan hover:text-scope-cyan/90 text-[10px] font-semibold uppercase tracking-wider rounded-xl border border-scope-cyan/30 hover:border-scope-cyan/50 shadow-lg shadow-scope-cyan/10 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black flex items-center gap-2"
@@ -1359,14 +1492,14 @@ export function SoundscapeStudio({
       {showControls && (
         <div id="soundscape-controls" className="relative z-30 flex-none glass-radiant border-t border-white/8">
           <div className="px-4 pt-2 flex justify-end">
-            <button type="button" onClick={handleToggleControls} aria-expanded={showControls} aria-controls="soundscape-controls" className="px-3 py-1.5 min-h-[36px] bg-white/5 hover:bg-white/8 text-white/45 hover:text-white/65 text-[9px] font-semibold uppercase tracking-wider rounded-lg border border-white/8 hover:border-white/15 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black">
+            <button ref={hideControlsButtonRef} type="button" onClick={handleHideControls} aria-expanded={showControls} aria-controls="soundscape-controls" className="px-3 py-2 min-h-[44px] bg-white/5 hover:bg-white/8 text-white/70 hover:text-white/90 text-[9px] font-semibold uppercase tracking-wider rounded-lg border border-white/8 hover:border-white/15 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black">
               Hide Controls
             </button>
           </div>
           <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:gap-5">
             {/* Music Source */}
             <div className="flex items-center gap-2.5 md:min-w-[280px]">
-              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Music</h3>
+              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/80 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Music</h3>
               <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
             </div>
 
@@ -1374,11 +1507,11 @@ export function SoundscapeStudio({
 
             {/* Theme Selector */}
             <div className="flex-1 flex items-center gap-2.5 min-w-0">
-              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/50 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Theme</h3>
+              <h3 className="text-[10px] uppercase tracking-wider text-scope-cyan/80 font-semibold whitespace-nowrap" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>Theme</h3>
               <div className="flex-1 min-w-0 space-y-1">
                 <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
                 {connectionState !== "connected" && (
-                  <p className="text-[9px] text-white/50 uppercase tracking-wider font-medium">
+                  <p className="text-[9px] text-white/70 uppercase tracking-wider font-medium">
                     Theme applies on next connect
                   </p>
                 )}
@@ -1392,8 +1525,23 @@ export function SoundscapeStudio({
               {/* Status summary - always visible */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
                 <span className="text-white/70 font-semibold">{activePipelineChain}</span>
-                <span className="text-white/50 font-medium capitalize">{denoisingProfileId} / {reactivityProfileId}</span>
-                {autoThemeEnabled && <span className="text-scope-cyan font-semibold">Auto: {autoThemeSectionBeats}b</span>}
+                <span className="text-white/70 font-medium capitalize">{denoisingProfileId} / {reactivityProfileId}</span>
+                <span
+                  className={`inline-flex items-center gap-1.5 font-semibold ${connectionSummary.textClass}`}
+                  title={statusMessage || undefined}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${connectionSummary.dotClass}`} aria-hidden="true" />
+                  {connectionSummary.label}
+                </span>
+                {autoThemeEnabled && (
+                  <span className="text-scope-cyan font-semibold">
+                    Auto: {autoThemeSectionBeats}b • {isPlaying && connectionState === "connected"
+                      ? "Running"
+                      : connectionState !== "connected"
+                        ? "Waiting for Scope"
+                        : "Waiting for audio"}
+                  </span>
+                )}
               </div>
               {/* Analysis meter - only when audio is active */}
               {isPlaying && (

@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-18 22:24 EST
+**Last Modified**: 2026-02-18 22:45 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -109,16 +109,18 @@ Copy `.env.example` to `.env.local`.
 | `SCOPE_API_URL` | Scope server base URL for server-side proxy target |
 | `NEXT_PUBLIC_SCOPE_API_URL` | Optional dev convenience fallback |
 | `SCOPE_PROXY_ENABLE` | Required in production to enable `/api/scope` proxy |
-| `SCOPE_PROXY_WRITE_TOKEN` | Optional additional server-side token required for write operations in production |
-| `SCOPE_PROXY_WRITE_TOKEN_HEADER` | Optional header name for write token (default: `x-scope-proxy-token`) |
+| `SCOPE_PROXY_REQUIRE_WRITE_TOKEN` | Write token enforcement in production (`true` by default) |
+| `SCOPE_PROXY_WRITE_TOKEN` | Server-side token used to authorize write operations |
+| `SCOPE_PROXY_WRITE_TOKEN_HEADER` | Header name for write token (default: `x-scope-proxy-token`) |
+| `SCOPE_PROXY_MAX_BODY_BYTES` | Maximum proxied write payload size in bytes (default: `524288`) |
 | `SCOPE_PROXY_TRUST_FORWARDED_IP` | Set `true` to trust forwarded IP headers for rate limiting (default: `false` in production) |
 | `SCOPE_PROXY_IP_HEADER` | Optional forwarded IP header to trust when `SCOPE_PROXY_TRUST_FORWARDED_IP=true` |
 
 ### Security Note
 
 The app defaults to `/api/scope` proxy routing. In production, proxying is disabled unless `SCOPE_PROXY_ENABLE=true`.
-When enabled, the proxy enforces strict endpoint/method allowlisting, same-origin `Origin` validation for writes, upstream safety checks, and request rate limiting.
-Production proxy safety expects `SCOPE_API_URL` to be set server-side. Optionally require `SCOPE_PROXY_WRITE_TOKEN` for additional write authorization hardening.
+When enabled, the proxy enforces strict endpoint/method allowlisting, same-origin `Origin` validation for writes, upstream safety checks, request-body limits, and request rate limiting.
+Production proxy safety expects `SCOPE_API_URL` to be set server-side. By default, production writes require `SCOPE_PROXY_WRITE_TOKEN` (`SCOPE_PROXY_REQUIRE_WRITE_TOKEN=true`).
 Deploy behind platform-level access controls for additional protection.
 
 ## Commands

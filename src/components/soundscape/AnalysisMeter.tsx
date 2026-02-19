@@ -40,7 +40,7 @@ function MeterBar({ label, value, color, showValue = true }: MeterBarProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between items-center text-[10px] uppercase tracking-wider px-0.5" id={`${meterId}-label`}>
-        <span className="text-white/50 font-medium">{label}</span>
+        <span className="text-white/65 font-medium">{label}</span>
         {showValue && <span className="text-white/70 tabular-nums font-semibold">{percentage}%</span>}
       </div>
       <div
@@ -77,7 +77,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         {/* Mini meters */}
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-scope-purple/70 font-semibold uppercase tracking-wide" aria-hidden="true">E</span>
+            <span className="text-[9px] text-scope-purple font-semibold uppercase tracking-wide" aria-hidden="true">E</span>
             <div
               className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
               role="progressbar"
@@ -97,7 +97,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
             <span className="sr-only">Energy {compactEnergy}%</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-scope-cyan/70 font-semibold uppercase tracking-wide" aria-hidden="true">B</span>
+            <span className="text-[9px] text-scope-cyan font-semibold uppercase tracking-wide" aria-hidden="true">B</span>
             <div
               className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
               role="progressbar"
@@ -133,7 +133,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
             aria-hidden="true"
           />
           <span className="text-sm text-white/80 font-semibold tabular-nums">{beat?.bpm ?? "--"}</span>
-          <span className="text-[9px] text-white/35 uppercase font-medium">bpm</span>
+          <span className="text-[9px] text-white/65 uppercase font-medium">bpm</span>
         </div>
       </div>
     );
@@ -143,7 +143,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
     <div className="space-y-6">
       {/* Audio Analysis Section */}
       <div className="space-y-4">
-        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
+        <h4 className="text-[10px] font-bold text-white/65 uppercase tracking-[0.25em] px-0.5">
           Spectral Data
         </h4>
         <div className="space-y-4">
@@ -167,7 +167,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
       {/* Beat Detection Section */}
       <div className="space-y-3">
-        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
+        <h4 className="text-[10px] font-bold text-white/65 uppercase tracking-[0.25em] px-0.5">
           Tempo
         </h4>
         <div
@@ -200,10 +200,10 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
               <span className="text-2xl font-bold text-white tracking-tight tabular-nums">
                 {beat?.bpm ?? "--"}
               </span>
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">BPM</span>
+              <span className="text-[10px] font-bold text-white/65 uppercase tracking-widest">BPM</span>
             </div>
             {beat?.confidence !== undefined && beat.confidence > 0 && (
-              <div className="text-[10px] font-medium text-white/35 uppercase tracking-wider">
+              <div className="text-[10px] font-medium text-white/60 uppercase tracking-wider">
                 Confidence: {Math.round(beat.confidence * 100)}%
               </div>
             )}
@@ -214,7 +214,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
       {/* Scope Parameters Section */}
       {parameters && (
         <div className="space-y-4">
-          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-[0.25em] px-0.5">
+          <h4 className="text-[10px] font-bold text-white/65 uppercase tracking-[0.25em] px-0.5">
             Engine Output
           </h4>
           <MeterBar
@@ -223,7 +223,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
             color="#F59E0B"
           />
           <div className="flex justify-between items-center text-[10px] px-0.5">
-            <span className="text-white/40 uppercase tracking-wider font-medium">Denoising Steps</span>
+            <span className="text-white/65 uppercase tracking-wider font-medium">Denoising Steps</span>
             <span className="text-white/60 tabular-nums font-mono text-[11px]">
               [{parameters.denoisingSteps.join(", ")}]
             </span>
@@ -234,8 +234,8 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
       {/* No Data State */}
       {!analysis && (
         <div className="text-center py-10 bg-white/[0.02] rounded-xl border border-dashed border-white/8">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/30">Awaiting Audio Input</p>
-          <p className="text-[9px] text-white/20 mt-1">Play a track or enable microphone</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/65">Awaiting Audio Input</p>
+          <p className="text-[9px] text-white/55 mt-1">Play a track or enable microphone</p>
         </div>
       )}
     </div>

@@ -100,6 +100,8 @@ export interface UseScopeConnectionOptions {
   shouldReconnect?: (reason: string) => boolean;
   /** Timeout waiting for first remote video track (ms) */
   videoTrackTimeoutMs?: number;
+  /** Grace period before treating WebRTC "disconnected" as a real disconnect (ms) */
+  disconnectGracePeriodMs?: number;
 }
 
 export interface ScopeConnectOverrides {
@@ -136,6 +138,16 @@ export interface UseScopeConnectionReturn {
   retry: () => void;
 }
 
+function normalizePipelineIds(pipelineIds: string[]): string[] {
+  return pipelineIds.map((id) => id.trim()).filter((id) => id.length > 0);
+}
+
+function createPipelineSignature(pipelineIds: string[], loadParams: PipelineLoadParams): string {
+  const normalizedIds = normalizePipelineIds(pipelineIds);
+  const loadParamsJson = JSON.stringify(loadParams ?? {});
+  return `${normalizedIds.join("::")}::${loadParamsJson}`;
+}
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
@@ -162,6 +174,7 @@ export function useScopeConnection(
     reconnectOnStreamStopped = false,
     shouldReconnect,
     videoTrackTimeoutMs = 15000,
+    disconnectGracePeriodMs = 1500,
   } = options;
 
   // State
@@ -176,12 +189,15 @@ export function useScopeConnection(
   const sessionDisposerRef = useRef<(() => void) | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoTrackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disconnectGraceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<(overrides?: ScopeConnectOverrides) => Promise<void>>(async () => {});
   const lastConnectOverridesRef = useRef<ScopeConnectOverrides>({});
   const connectAttemptRef = useRef(0);
   const isConnectingRef = useRef(false);
   const isManualDisconnectRef = useRef(false);
   const isRecoveringRef = useRef(false);
+  const preparedPipelineSignatureRef = useRef<string | null>(null);
+  const shouldForcePipelinePrepareRef = useRef(false);
 
   // Clear reconnect timer
   const clearReconnectTimer = useCallback(() => {
@@ -198,10 +214,18 @@ export function useScopeConnection(
     }
   }, []);
 
+  const clearDisconnectGraceTimer = useCallback(() => {
+    if (disconnectGraceTimeoutRef.current) {
+      clearTimeout(disconnectGraceTimeoutRef.current);
+      disconnectGraceTimeoutRef.current = null;
+    }
+  }, []);
+
   // Cleanup connection resources
   const cleanup = useCallback(() => {
     clearReconnectTimer();
     clearVideoTrackTimeout();
+    clearDisconnectGraceTimer();
 
     const hadDataChannel = Boolean(dataChannelRef.current);
     if (dataChannelRef.current) {
@@ -231,20 +255,35 @@ export function useScopeConnection(
     if (hadDataChannel) {
       onDataChannelClose?.();
     }
-  }, [clearReconnectTimer, clearVideoTrackTimeout, onDataChannelClose]);
+  }, [clearReconnectTimer, clearVideoTrackTimeout, clearDisconnectGraceTimer, onDataChannelClose]);
 
-  // Disconnect
-  const disconnect = useCallback(
-    (preserveError = false) => {
+  const completeDisconnect = useCallback(
+    ({
+      reason,
+      preserveError = false,
+      notifyDisconnect = true,
+      manual = false,
+      nextState = "disconnected",
+      nextStatusMessage = "",
+    }: {
+      reason?: string;
+      preserveError?: boolean;
+      notifyDisconnect?: boolean;
+      manual?: boolean;
+      nextState?: ConnectionState;
+      nextStatusMessage?: string;
+    }) => {
       connectAttemptRef.current += 1;
-      isManualDisconnectRef.current = true;
+      isManualDisconnectRef.current = manual;
       isRecoveringRef.current = false;
       cleanup();
-      onDisconnect?.("manual disconnect");
+      if (notifyDisconnect) {
+        onDisconnect?.(reason);
+      }
       setReconnectAttempts(0);
       isConnectingRef.current = false;
-      setConnectionState("disconnected");
-      setStatusMessage("");
+      setConnectionState(nextState);
+      setStatusMessage(nextStatusMessage);
       if (!preserveError) {
         setError(null);
       }
@@ -252,9 +291,24 @@ export function useScopeConnection(
     [cleanup, onDisconnect]
   );
 
+  // Disconnect
+  const disconnect = useCallback(
+    (preserveError = false) => {
+      completeDisconnect({
+        reason: "manual disconnect",
+        preserveError,
+        manual: true,
+        nextState: "disconnected",
+        nextStatusMessage: "",
+      });
+    },
+    [completeDisconnect]
+  );
+
   // Handle connection lost - attempt reconnection
   const handleConnectionLost = useCallback(
     (reason: string) => {
+      clearDisconnectGraceTimer();
       if (isManualDisconnectRef.current) {
         isManualDisconnectRef.current = false;
         return;
@@ -299,6 +353,7 @@ export function useScopeConnection(
     },
     [
       cleanup,
+      clearDisconnectGraceTimer,
       maxReconnectAttempts,
       reconnectBaseDelay,
       clearReconnectTimer,
@@ -314,6 +369,10 @@ export function useScopeConnection(
       return;
     }
 
+    if (peerConnectionRef.current || dataChannelRef.current || sessionDisposerRef.current) {
+      cleanup();
+    }
+
     const hasOverrides = Object.keys(overrides).length > 0;
     if (hasOverrides) {
       lastConnectOverridesRef.current = { ...overrides };
@@ -324,14 +383,17 @@ export function useScopeConnection(
     connectAttemptRef.current = connectAttemptId;
     const isCurrentAttempt = () =>
       connectAttemptRef.current === connectAttemptId && !isManualDisconnectRef.current;
+    const isReconnectAttempt = isRecoveringRef.current;
 
     isManualDisconnectRef.current = false;
     isRecoveringRef.current = false;
     isConnectingRef.current = true;
     clearReconnectTimer();
     clearVideoTrackTimeout();
+    clearDisconnectGraceTimer();
     setConnectionState("connecting");
     setError(null);
+    let usedReconnectFastPath = false;
 
     try {
       let hasReceivedVideoTrack = false;
@@ -358,27 +420,46 @@ export function useScopeConnection(
                 ? [pipelineId]
                 : [];
 
-      if (requestedPipelineIds.length === 0) {
+      const normalizedRequestedPipelineIds = normalizePipelineIds(requestedPipelineIds);
+
+      if (normalizedRequestedPipelineIds.length === 0) {
         throw createScopeError("PIPELINE_LOAD_FAILED", "No pipeline selected");
       }
 
       const resolvedLoadParams = activeOverrides.loadParams ?? loadParams ?? {};
+      const pipelineSignature = createPipelineSignature(
+        normalizedRequestedPipelineIds,
+        resolvedLoadParams
+      );
+      const canUseReconnectFastPath =
+        isReconnectAttempt &&
+        !shouldForcePipelinePrepareRef.current &&
+        preparedPipelineSignatureRef.current === pipelineSignature;
 
-      try {
-        await prepareScopePipeline({
-          scopeClient,
-          pipelineIds: requestedPipelineIds,
-          loadParams: resolvedLoadParams,
-          onStatus: setStatusMessage,
-        });
-        if (!isCurrentAttempt()) {
-          return;
+      if (canUseReconnectFastPath) {
+        usedReconnectFastPath = true;
+        setStatusMessage("Reusing loaded pipeline...");
+      } else {
+        try {
+          await prepareScopePipeline({
+            scopeClient,
+            pipelineIds: normalizedRequestedPipelineIds,
+            loadParams: resolvedLoadParams,
+            onStatus: setStatusMessage,
+          });
+          if (!isCurrentAttempt()) {
+            return;
+          }
+          preparedPipelineSignatureRef.current = pipelineSignature;
+          shouldForcePipelinePrepareRef.current = false;
+        } catch (pipelineError) {
+          preparedPipelineSignatureRef.current = null;
+          shouldForcePipelinePrepareRef.current = false;
+          throw createScopeError(
+            "PIPELINE_LOAD_FAILED",
+            pipelineError instanceof Error ? pipelineError.message : "Pipeline failed to load"
+          );
         }
-      } catch (pipelineError) {
-        throw createScopeError(
-          "PIPELINE_LOAD_FAILED",
-          pipelineError instanceof Error ? pipelineError.message : "Pipeline failed to load"
-        );
       }
 
       // Step 3: Create WebRTC session
@@ -405,6 +486,9 @@ export function useScopeConnection(
           const stream = event.streams[0] ?? new MediaStream([event.track]);
           if (stream) {
             hasReceivedVideoTrack = true;
+            isRecoveringRef.current = false;
+            shouldForcePipelinePrepareRef.current = false;
+            clearDisconnectGraceTimer();
             clearVideoTrackTimeout();
             onStream?.(stream);
             setStatusMessage("Connected");
@@ -413,10 +497,40 @@ export function useScopeConnection(
           }
         },
         onConnectionStateChange: (connection) => {
-          if (
-            connection.connectionState === "failed" ||
-            connection.connectionState === "disconnected"
-          ) {
+          if (!isCurrentAttempt()) {
+            return;
+          }
+
+          if (connection.connectionState === "connected") {
+            clearDisconnectGraceTimer();
+            return;
+          }
+
+          if (connection.connectionState === "disconnected") {
+            if (disconnectGraceTimeoutRef.current) {
+              return;
+            }
+
+            disconnectGraceTimeoutRef.current = setTimeout(() => {
+              disconnectGraceTimeoutRef.current = null;
+              if (!isCurrentAttempt()) {
+                return;
+              }
+
+              const currentState = connection.connectionState;
+              if (
+                currentState === "disconnected" ||
+                currentState === "failed" ||
+                currentState === "closed"
+              ) {
+                handleConnectionLost("Connection lost");
+              }
+            }, disconnectGracePeriodMs);
+            return;
+          }
+
+          if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+            clearDisconnectGraceTimer();
             handleConnectionLost("Connection lost");
           }
         },
@@ -446,7 +560,13 @@ export function useScopeConnection(
                 if (reconnectOnStreamStopped) {
                   handleConnectionLost(streamMessage);
                 } else {
-                  disconnect(true);
+                  completeDisconnect({
+                    reason: streamMessage,
+                    preserveError: true,
+                    manual: false,
+                    nextState: "failed",
+                    nextStatusMessage: "Connection stopped",
+                  });
                 }
                 return;
               }
@@ -498,6 +618,7 @@ export function useScopeConnection(
       if (!isCurrentAttempt()) {
         return;
       }
+
       const scopeError =
         err && typeof err === "object" && "code" in err
           ? (err as ScopeError)
@@ -505,6 +626,15 @@ export function useScopeConnection(
               "CONNECTION_FAILED",
               err instanceof Error ? err.message : "Connection failed"
             );
+
+      if (isReconnectAttempt) {
+        if (usedReconnectFastPath) {
+          shouldForcePipelinePrepareRef.current = true;
+        }
+        handleConnectionLost(scopeError.message);
+        return;
+      }
+
       setError(scopeError);
       setConnectionState("failed");
       setStatusMessage("Connection failed");
@@ -528,13 +658,15 @@ export function useScopeConnection(
     onDataChannelMessage,
     onDisconnect,
     handleConnectionLost,
-    disconnect,
+    completeDisconnect,
     cleanup,
     clearReconnectTimer,
     clearVideoTrackTimeout,
+    clearDisconnectGraceTimer,
     reconnectOnDataChannelClose,
     reconnectOnStreamStopped,
     videoTrackTimeoutMs,
+    disconnectGracePeriodMs,
   ]);
 
   useEffect(() => {
