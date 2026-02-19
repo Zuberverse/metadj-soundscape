@@ -1,6 +1,6 @@
 # MetaDJ Soundscape - Public Capability Spec
 
-**Last Modified**: 2026-02-18 10:19 EST
+**Last Modified**: 2026-02-18 22:24 EST
 **Status**: Active
 **Version**: 1.1.0-candidate
 
@@ -47,6 +47,7 @@ MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Sco
 - Test suite: pass
 - Production build: pass
 - Prod dependency audit: no known vulnerabilities
+- Full dependency audit: track dev-tooling advisories in CI/security triage
 
 ## Setup
 

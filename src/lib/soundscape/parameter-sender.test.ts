@@ -148,4 +148,15 @@ describe("ParameterSender", () => {
     // No sends after channel removal
     expect(channel.send).not.toHaveBeenCalled();
   });
+
+  it("disposes sender resources", () => {
+    const channel = createMockDataChannel("open");
+    sender.setDataChannel(channel);
+    sender.send(createTestParams());
+
+    sender.dispose();
+    vi.advanceTimersByTime(50);
+
+    expect(channel.send).not.toHaveBeenCalled();
+  });
 });

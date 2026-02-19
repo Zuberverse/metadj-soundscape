@@ -121,8 +121,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         {/* BPM */}
         <div
           className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/8"
-          role="status"
-          aria-live="polite"
+          role="group"
           aria-label={`Tempo: ${beat?.bpm ?? "unknown"} BPM`}
         >
           <div
@@ -173,8 +172,7 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
         </h4>
         <div
           className="flex items-center gap-4 bg-white/[0.03] p-4 rounded-xl border border-white/8"
-          role="status"
-          aria-live="polite"
+          role="group"
           aria-label={`Tempo: ${beat?.bpm ?? "unknown"} BPM, confidence ${beat?.confidence ? Math.round(beat.confidence * 100) : 0}%`}
         >
           {/* Beat Indicator */}

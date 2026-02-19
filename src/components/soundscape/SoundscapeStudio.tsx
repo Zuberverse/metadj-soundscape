@@ -10,7 +10,9 @@ import {
   useSoundscape,
   DEFAULT_ASPECT_RATIO,
   DENOISING_PROFILES,
+  MAX_RECONNECT_ATTEMPTS,
   REACTIVITY_PROFILES,
+  RECONNECT_BASE_DELAY_MS,
   type DenoisingProfileId,
   type ReactivityProfileId,
 } from "@/lib/soundscape";
@@ -38,9 +40,6 @@ const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
   source: "unknown",
 };
 
-// Reconnection configuration
-const MAX_RECONNECT_ATTEMPTS = 3;
-const RECONNECT_DELAY_MS = 2000;
 const WARNING_DROPPED_FRAME_PERCENT = 5;
 const CRITICAL_DROPPED_FRAME_PERCENT = 12;
 const WARNING_FPS_THRESHOLD = 10;
@@ -134,6 +133,8 @@ interface SoundscapeStudioProps {
   onControlsToggle?: () => void;
   /** Callback to register the disconnect handler with the parent */
   onRegisterDisconnect?: (disconnectFn: () => void) => void;
+  /** Whether global hotkeys should be active */
+  hotkeysEnabled?: boolean;
 }
 
 export function SoundscapeStudio({
@@ -142,6 +143,7 @@ export function SoundscapeStudio({
   showControls: showControlsProp,
   onControlsToggle,
   onRegisterDisconnect,
+  hotkeysEnabled = true,
 }: SoundscapeStudioProps) {
   // Scope connection state
   const [scopeStream, setScopeStream] = useState<MediaStream | null>(null);
@@ -680,6 +682,15 @@ export function SoundscapeStudio({
     setIsRecording(false);
   }, [setDataChannel, stopPlaybackForDisconnect]);
 
+  const handleScopeInterrupted = useCallback(() => {
+    setScopeStream(null);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
   const {
     connectionState,
     statusMessage,
@@ -697,7 +708,7 @@ export function SoundscapeStudio({
     loadParams,
     initialParameters,
     maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
-    reconnectBaseDelay: RECONNECT_DELAY_MS,
+    reconnectBaseDelay: RECONNECT_BASE_DELAY_MS,
     setupPeerConnection: (connection) => {
       connection.addTransceiver("video");
     },
@@ -714,6 +725,7 @@ export function SoundscapeStudio({
       setDataChannel(null);
       stopAmbient();
     },
+    onConnectionInterrupted: handleScopeInterrupted,
     onDisconnect: handleScopeDisconnect,
     reconnectOnDataChannelClose: true,
     reconnectOnStreamStopped: true,
@@ -923,14 +935,24 @@ export function SoundscapeStudio({
   }, [isRecording]);
 
   useEffect(() => {
+    if (!hotkeysEnabled) {
+      return;
+    }
+
     const handleGlobalHotkeys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const isTextInput =
         !!target &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT" || target.isContentEditable);
+      const isInteractiveControl =
+        !!target &&
+        (target.tagName === "BUTTON" ||
+          target.tagName === "A" ||
+          target.closest('[role="dialog"]') !== null);
 
-      if (isTextInput || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (isTextInput || isInteractiveControl || event.metaKey || event.ctrlKey || event.altKey) return;
 
       if (event.key === " ") {
         event.preventDefault();
@@ -977,7 +999,7 @@ export function SoundscapeStudio({
 
     window.addEventListener("keydown", handleGlobalHotkeys);
     return () => window.removeEventListener("keydown", handleGlobalHotkeys);
-  }, [currentTheme?.id, presetThemes, setTheme]);
+  }, [currentTheme?.id, hotkeysEnabled, presetThemes, setTheme]);
 
   useEffect(() => {
     if (!autoThemeEnabled || !isPlaying || !scopeStream || !soundscapeState.analysis) {
@@ -1056,9 +1078,9 @@ export function SoundscapeStudio({
                   {recordedClipUrl && (
                     <a href={recordedClipUrl} download={`soundscape-clip-${Date.now()}.webm`} className="rounded-lg border border-scope-cyan/25 bg-scope-cyan/10 px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold text-scope-cyan hover:bg-scope-cyan/20 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Download</a>
                   )}
-                  {recordedClipSeconds !== null && <span className="text-[9px] text-white/35 ml-1">{recordedClipSeconds.toFixed(1)}s</span>}
+                  {recordedClipSeconds !== null && <span className="text-[9px] text-white/55 ml-1">{recordedClipSeconds.toFixed(1)}s</span>}
                 </div>
-                {recordingError && <p className="text-[9px] text-amber-300/80 mt-1">{recordingError}</p>}
+                {recordingError && <p className="text-[9px] text-amber-300/90 mt-1" role="alert" aria-live="assertive">{recordingError}</p>}
               </div>
             )}
 
@@ -1136,9 +1158,9 @@ export function SoundscapeStudio({
                   <h2 className="text-xl sm:text-2xl text-white mb-1.5 tracking-wide bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta bg-clip-text text-transparent" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
                     Soundscape
                   </h2>
-                  <p className="text-white/45 mb-4 text-sm">Real-time AI visuals from your audio</p>
+                  <p className="text-white/60 mb-4 text-sm">Real-time AI visuals from your audio</p>
                   <div>
-                    <p className="text-[10px] text-white/35 uppercase tracking-[0.2em] mb-2 font-semibold">Output Format</p>
+                    <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] mb-2 font-semibold">Output Format</p>
                     <div className="flex justify-center"><AspectRatioToggle current={aspectRatio} onChange={setAspectRatio} disabled={false} /></div>
                   </div>
                 </div>
@@ -1159,7 +1181,7 @@ export function SoundscapeStudio({
                         </span>
                       }
                     >
-                      <div className="space-y-3">
+                      <div className="space-y-3" aria-busy={isDiagnosticsLoading}>
                         <div className="flex items-center justify-end">
                           <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading || isConnecting} className="px-2.5 py-1.5 text-[9px] uppercase tracking-wider font-semibold rounded-lg bg-white/5 text-white/60 border border-white/10 hover:bg-white/8 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">
                             {isDiagnosticsLoading ? "Checking..." : "Refresh"}
@@ -1191,7 +1213,7 @@ export function SoundscapeStudio({
                           </div>
                         )}
                         {diagnosticsError && <p className="text-[10px] text-amber-300/80 font-medium" role="alert">{diagnosticsError}</p>}
-                        {lastScopeCheckAt && <p className="text-[10px] text-white/25">Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}</p>}
+                        {lastScopeCheckAt && <p className="text-[10px] text-white/45">Last check: {new Date(lastScopeCheckAt).toLocaleTimeString()}</p>}
                       </div>
                     </CollapsibleSection>
 
@@ -1298,7 +1320,7 @@ export function SoundscapeStudio({
                     <span className="text-[10px] uppercase tracking-wider text-white/40">
                       <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">Space</kbd> play/pause
                     </span>
-                    <span className="text-white/20">|</span>
+                    <span className="text-white/35">|</span>
                     <span className="text-[10px] uppercase tracking-wider text-white/40">
                       <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60 font-mono text-[9px]">1-9</kbd> themes
                     </span>
@@ -1309,7 +1331,7 @@ export function SoundscapeStudio({
                   {!canConnect && !isConnecting && connectBlockedReason && (
                     <p className="text-[10px] text-amber-200/80 mt-2" role="status" aria-live="polite">{connectBlockedReason}</p>
                   )}
-                  <p className="text-[10px] text-white/45 mt-2 font-medium">{activePipelineChain}</p>
+                  <p className="text-[10px] text-white/60 mt-2 font-medium">{activePipelineChain}</p>
                 </div>
               </div>
             </div>

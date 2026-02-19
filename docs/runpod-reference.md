@@ -1,6 +1,6 @@
 # RunPod Reference
 
-**Last Modified**: 2026-02-10 11:51 EST
+**Last Modified**: 2026-02-10 11:51 ET
 **Status**: Project Delta
 
 ## Purpose

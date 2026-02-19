@@ -1,6 +1,6 @@
 # API Notes
 
-**Last Modified**: 2026-01-10 15:37 EST
+**Last Modified**: 2026-01-10 15:37 ET
 
 Central index for Scope API integration notes. Canonical API docs live in the external references hub and official Scope docs.
 

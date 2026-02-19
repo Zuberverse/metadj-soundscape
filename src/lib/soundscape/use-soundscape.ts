@@ -293,6 +293,15 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     [debug]
   );
 
+  const disposeParameterSender = useCallback(() => {
+    if (!parameterSenderRef.current) {
+      return;
+    }
+
+    parameterSenderRef.current.dispose();
+    parameterSenderRef.current = null;
+  }, []);
+
   const setDenoisingProfile = useCallback(
     (profileId: DenoisingProfileId) => {
       if (!DENOISING_PROFILES[profileId]) {
@@ -475,6 +484,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       analyzerRef.current.destroy();
       analyzerRef.current = null;
     }
+    disposeParameterSender();
     audioElementRef.current = null;
     lastUiUpdateRef.current = 0;
     parametersRef.current = null;
@@ -486,7 +496,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       stats: null,
     }));
     log("Audio disconnected");
-  }, [log]);
+  }, [disposeParameterSender, log]);
 
   // ============================================================================
   // Scope Connection

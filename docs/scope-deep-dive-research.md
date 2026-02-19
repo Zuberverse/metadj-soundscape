@@ -1,6 +1,6 @@
 # Daydream Scope Platform: Deep Dive Research
 
-**Last Modified**: 2026-02-12 20:29 EST
+**Last Modified**: 2026-02-12 20:29 ET
 **Purpose**: Comprehensive intelligence on Scope API, pipelines, WebRTC protocol, and integration opportunities for MetaDJ Soundscape.
 **Sources**: DeepWiki analysis of `daydreamlive/scope` repo, official GitHub docs (`server.md`, `vace.md`, `lora.md`, `vae.md`), existing Soundscape codebase.
 

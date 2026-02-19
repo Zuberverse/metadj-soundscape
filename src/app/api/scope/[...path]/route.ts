@@ -5,14 +5,22 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+const SERVER_SCOPE_API_URL = process.env.SCOPE_API_URL?.trim();
+const PUBLIC_SCOPE_API_URL = process.env.NEXT_PUBLIC_SCOPE_API_URL?.trim();
 const SCOPE_API_URL = (
-  process.env.SCOPE_API_URL ||
-  process.env.NEXT_PUBLIC_SCOPE_API_URL ||
+  SERVER_SCOPE_API_URL ||
+  PUBLIC_SCOPE_API_URL ||
   "http://localhost:8000"
 ).replace(/\/$/, "");
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const HEADER_ALLOWLIST = ["content-type", "accept", "authorization"];
+const HEADER_ALLOWLIST = ["content-type", "accept"];
+const WRITE_AUTH_TOKEN = process.env.SCOPE_PROXY_WRITE_TOKEN?.trim() || "";
+const WRITE_AUTH_HEADER = (process.env.SCOPE_PROXY_WRITE_TOKEN_HEADER || "x-scope-proxy-token")
+  .trim()
+  .toLowerCase();
+const TRUST_FORWARDED_IP = !IS_PRODUCTION || process.env.SCOPE_PROXY_TRUST_FORWARDED_IP === "true";
+const FORWARDED_IP_HEADER = process.env.SCOPE_PROXY_IP_HEADER?.trim().toLowerCase();
 
 /**
  * Proxy Security Configuration
@@ -54,7 +62,9 @@ const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_READS = 240;
 const RATE_LIMIT_MAX_WRITES = 90;
+const RATE_LIMIT_MAX_KEYS = 2000;
 const rateLimitStore = new Map<string, { windowStart: number; count: number }>();
+let lastRateLimitSweep = 0;
 
 function normalizePathSegments(path: string[]): string[] | null {
   const normalized: string[] = [];
@@ -107,6 +117,11 @@ function isUpstreamConfigSafe(): boolean {
     return true;
   }
 
+  // In production, enforce server-only configuration to avoid relying on public client env fallbacks.
+  if (!SERVER_SCOPE_API_URL) {
+    return false;
+  }
+
   if (parsed.protocol === "https:") {
     return true;
   }
@@ -120,32 +135,101 @@ function isTrustedWriteOrigin(request: NextRequest): boolean {
   }
 
   const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      return new URL(origin).origin === request.nextUrl.origin;
-    } catch {
-      return false;
-    }
+  if (!origin) {
+    return false;
+  }
+  try {
+    return new URL(origin).origin === request.nextUrl.origin;
+  } catch {
+    return false;
+  }
+}
+
+function safeStringEqual(left: string, right: string): boolean {
+  if (left.length !== right.length) {
+    return false;
   }
 
-  // Browsers include this for same-origin fetches; reject unknown non-browser callers.
-  return request.headers.get("sec-fetch-site") === "same-origin";
+  let diff = 0;
+  for (let i = 0; i < left.length; i += 1) {
+    diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function isWriteAuthorized(request: NextRequest): boolean {
+  if (!IS_PRODUCTION || !WRITE_AUTH_TOKEN) {
+    return true;
+  }
+
+  const providedToken = request.headers.get(WRITE_AUTH_HEADER);
+  if (!providedToken) {
+    return false;
+  }
+  return safeStringEqual(providedToken.trim(), WRITE_AUTH_TOKEN);
 }
 
 function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
+  const requestWithIp = request as NextRequest & { ip?: string };
+  if (requestWithIp.ip && requestWithIp.ip.trim()) {
+    return requestWithIp.ip.trim();
   }
 
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
+  if (TRUST_FORWARDED_IP) {
+    const headerNames = FORWARDED_IP_HEADER
+      ? [FORWARDED_IP_HEADER]
+      : ["x-forwarded-for", "x-real-ip"];
+    for (const headerName of headerNames) {
+      const forwarded = request.headers.get(headerName);
+      if (forwarded) {
+        const candidate = forwarded.split(",")[0]?.trim();
+        if (candidate) {
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return "unknown";
+}
+
+function pruneRateLimitStore(now: number): void {
+  if (
+    now - lastRateLimitSweep < RATE_LIMIT_WINDOW_MS / 2 &&
+    rateLimitStore.size < RATE_LIMIT_MAX_KEYS
+  ) {
+    return;
+  }
+
+  lastRateLimitSweep = now;
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+      rateLimitStore.delete(key);
+    }
+  }
+
+  if (rateLimitStore.size <= RATE_LIMIT_MAX_KEYS) {
+    return;
+  }
+
+  const excess = rateLimitStore.size - RATE_LIMIT_MAX_KEYS;
+  const oldestFirst = Array.from(rateLimitStore.entries())
+    .sort((a, b) => a[1].windowStart - b[1].windowStart);
+  for (let i = 0; i < excess; i += 1) {
+    const entry = oldestFirst[i];
+    if (entry) {
+      rateLimitStore.delete(entry[0]);
+    }
+  }
 }
 
 function isRateLimited(request: NextRequest): boolean {
   const method = request.method.toUpperCase();
   const limit = SAFE_METHODS.has(method) ? RATE_LIMIT_MAX_READS : RATE_LIMIT_MAX_WRITES;
-  const key = `${getClientIp(request)}:${method}`;
   const now = Date.now();
+  pruneRateLimitStore(now);
+
+  const key = `${getClientIp(request)}:${method}`;
   const entry = rateLimitStore.get(key);
 
   if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
@@ -207,7 +291,7 @@ async function proxyRequest(
 
   if (!isUpstreamConfigSafe()) {
     return NextResponse.json(
-      { error: "Invalid or insecure SCOPE_API_URL configuration for current environment" },
+      { error: "Invalid or insecure Scope proxy upstream configuration for current environment" },
       { status: 500 }
     );
   }
@@ -223,8 +307,18 @@ async function proxyRequest(
 
   if (WRITE_METHODS.has(method) && !isTrustedWriteOrigin(request)) {
     return NextResponse.json(
-      { error: "Write operations require same-origin browser context" },
+      { error: "Write operations require a same-origin Origin header" },
       { status: 403 }
+    );
+  }
+
+  if (WRITE_METHODS.has(method) && !isWriteAuthorized(request)) {
+    return NextResponse.json(
+      {
+        error:
+          "Write operation unauthorized for Scope proxy. Configure SCOPE_PROXY_WRITE_TOKEN and send it via the configured header.",
+      },
+      { status: 401 }
     );
   }
 

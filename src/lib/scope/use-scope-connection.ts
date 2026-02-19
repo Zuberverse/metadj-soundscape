@@ -84,7 +84,9 @@ export interface UseScopeConnectionOptions {
   onDataChannelClose?: () => void;
   /** Callback when data channel receives a message */
   onDataChannelMessage?: (event: MessageEvent) => void;
-  /** Callback when connection is cleaned up */
+  /** Callback when connection is interrupted and reconnection will be attempted */
+  onConnectionInterrupted?: (reason?: string) => void;
+  /** Callback when connection is fully disconnected (manual or terminal failure) */
   onDisconnect?: (reason?: string) => void;
   /** Custom peer connection setup */
   setupPeerConnection?: (pc: RTCPeerConnection) => void;
@@ -152,6 +154,7 @@ export function useScopeConnection(
     onDataChannelOpen,
     onDataChannelClose,
     onDataChannelMessage,
+    onConnectionInterrupted,
     onDisconnect,
     setupPeerConnection,
     initialParameters,
@@ -170,6 +173,7 @@ export function useScopeConnection(
   // Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
+  const sessionDisposerRef = useRef<(() => void) | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoTrackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<(overrides?: ScopeConnectOverrides) => Promise<void>>(async () => {});
@@ -199,22 +203,35 @@ export function useScopeConnection(
     clearReconnectTimer();
     clearVideoTrackTimeout();
 
+    const hadDataChannel = Boolean(dataChannelRef.current);
     if (dataChannelRef.current) {
       dataChannelRef.current.onopen = null;
       dataChannelRef.current.onclose = null;
       dataChannelRef.current.onmessage = null;
-      dataChannelRef.current.close();
-      dataChannelRef.current = null;
     }
 
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.onicecandidate = null;
-      peerConnectionRef.current.ontrack = null;
-      peerConnectionRef.current.onconnectionstatechange = null;
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+    if (sessionDisposerRef.current) {
+      sessionDisposerRef.current();
+      sessionDisposerRef.current = null;
+    } else {
+      if (dataChannelRef.current && dataChannelRef.current.readyState !== "closed") {
+        dataChannelRef.current.close();
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.onicecandidate = null;
+        peerConnectionRef.current.ontrack = null;
+        peerConnectionRef.current.onconnectionstatechange = null;
+        peerConnectionRef.current.close();
+      }
     }
-  }, [clearReconnectTimer, clearVideoTrackTimeout]);
+
+    dataChannelRef.current = null;
+    peerConnectionRef.current = null;
+
+    if (hadDataChannel) {
+      onDataChannelClose?.();
+    }
+  }, [clearReconnectTimer, clearVideoTrackTimeout, onDataChannelClose]);
 
   // Disconnect
   const disconnect = useCallback(
@@ -256,7 +273,7 @@ export function useScopeConnection(
 
       isRecoveringRef.current = true;
       cleanup();
-      onDisconnect?.(reason);
+      onConnectionInterrupted?.(reason);
       setReconnectAttempts((prev) => {
         const next = prev + 1;
         if (next > maxReconnectAttempts) {
@@ -264,6 +281,7 @@ export function useScopeConnection(
           setConnectionState("failed");
           setStatusMessage("Connection failed");
           isRecoveringRef.current = false;
+          onDisconnect?.(`${reason}. Max retries exceeded.`);
           return prev;
         }
 
@@ -279,7 +297,15 @@ export function useScopeConnection(
         return next;
       });
     },
-    [cleanup, maxReconnectAttempts, reconnectBaseDelay, clearReconnectTimer, shouldReconnect, onDisconnect]
+    [
+      cleanup,
+      maxReconnectAttempts,
+      reconnectBaseDelay,
+      clearReconnectTimer,
+      shouldReconnect,
+      onConnectionInterrupted,
+      onDisconnect,
+    ]
   );
 
   // Connect to Scope
@@ -361,7 +387,7 @@ export function useScopeConnection(
       const resolvedInitialParameters =
         activeOverrides.initialParameters ?? initialParameters;
 
-      const { pc, dataChannel } = await createScopeWebRtcSession({
+      const { pc, dataChannel, dispose } = await createScopeWebRtcSession({
         scopeClient,
         initialParameters: resolvedInitialParameters,
         setupPeerConnection: (connection) => {
@@ -436,19 +462,24 @@ export function useScopeConnection(
       });
 
       if (!isCurrentAttempt()) {
-        pc.onicecandidate = null;
-        pc.ontrack = null;
-        pc.onconnectionstatechange = null;
-        if (dataChannel && dataChannel.readyState !== "closed") {
-          dataChannel.onopen = null;
-          dataChannel.onclose = null;
-          dataChannel.onmessage = null;
-          dataChannel.close();
+        if (dispose) {
+          dispose();
+        } else {
+          pc.onicecandidate = null;
+          pc.ontrack = null;
+          pc.onconnectionstatechange = null;
+          if (dataChannel && dataChannel.readyState !== "closed") {
+            dataChannel.onopen = null;
+            dataChannel.onclose = null;
+            dataChannel.onmessage = null;
+            dataChannel.close();
+          }
+          pc.close();
         }
-        pc.close();
         return;
       }
 
+      sessionDisposerRef.current = dispose ?? null;
       peerConnectionRef.current = pc;
       dataChannelRef.current = dataChannel ?? null;
       setReconnectAttempts(0);

@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-18 10:19 EST
+**Last Modified**: 2026-02-18 22:24 EST
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -42,6 +42,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope proxy regression tests for production same-origin write enforcement.
 
 ### Changed
+- Scope proxy write hardening now requires a strict same-origin `Origin` header in production (no `sec-fetch-site` fallback), supports optional write token enforcement (`SCOPE_PROXY_WRITE_TOKEN`), and no longer forwards client `Authorization` headers upstream.
+- Scope proxy production safety now requires a server-side `SCOPE_API_URL` (prevents relying on `NEXT_PUBLIC_SCOPE_API_URL` fallback in production), with clearer error messaging for invalid upstream config.
+- Scope proxy rate limiting now supports forwarded-IP trust controls (`SCOPE_PROXY_TRUST_FORWARDED_IP`, optional `SCOPE_PROXY_IP_HEADER`) and bounded in-memory eviction/cleanup to prevent unbounded key growth.
+- Connection lifecycle now distinguishes interruption vs terminal disconnect: transient reconnects preserve playback intent while still cleaning stream/recording state.
+- WebRTC session cleanup now exposes an explicit disposer, and connection teardown calls it to reliably clear ICE retry timers and channel handlers.
+- Soundscape hook teardown now disposes `ParameterSender` instances explicitly, preventing lingering scheduled send loops across disconnect/unmount.
+- Compact audio volume control now exposes correctly labeled volume controls (with dedicated mute action) instead of announcing mute semantics on a slider-toggle button.
+- Audio source switcher now supports keyboard radio navigation with roving focus (`Arrow`/`Home`/`End`) and expanded touch targets.
+- Global hotkeys are now gated when the help dialog is open and while focus is on interactive controls to prevent background actions during modal workflows.
+- Help modal now makes background content inert/aria-hidden while open, and viewport sizing now uses dynamic viewport units (`dvh`) for better mobile browser toolbar behavior.
+- Mobile header controls now use larger touch targets (44px minimum) and improved default text contrast.
+- Recording errors now announce through an assertive live region and Scope readiness panel now marks busy state via `aria-busy`.
+- Analysis meter tempo cards now use non-live grouping semantics to avoid high-frequency screen-reader announcement spam.
+- CSP policy now differentiates dev/prod script/connect directives and removes `unsafe-eval` from production.
+- CI now includes production dependency audit gating (`npm audit --omit=dev --audit-level=high`) plus full-graph audit reporting.
 - Documentation now recommends corpus-level `ai-dev-server.sh` for persistent Codex/Claude dev sessions.
 - Upgraded frontend runtime/security baseline to `next@16.1.6` and aligned `eslint-config-next`/React patch versions.
 - Scope connect action now uses refreshed, resolved pipeline IDs directly to avoid stale local preference race conditions.

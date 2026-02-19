@@ -1,13 +1,53 @@
 import type { NextConfig } from "next";
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function toConnectSources(rawUrl?: string): string[] {
+  if (!rawUrl) return [];
+
+  try {
+    const url = new URL(rawUrl);
+    const sources = new Set<string>([url.origin]);
+
+    if (url.protocol === "https:") {
+      sources.add(`wss://${url.host}`);
+    } else if (url.protocol === "http:") {
+      sources.add(`ws://${url.host}`);
+    }
+
+    return Array.from(sources);
+  } catch {
+    return [];
+  }
+}
+
+const connectSources = new Set<string>(["'self'"]);
+for (const source of toConnectSources(process.env.SCOPE_API_URL)) {
+  connectSources.add(source);
+}
+for (const source of toConnectSources(process.env.NEXT_PUBLIC_SCOPE_API_URL)) {
+  connectSources.add(source);
+}
+if (!IS_PRODUCTION) {
+  connectSources.add("https:");
+  connectSources.add("http:");
+  connectSources.add("ws:");
+  connectSources.add("wss:");
+}
+
+const scriptSources = ["'self'", "'unsafe-inline'"];
+if (!IS_PRODUCTION) {
+  scriptSources.push("'unsafe-eval'");
+}
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src ${scriptSources.join(" ")}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https: http: ws: wss:",
+  `connect-src ${Array.from(connectSources).join(" ")}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

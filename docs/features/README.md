@@ -1,6 +1,6 @@
 # Feature Notes
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-12 09:23 ET
 
 Feature-level specifications for Soundscape.
 

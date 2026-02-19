@@ -46,6 +46,8 @@ const mockMappingEngineInstance = {
 const mockParameterSenderInstance = {
   setDataChannel: vi.fn(),
   send: vi.fn(),
+  clearPending: vi.fn(),
+  dispose: vi.fn(),
 };
 
 vi.mock("./mapping-engine", () => ({

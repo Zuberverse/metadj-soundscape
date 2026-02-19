@@ -14,12 +14,14 @@ export default function SoundscapePage() {
   const [showControls, setShowControls] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
 
   // Ref to hold disconnect function from SoundscapeStudio
   const disconnectRef = useRef<(() => void) | null>(null);
   const helpDialogRef = useRef<HTMLDivElement | null>(null);
   const helpCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
+  const mainContentRef = useRef<HTMLElement | null>(null);
 
   // Called by SoundscapeStudio to register its disconnect handler
   const handleRegisterDisconnect = useCallback((disconnectFn: () => void) => {
@@ -45,8 +47,10 @@ export default function SoundscapePage() {
         await document.exitFullscreen();
         setIsFullscreen(false);
       }
+      setFullscreenError(null);
     } catch (error) {
       console.error("Fullscreen error:", error);
+      setFullscreenError("Fullscreen unavailable in this browser context. Try again with a direct click.");
     }
   }, []);
 
@@ -59,14 +63,11 @@ export default function SoundscapePage() {
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Lock body scroll on mount
   useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, []);
+    if (!fullscreenError) return;
+    const timeoutId = window.setTimeout(() => setFullscreenError(null), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [fullscreenError]);
 
   useEffect(() => {
     if (!showHelp) {
@@ -122,8 +123,22 @@ export default function SoundscapePage() {
     };
   }, [closeHelp, showHelp]);
 
+  useEffect(() => {
+    const main = mainContentRef.current;
+    if (!main) return;
+
+    if (showHelp) {
+      main.setAttribute("inert", "");
+      main.setAttribute("aria-hidden", "true");
+      return;
+    }
+
+    main.removeAttribute("inert");
+    main.removeAttribute("aria-hidden");
+  }, [showHelp]);
+
   return (
-    <div className="h-screen flex flex-col bg-scope-bg overflow-hidden relative">
+    <div className="min-h-dvh h-dvh flex flex-col bg-scope-bg overflow-hidden relative">
       {/* Subtle ambient background */}
       <div className="fixed inset-0 pointer-events-none z-0 opacity-50">
         <div className="glow-bg bg-scope-cyan/10 top-[-30%] right-[-20%]" />
@@ -174,7 +189,7 @@ export default function SoundscapePage() {
               )}
             </div>
             <span className={`text-[10px] font-semibold uppercase tracking-wider leading-none ${
-              isConnected ? 'text-scope-cyan' : 'text-white/40'
+              isConnected ? 'text-scope-cyan' : 'text-white/60'
             }`}>
               {isConnected ? "Live" : "Standby"}
             </span>
@@ -189,7 +204,7 @@ export default function SoundscapePage() {
             onClick={toggleFullscreen}
             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             aria-pressed={isFullscreen}
-            className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-white/5 text-white/60 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+            className="min-h-[44px] min-w-[44px] px-3 py-2 bg-white/5 text-white/70 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/85 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
           >
             {isFullscreen ? (
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,7 +222,7 @@ export default function SoundscapePage() {
             type="button"
             onClick={() => setShowHelp(true)}
             aria-label="Show keyboard shortcuts"
-            className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-white/5 text-white/60 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+            className="min-h-[44px] min-w-[44px] px-3 py-2 bg-white/5 text-white/70 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/85 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
           >
             ?
           </button>
@@ -220,10 +235,10 @@ export default function SoundscapePage() {
                 onClick={() => setSharpenEnabled(!sharpenEnabled)}
                 aria-pressed={sharpenEnabled}
                 aria-label={sharpenEnabled ? "Disable visual enhancement" : "Enable visual enhancement"}
-                className={`min-h-[36px] min-w-[36px] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider rounded-lg transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg ${
+                className={`min-h-[44px] min-w-[44px] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider rounded-lg transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg ${
                   sharpenEnabled
                     ? "bg-scope-cyan/15 text-scope-cyan border border-scope-cyan/30"
-                    : "bg-white/5 text-white/60 border border-white/15 hover:bg-white/10 hover:text-white/80"
+                    : "bg-white/5 text-white/70 border border-white/15 hover:bg-white/10 hover:text-white/85"
                 }`}
               >
                 {sharpenEnabled ? "Enhanced" : "Original"}
@@ -235,7 +250,7 @@ export default function SoundscapePage() {
                 onClick={() => setShowControls(!showControls)}
                 aria-pressed={showControls}
                 aria-label={showControls ? "Hide controls panel" : "Show controls panel"}
-                className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-white/5 text-white/60 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/80 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+                className="min-h-[44px] min-w-[44px] px-3 py-2 bg-white/5 text-white/70 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-white/15 hover:bg-white/10 hover:text-white/85 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
               >
                 {showControls ? "Hide" : "Show"}
               </button>
@@ -248,7 +263,7 @@ export default function SoundscapePage() {
                 type="button"
                 onClick={handleDisconnect}
                 aria-label="Disconnect from Scope server"
-                className="min-h-[36px] min-w-[36px] px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-red-500/25 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
+                className="min-h-[44px] min-w-[44px] px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-[10px] font-semibold uppercase tracking-wider rounded-lg border border-red-500/25 transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 focus-visible:ring-offset-scope-bg"
               >
                 Disconnect
               </button>
@@ -256,15 +271,25 @@ export default function SoundscapePage() {
           )}
         </nav>
       </header>
+      {fullscreenError && (
+        <div
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-[90] px-4 py-2 rounded-lg border border-amber-300/30 bg-black/75 text-amber-100 text-xs"
+          role="status"
+          aria-live="polite"
+        >
+          {fullscreenError}
+        </div>
+      )}
 
       {/* Main Content */}
-      <main id="main-content" className="relative z-10 flex-1 min-h-0">
+      <main ref={mainContentRef} id="main-content" className="relative z-10 flex-1 min-h-0">
         <SoundscapeStudio
           onConnectionChange={setIsConnected}
           sharpenEnabled={sharpenEnabled}
           showControls={showControls}
           onControlsToggle={() => setShowControls(!showControls)}
           onRegisterDisconnect={handleRegisterDisconnect}
+          hotkeysEnabled={!showHelp}
         />
       </main>
 
@@ -326,7 +351,7 @@ export default function SoundscapePage() {
               </div>
             </div>
             
-            <p className="mt-5 text-[11px] text-white/40 leading-relaxed">
+            <p className="mt-5 text-[11px] text-white/55 leading-relaxed">
               Audio analysis and theme switching work locally. Connect to a Scope server to stream AI-generated visuals.
             </p>
           </div>

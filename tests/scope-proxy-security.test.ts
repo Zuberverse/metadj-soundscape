@@ -110,6 +110,7 @@ describe("Scope proxy security", () => {
     Object.assign(process.env, {
       NODE_ENV: "production",
       SCOPE_PROXY_ENABLE: "true",
+      SCOPE_API_URL: "https://scope.example",
     });
 
     const { POST } = await import("../src/app/api/scope/[...path]/route");
@@ -134,6 +135,7 @@ describe("Scope proxy security", () => {
     Object.assign(process.env, {
       NODE_ENV: "production",
       SCOPE_PROXY_ENABLE: "true",
+      SCOPE_API_URL: "https://scope.example",
     });
 
     const { POST } = await import("../src/app/api/scope/[...path]/route");
@@ -162,6 +164,38 @@ describe("Scope proxy security", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("requires write auth token when configured", async () => {
+    Object.assign(process.env, {
+      NODE_ENV: "production",
+      SCOPE_PROXY_ENABLE: "true",
+      SCOPE_API_URL: "https://scope.example",
+      SCOPE_PROXY_WRITE_TOKEN: "super-secret-token",
+    });
+
+    const { POST } = await import("../src/app/api/scope/[...path]/route");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const unauthorizedRequest = new NextRequest(
+      "https://soundscape.example/api/scope/api/v1/pipeline/load",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://soundscape.example",
+        },
+        body: JSON.stringify({ pipeline_ids: ["longlive"] }),
+      }
+    );
+
+    const unauthorizedResponse = await POST(unauthorizedRequest, {
+      params: Promise.resolve({ path: ["api", "v1", "pipeline", "load"] }),
+    });
+
+    expect(unauthorizedResponse.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("only forwards allowlisted headers", async () => {
     const { GET } = await import("../src/app/api/scope/[...path]/route");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -186,7 +220,7 @@ describe("Scope proxy security", () => {
 
     const forwardedHeaders = fetchMock.mock.calls[0][1]?.headers as Headers;
     expect(forwardedHeaders.get("content-type")).toBe("application/json");
-    expect(forwardedHeaders.get("authorization")).toBe("Bearer token123");
+    expect(forwardedHeaders.get("authorization")).toBeNull();
     expect(forwardedHeaders.get("x-custom-header")).toBeNull();
     expect(forwardedHeaders.get("cookie")).toBeNull();
   });

@@ -22,6 +22,7 @@ export interface ScopeWebRtcSession {
   pc: RTCPeerConnection;
   dataChannel?: RTCDataChannel;
   sessionId: string;
+  dispose?: () => void;
 }
 
 export async function createScopeWebRtcSession(
@@ -48,6 +49,23 @@ export async function createScopeWebRtcSession(
       clearTimeout(retryTimeoutId);
       retryTimeoutId = null;
     }
+  };
+
+  const disposeSession = () => {
+    clearRetryTimeout();
+    pc.removeEventListener("connectionstatechange", handleConnectionCleanup);
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.onconnectionstatechange = null;
+
+    if (dataChannel && dataChannel.readyState !== "closed") {
+      dataChannel.onopen = null;
+      dataChannel.onclose = null;
+      dataChannel.onmessage = null;
+      dataChannel.close();
+    }
+
+    pc.close();
   };
 
   const handleConnectionCleanup = () => {
@@ -175,22 +193,9 @@ export async function createScopeWebRtcSession(
       }
     }
 
-    return { pc, dataChannel, sessionId };
+    return { pc, dataChannel, sessionId, dispose: disposeSession };
   } catch (error) {
-    clearRetryTimeout();
-    pc.removeEventListener("connectionstatechange", handleConnectionCleanup);
-    pc.onicecandidate = null;
-    pc.ontrack = null;
-    pc.onconnectionstatechange = null;
-
-    if (dataChannel && dataChannel.readyState !== "closed") {
-      dataChannel.onopen = null;
-      dataChannel.onclose = null;
-      dataChannel.onmessage = null;
-      dataChannel.close();
-    }
-
-    pc.close();
+    disposeSession();
     throw error;
   }
 }

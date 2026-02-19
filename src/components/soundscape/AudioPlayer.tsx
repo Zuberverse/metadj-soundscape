@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useRef, useState, useCallback, useEffect, type ChangeEvent } from "react";
+import { useRef, useState, useCallback, useEffect, useId, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 // Demo track path (in public folder)
 const DEMO_TRACK = {
@@ -65,6 +65,9 @@ export function AudioPlayer({
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const retryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const demoSourceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const micSourceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const compactVolumePanelId = useId();
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -281,6 +284,33 @@ export function AudioPlayer({
     [configureDemoSource, ensureMicSource, handlePause, handlePlay, sourceMode, stopMicStream]
   );
 
+  const handleSourceSwitcherKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
+
+      let nextMode: AudioSourceMode | null = null;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        nextMode = sourceMode === "demo" ? "mic" : "demo";
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        nextMode = sourceMode === "mic" ? "demo" : "mic";
+      } else if (event.key === "Home") {
+        nextMode = "demo";
+      } else if (event.key === "End") {
+        nextMode = "mic";
+      }
+
+      if (!nextMode) return;
+      event.preventDefault();
+      void handleSourceChange(nextMode);
+      if (nextMode === "demo") {
+        demoSourceButtonRef.current?.focus();
+      } else {
+        micSourceButtonRef.current?.focus();
+      }
+    },
+    [disabled, handleSourceChange, sourceMode]
+  );
+
   const handleVolumeChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const newVolume = parseFloat(e.target.value);
@@ -354,16 +384,19 @@ export function AudioPlayer({
       className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5"
       role="radiogroup"
       aria-label="Audio source"
+      onKeyDown={handleSourceSwitcherKeyDown}
     >
       <button
+        ref={demoSourceButtonRef}
         type="button"
         role="radio"
         aria-checked={sourceMode === "demo"}
+        tabIndex={sourceMode === "demo" ? 0 : -1}
         onClick={() => {
           void handleSourceChange("demo");
         }}
         disabled={disabled}
-        className={`px-2.5 py-1.5 min-h-[32px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
+        className={`px-2.5 py-1.5 min-h-[44px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
           sourceMode === "demo"
             ? "bg-scope-cyan/20 text-scope-cyan"
             : "text-white/45 hover:text-white/70"
@@ -372,14 +405,16 @@ export function AudioPlayer({
         Demo
       </button>
       <button
+        ref={micSourceButtonRef}
         type="button"
         role="radio"
         aria-checked={sourceMode === "mic"}
+        tabIndex={sourceMode === "mic" ? 0 : -1}
         onClick={() => {
           void handleSourceChange("mic");
         }}
         disabled={disabled}
-        className={`px-2.5 py-1.5 min-h-[32px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
+        className={`px-2.5 py-1.5 min-h-[44px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
           sourceMode === "mic"
             ? "bg-scope-purple/20 text-scope-purple"
             : "text-white/45 hover:text-white/70"
@@ -396,7 +431,11 @@ export function AudioPlayer({
         type="button"
         onClick={() => setShowVolumeSlider(!showVolumeSlider)}
         onMouseEnter={() => setShowVolumeSlider(true)}
-        aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+        onFocus={() => setShowVolumeSlider(true)}
+        aria-label={showVolumeSlider ? "Hide volume controls" : "Show volume controls"}
+        aria-expanded={showVolumeSlider}
+        aria-controls={compactVolumePanelId}
+        aria-haspopup="dialog"
         className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
       >
         {isMuted || volume === 0 ? (
@@ -419,10 +458,20 @@ export function AudioPlayer({
       </button>
       
       {showVolumeSlider && (
-        <div 
+        <div
+          id={compactVolumePanelId}
+          role="group"
+          aria-label="Volume controls"
           className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 glass bg-black/80 rounded-xl border border-white/10"
           onMouseLeave={() => setShowVolumeSlider(false)}
         >
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="mb-2 w-full rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wider text-white/80 hover:bg-white/10 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
+          >
+            {isMuted || volume === 0 ? "Unmute" : "Mute"}
+          </button>
           <input
             type="range"
             min={0}

@@ -1,6 +1,6 @@
 # Workflows - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-01-09 18:35 ET
 
 Placeholder for hackathon workflows. Add workflow documentation here as the project progresses.
 

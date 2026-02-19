@@ -874,6 +874,15 @@ export class ParameterSender {
   }
 
   /**
+   * Fully dispose sender resources (timers + channel reference).
+   * Use on component teardown to avoid lingering scheduled sends.
+   */
+  dispose(): void {
+    this.clearPending();
+    this.setDataChannel(null);
+  }
+
+  /**
    * Queue parameters for sending. Rate-limited to targetUpdateRate.
    */
   send(params: ScopeParameters): void {

@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-18 10:19 EST
+**Last Modified**: 2026-02-18 22:24 EST
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -15,7 +15,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Demo-Safe Mode** UX when Scope is offline, with quick diagnostics CTA.
 - **Performance HUD** with FPS sampling + dropped frame warning states.
 - **Hardened connect flow** that resolves pipelines from fresh diagnostics before connecting.
-- **Security patch baseline** upgraded to `next@16.1.6` (no known audit vulnerabilities).
+- **Security patch baseline** upgraded to `next@16.1.6` (no known production dependency vulnerabilities via `npm audit --omit=dev`).
 
 ## Core Features
 
@@ -109,11 +109,16 @@ Copy `.env.example` to `.env.local`.
 | `SCOPE_API_URL` | Scope server base URL for server-side proxy target |
 | `NEXT_PUBLIC_SCOPE_API_URL` | Optional dev convenience fallback |
 | `SCOPE_PROXY_ENABLE` | Required in production to enable `/api/scope` proxy |
+| `SCOPE_PROXY_WRITE_TOKEN` | Optional additional server-side token required for write operations in production |
+| `SCOPE_PROXY_WRITE_TOKEN_HEADER` | Optional header name for write token (default: `x-scope-proxy-token`) |
+| `SCOPE_PROXY_TRUST_FORWARDED_IP` | Set `true` to trust forwarded IP headers for rate limiting (default: `false` in production) |
+| `SCOPE_PROXY_IP_HEADER` | Optional forwarded IP header to trust when `SCOPE_PROXY_TRUST_FORWARDED_IP=true` |
 
 ### Security Note
 
 The app defaults to `/api/scope` proxy routing. In production, proxying is disabled unless `SCOPE_PROXY_ENABLE=true`.
-When enabled, the proxy enforces a strict endpoint/method allowlist, same-origin validation for write requests, and request rate limiting.
+When enabled, the proxy enforces strict endpoint/method allowlisting, same-origin `Origin` validation for writes, upstream safety checks, and request rate limiting.
+Production proxy safety expects `SCOPE_API_URL` to be set server-side. Optionally require `SCOPE_PROXY_WRITE_TOKEN` for additional write authorization hardening.
 Deploy behind platform-level access controls for additional protection.
 
 ## Commands

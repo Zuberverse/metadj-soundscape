@@ -24,6 +24,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Security Audit (prod dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Security Audit Report (full dependency graph)
+        run: npm audit --audit-level=high || true
+
       - name: Lint
         run: npm run lint
 

@@ -232,7 +232,7 @@ export function ThemeSelector({
                 {/* Keyboard shortcut hint */}
                 {index < 9 && (
                   <span
-                    className="absolute top-2 right-2.5 text-[9px] text-white/20 font-mono tabular-nums"
+                    className="absolute top-2 right-2.5 text-[9px] text-white/45 font-mono tabular-nums"
                     aria-hidden="true"
                   >
                     {index + 1}

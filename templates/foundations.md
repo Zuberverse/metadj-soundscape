@@ -1,6 +1,6 @@
 # Templates - MetaDJ Soundscape
 
-**Last Modified**: 2026-01-09 18:35 EST
+**Last Modified**: 2026-01-09 18:35 ET
 
 Placeholder for reusable templates. Add templates here as the project progresses.
 

@@ -1,6 +1,6 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-02-12 09:23 EST
+**Last Modified**: 2026-02-12 09:23 ET
 
 Documentation index for Soundscape.
 
