@@ -61,6 +61,9 @@ Returns: `{ "status": "loaded" }` (or similar)
     "width": 576,
     "height": 320,
     "vace_enabled": false,
+    "vae_type": "lightvae",
+    "quantization": null,
+    "lora_merge_mode": "permanent_merge",
     "output_ndi": false,
     "output_spout": false
   }
@@ -68,7 +71,8 @@ Returns: `{ "status": "loaded" }` (or similar)
 ```
 **Notes**: 
 - `width` and `height` must be divisible by 64. 
-- `pipeline_ids` is the canonical shape for loading. Soundscape uses `vace_enabled: false` to ensure Text-to-Video mode on `longlive`.
+- `pipeline_ids` is the canonical shape for loading. Soundscape uses `vace_enabled: false` with `longlive`.
+- **Hardware Target**: Soundscape is optimized for the RTX 5090 (32GB VRAM), utilizing `"lightvae"`, uncompressed weights (`"quantization": null`), and `"permanent_merge"` for a balance of maximum visual fidelity and inference FPS.
 
 ### 3. WebRTC Negotiation
 

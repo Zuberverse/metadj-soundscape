@@ -20,3 +20,8 @@ Zuberant typically uses RunPod to deploy Daydream Scope instances that stream di
 Canonical tools overview: `3-projects/5-software/tools.md`
 
 Any project-specific tooling, including AI-driven startup shell scripts, reside in `scripts/` inside the application structure or use global `1-system/2-scripts` workflows.
+
+### Local Development
+
+> [!IMPORTANT]
+> Because Next.js apps default to port `3000`, it is extremely common to accidentally open `localhost:3000` out of habit. **Soundscape runs on port `3500`**. Always use `http://localhost:3500` when accessing the local dashboard.

@@ -70,8 +70,10 @@ npm install
 
 ```bash
 npm run dev
-# Open http://localhost:3500
 ```
+
+> [!NOTE]
+> **Important**: Always open the application on **`http://localhost:3500`**, *not* the default Next.js port 3000. The application is configured to expect port 3500, and using 3000 may lead to unexpected behavior or conflicts.
 
 For persistent launch from Codex/Claude sessions, from corpus root use:
 

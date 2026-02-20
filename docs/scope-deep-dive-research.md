@@ -669,7 +669,7 @@ Soundscape already uses prompt blending and slerp transitions extensively. The m
 
 ### Recommended Configurations
 
-**High Performance (RTX 3090/4090, 24GB)**:
+**High Performance (RTX 4090/5090, 24GB-32GB)**:
 ```json
 {
   "width": 576, "height": 320,

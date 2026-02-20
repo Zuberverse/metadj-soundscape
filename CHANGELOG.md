@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **External Video Routing**: NDI and Spout output toggles in the Soundscape UI for routing generations to external VJ software directly from the Scope backend.
+- Full propagation of Reactivity Profile `smoothingFactor` down to the `MappingEngine`, unlocking smoother, configurable audio-to-visual parameter transitions.
+- Completed full visual transitions audit validating semantic `slerp` prompt mechanics, fallback behavior, and parameter overrides across 12 default themes.
 - Microphone audio input mode in `AudioPlayer` alongside the built-in demo track source.
 - Live clip recording workflow for Scope stream output with downloadable `webm` export.
 - Beat-synced Auto Theme timeline controls (16/32/64 beat sections) for hands-free preset rotation.
