@@ -23,6 +23,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Beat Detection + BPM Estimation** — Energy-spike detector with cooldowns
 - **12 Visual Themes** — Preset prompt/mapping profiles for different aesthetics
 - **WebRTC Scope Streaming** — GPU output video + parameter data channel
+- **External Video Routing** — NDI and Spout toggles for streaming frames directly to VJ software
 - **Ambient Mode** — Visual generation can continue without active audio playback
 - **Generation Controls** — Denoising profile, reactivity profile, prompt accent, pipeline chain
 - **Diagnostics Panel** — Health, pipeline status, hardware, model readiness, plugins/LoRAs

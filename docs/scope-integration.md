@@ -60,7 +60,9 @@ Returns: `{ "status": "loaded" }` (or similar)
   "load_params": {
     "width": 576,
     "height": 320,
-    "vace_enabled": false
+    "vace_enabled": false,
+    "output_ndi": false,
+    "output_spout": false
   }
 }
 ```

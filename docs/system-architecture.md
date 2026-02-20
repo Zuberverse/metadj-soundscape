@@ -109,6 +109,7 @@ Primary implementation: `src/lib/scope/use-scope-connection.ts`
 - Connect overrides supported at call time (`connect({ pipelineIds, pipelineId })`).
 - Last successful connect overrides reused on automatic reconnect.
 - **Pipeline Selection Safety**: `SoundscapeStudio` refreshes diagnostics before connecting and computes resolved pipeline IDs from the live schema response to avoid stale `localStorage` pipeline mismatches.
+- **External Video Routing**: The connection payload defines `output_ndi` and `output_spout` flags (driven by user UI toggles) to instruct the Scope engine to broadcast generated frames to external VJ software mixing pipelines.
 
 ## Scope Proxy & Security Safety
 
