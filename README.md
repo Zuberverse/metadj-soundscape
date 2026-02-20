@@ -155,12 +155,12 @@ Deploy behind platform-level access controls for additional protection.
 
 ## Documentation Map
 
-- `docs/README.md` — Documentation index
-- `docs/architecture.md` — Runtime architecture + lifecycle
-- `docs/soundscape-mechanics.md` — Audio/visual mechanics + transitions
-- `docs/features/soundscape-mvp-spec.md` — Public capability summary
-- `docs/api-reference.md` — Scope API usage notes
-- `docs/scope-platform-reference.md` — Scope platform delta notes
+- `docs/README.md` — Detailed documentation index
+- `docs/system-architecture.md` — Runtime architecture, connection lifecycle, and audio-reactive mechanics
+- `docs/scope-integration.md` — Single source of truth for Daydream Scope API endpoints and technical parameters
+- `docs/product-spec.md` — Public capabilities and feature thresholds
+- `docs/operations.md` — Tooling and deployment context
+- `docs/archive/` — Historical Scope-Track Hackathon context
 
 ## License
 

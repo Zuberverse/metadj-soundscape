@@ -71,6 +71,8 @@ interface ScopeCapabilities {
   modelReady: boolean | null;
   loraCount: number;
   pluginCount: number;
+  ndiAvailable: boolean;
+  spoutAvailable: boolean;
 }
 
 /**
@@ -174,6 +176,7 @@ export function SoundscapeStudio({
   const connectionProfileRef = useRef<"modern" | "legacy-minimal">("modern");
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
+  const [hasLaunched, setHasLaunched] = useState(false);
   const [showControlsInternal, setShowControlsInternal] = useState(true);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
@@ -246,6 +249,8 @@ export function SoundscapeStudio({
   const [autoThemeEnabled, setAutoThemeEnabled] = useState(false);
   const [autoThemeSectionBeats, setAutoThemeSectionBeats] = useState(32);
   const [showTelemetry, setShowTelemetry] = useState(false);
+  const [ndiEnabled, setNdiEnabled] = useState(false);
+  const [spoutEnabled, setSpoutEnabled] = useState(false);
   const [scopeCapabilities, setScopeCapabilities] = useState<ScopeCapabilities>({
     hardwareSummary: "Unknown",
     freeVramGb: null,
@@ -253,6 +258,8 @@ export function SoundscapeStudio({
     modelReady: null,
     loraCount: 0,
     pluginCount: 0,
+    ndiAvailable: false,
+    spoutAvailable: false,
   });
   const scopeClient = useMemo(() => getScopeClient(), []);
 
@@ -419,6 +426,8 @@ export function SoundscapeStudio({
           modelReady: null,
           loraCount: 0,
           pluginCount: 0,
+          ndiAvailable: false,
+          spoutAvailable: false,
         });
         return {
           isHealthy: false,
@@ -473,6 +482,8 @@ export function SoundscapeStudio({
         modelReady,
         loraCount: loras.length,
         pluginCount: plugins.length,
+        ndiAvailable: !!hardwareInfo?.ndi_available,
+        spoutAvailable: !!hardwareInfo?.spout_available,
       });
 
       if (pipelines.length > 0) {
@@ -718,8 +729,10 @@ export function SoundscapeStudio({
     if (selectedPipeline === "longlive") {
       params.vace_enabled = false;
     }
+    if (ndiEnabled) params.output_ndi = true;
+    if (spoutEnabled) params.output_spout = true;
     return params;
-  }, [aspectRatio, selectedPipeline]);
+  }, [aspectRatio, selectedPipeline, ndiEnabled, spoutEnabled]);
 
   const pipelineIdsForConnect = useMemo(() => {
     if (selectedPreprocessor !== NO_PREPROCESSOR) {
@@ -853,28 +866,20 @@ export function SoundscapeStudio({
   const hasPipelineSelection = selectedPipeline.trim().length > 0;
   const canConnect =
     !isConnecting &&
-    !isDiagnosticsLoading &&
-    scopeHealth?.status === "ok" &&
     hasPipelineSelection;
   const connectBlockedReason =
     isConnecting
       ? null
-      : isDiagnosticsLoading
-        ? "Checking Scope readiness..."
-        : scopeHealth === null
-          ? "Scope readiness not loaded yet. Click Refresh to check server status."
-          : !hasPipelineSelection
-            ? "Select a main pipeline before connecting."
-            : scopeHealth?.status !== "ok"
-              ? "Scope server offline. Start Scope and refresh readiness."
-              : null;
+      : !hasPipelineSelection
+        ? "Select a main pipeline before connecting."
+        : null;
   const scopeReadiness = useMemo(() => {
     if (scopeHealth?.status === "ok") {
       return { label: "Online", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
     }
 
     if (scopeHealth === null || isDiagnosticsLoading) {
-      return { label: "Checking", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+      return { label: "Checking", textClass: "text-white/70", dotClass: "bg-white/50" };
     }
 
     return { label: "Offline", textClass: "text-red-300", dotClass: "bg-red-400" };
@@ -884,9 +889,9 @@ export function SoundscapeStudio({
       case "connected":
         return { label: "Live", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
       case "connecting":
-        return { label: "Connecting", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+        return { label: "Connecting", textClass: "text-white/70", dotClass: "bg-white/50" };
       case "reconnecting":
-        return { label: "Reconnecting", textClass: "text-amber-200", dotClass: "bg-amber-300" };
+        return { label: "Reconnecting", textClass: "text-white/70", dotClass: "bg-white/50" };
       case "failed":
         return { label: "Failed", textClass: "text-red-300", dotClass: "bg-red-400" };
       default:
@@ -959,6 +964,7 @@ export function SoundscapeStudio({
 
   const handleDisconnectScope = useCallback((userInitiated = false) => {
     disconnect(true);
+    setHasLaunched(false);
     if (userInitiated) {
       clearError();
     }
@@ -973,10 +979,8 @@ export function SoundscapeStudio({
 
   const handleConnectScope = useCallback(async () => {
     clearError();
+    setHasLaunched(true);
     const diagnostics = await refreshScopeDiagnostics();
-    if (!diagnostics.isHealthy) {
-      return;
-    }
 
     const pipelineIds =
       diagnostics.resolvedPreprocessor !== NO_PREPROCESSOR
@@ -984,10 +988,10 @@ export function SoundscapeStudio({
         : [diagnostics.resolvedPipeline];
 
     await connect({
-      pipelineId: diagnostics.resolvedPipeline,
-      pipelineIds,
+      pipelineId: diagnostics.resolvedPipeline || selectedPipeline,
+      pipelineIds: diagnostics.isHealthy ? pipelineIds : [selectedPipeline],
     });
-  }, [clearError, refreshScopeDiagnostics, connect]);
+  }, [clearError, refreshScopeDiagnostics, connect, selectedPipeline]);
 
   const handleCopyScopeCommand = useCallback(async () => {
     const command = "npm run check:scope";
@@ -1375,13 +1379,13 @@ export function SoundscapeStudio({
               </div>
             </div>
           </div>
-        ) : (
+        ) : !hasLaunched ? (
           <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-8 lg:gap-16 justify-center items-center pointer-events-auto overflow-y-auto w-full max-w-6xl mx-auto">
 
             {/* Left Column: Intro & Branding */}
             <div className="flex-1 w-full max-w-lg lg:pr-12 animate-fade-in">
-              <h1 className="text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/50 mb-6 font-bold tracking-tight drop-shadow-lg" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                Daydream Scope
+              <h1 className="text-5xl md:text-7xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-6 font-bold tracking-normal pr-2 drop-shadow-[0_0_30px_rgba(6,182,212,0.3)]" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif', lineHeight: '1.2', paddingBottom: '0.1em' }}>
+                MetaDJ Soundscape
               </h1>
               <p className="text-lg text-white/60 mb-10 leading-relaxed font-light">
                 Hardware-accelerated audio-reactive environment. Configure your AI synthesis pipeline and initiate connection.
@@ -1412,25 +1416,57 @@ export function SoundscapeStudio({
                   </div>
 
                   <div className="space-y-3">
-                    <label className="block">
-                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Main Pipeline</span>
-                      <select value={selectedPipeline} onChange={(e) => setSelectedPipeline(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none">
-                        {mainPipelineOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                    <label className="block relative group">
+                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-cyan/80 transition-colors">Main Pipeline</span>
+                      <div className="relative">
+                        <select value={selectedPipeline} onChange={(e) => setSelectedPipeline(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                          {mainPipelineOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-white/30 group-hover:text-scope-cyan/60 transition-colors">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                      </div>
                     </label>
 
-                    <label className="block">
-                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Preprocessor</span>
-                      <select
-                        value={selectedPreprocessor}
-                        onChange={(e) => setSelectedPreprocessor(e.target.value)}
-                        disabled={preprocessorOptions.length === 0}
-                        className={`w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none ${preprocessorOptions.length === 0 ? 'text-white/30 cursor-not-allowed' : 'text-white'}`}
-                      >
-                        <option value={NO_PREPROCESSOR}>{preprocessorOptions.length === 0 ? "Loading..." : "None"}</option>
-                        {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                    <label className="block relative group">
+                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-cyan/80 transition-colors">Preprocessor</span>
+                      <div className="relative">
+                        <select
+                          value={selectedPreprocessor}
+                          onChange={(e) => setSelectedPreprocessor(e.target.value)}
+                          disabled={preprocessorOptions.length === 0}
+                          className={`w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none group-hover:bg-black/60 ${preprocessorOptions.length === 0 ? 'text-white/30 cursor-not-allowed' : 'text-white'}`}
+                        >
+                          <option value={NO_PREPROCESSOR}>{preprocessorOptions.length === 0 ? "Loading..." : "None"}</option>
+                          {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-white/30 group-hover:text-scope-cyan/60 transition-colors">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                      </div>
                     </label>
+
+                    {/* Output Routing */}
+                    <div className="pt-2">
+                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-3">Output Routing</span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${ndiEnabled ? 'bg-scope-cyan/20 border-scope-cyan/50' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
+                          <input type="checkbox" className="sr-only" checked={ndiEnabled} onChange={(e) => setNdiEnabled(e.target.checked)} />
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${ndiEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
+                            {ndiEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                          </div>
+                          <span className={`text-xs font-semibold ${ndiEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>NDI Stream</span>
+                        </label>
+
+                        <label className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${spoutEnabled ? 'bg-scope-cyan/20 border-scope-cyan/50' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
+                          <input type="checkbox" className="sr-only" checked={spoutEnabled} onChange={(e) => setSpoutEnabled(e.target.checked)} />
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${spoutEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
+                            {spoutEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                          </div>
+                          <span className={`text-xs font-semibold ${spoutEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>Spout Stream</span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1441,30 +1477,40 @@ export function SoundscapeStudio({
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <label className="block">
-                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Denoising</span>
-                      <select value={denoisingProfileId} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-purple/50 outline-none appearance-none">
-                        <option value="speed">Speed</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="quality">Quality</option>
-                      </select>
+                    <label className="block relative group">
+                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Denoising</span>
+                      <div className="relative">
+                        <select value={denoisingProfileId} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                          <option value="speed">Speed</option>
+                          <option value="balanced">Balanced</option>
+                          <option value="quality">Quality</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                      </div>
                     </label>
-                    <label className="block">
-                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Reactivity</span>
-                      <select value={reactivityProfileId} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-purple/50 outline-none appearance-none">
-                        <option value="cinematic">Cinematic</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="kinetic">Kinetic</option>
-                      </select>
+                    <label className="block relative group">
+                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Reactivity</span>
+                      <div className="relative">
+                        <select value={reactivityProfileId} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                          <option value="cinematic">Cinematic</option>
+                          <option value="balanced">Balanced</option>
+                          <option value="kinetic">Kinetic</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                      </div>
                     </label>
                   </div>
 
-                  <label className="block">
+                  <label className="block relative group">
                     <div className="flex justify-between items-end mb-2">
-                      <span className="text-[10px] text-white/50 uppercase tracking-widest font-bold">Accent Weight</span>
-                      <span className="text-[10px] text-white/80 font-mono bg-white/10 px-1.5 py-0.5 rounded">{promptAccent.weight.toFixed(2)}</span>
+                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold group-hover:text-scope-purple/80 transition-colors">Accent Weight</span>
+                      <span className="text-[10px] text-scope-purple font-mono bg-scope-purple/10 px-2 py-0.5 rounded border border-scope-purple/20">{promptAccent.weight.toFixed(2)}</span>
                     </div>
-                    <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="w-full accent-scope-purple" />
+                    <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="w-full accent-scope-purple cursor-pointer" />
                   </label>
                 </div>
 
@@ -1484,13 +1530,38 @@ export function SoundscapeStudio({
                   type="button"
                   onClick={() => { void handleConnectScope(); }}
                   disabled={!canConnect}
-                  className={`w-full py-4 rounded-xl text-sm uppercase tracking-widest font-bold transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-scope-cyan overflow-hidden relative group ${canConnect
-                    ? 'bg-scope-cyan text-black hover:bg-white hover:shadow-[0_0_30px_rgba(6,182,212,0.6)]'
+                  className={`w-full py-5 rounded-2xl text-[13px] uppercase tracking-[0.25em] font-black transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-scope-cyan overflow-hidden relative group ${canConnect
+                    ? 'bg-gradient-to-r from-scope-cyan to-scope-purple text-white shadow-[0_0_40px_rgba(6,182,212,0.4)] hover:shadow-[0_0_60px_rgba(139,92,246,0.6)] hover:scale-[1.02]'
                     : 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed'
                     }`}
                 >
-                  {canConnect && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shimmer" />}
-                  <span className="relative z-10">{isConnecting ? "Connecting..." : "Initiate Connection"}</span>
+                  {canConnect && (
+                    <>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-[150%] group-hover:animate-shimmer" />
+                      <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/20 pointer-events-none" />
+                      <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors pointer-events-none" />
+                    </>
+                  )}
+                  <span className="relative z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]">{isConnecting ? "CONNECTING..." : "LAUNCH SOUNDSCAPE"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center p-6 pointer-events-auto">
+            <div className="glass-radiant p-10 rounded-3xl max-w-md w-full text-center border border-red-500/20 shadow-[0_0_50px_rgba(239,68,68,0.1)] animate-fade-in relative z-50">
+              <h2 className="text-2xl text-red-400 mb-3 tracking-widest font-bold drop-shadow-md" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
+                CONNECTION FAILED
+              </h2>
+              <p className="text-white/70 text-sm font-medium mb-8 leading-relaxed">
+                {scopeErrorDescription || "Unable to establish a link with the Soundscape Generation Engine. The server might be offline."}
+              </p>
+              <div className="flex flex-col gap-3">
+                <button onClick={() => { void handleConnectScope(); }} className="w-full py-4 rounded-xl text-sm uppercase tracking-widest font-bold transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-500 bg-red-500/20 text-red-100 hover:bg-red-500/30 border border-red-500/30 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+                  Retry Connection
+                </button>
+                <button onClick={() => setHasLaunched(false)} className="w-full py-3 text-xs text-white/50 hover:text-white/90 uppercase tracking-widest transition-colors font-semibold">
+                  Back to Configuration
                 </button>
               </div>
             </div>
@@ -1498,94 +1569,95 @@ export function SoundscapeStudio({
         )}
       </div>
 
-      {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker) */}
-      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-20 md:px-24 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
+      {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker - Only show conditionally when connected) */}
+      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-20 md:px-24 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${(scopeStream && showControls) ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
         <div className="w-full max-w-[calc(100vw-12rem)] md:max-w-6xl">
           <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
         </div>
       </div>
 
       {/* FLOATING ACTION BUTTONS (FABs) */}
-      {scopeStream && showControls && (
-        <>
-          {/* LEFT: MUSIC AND SETTINGS */}
-          <div className="absolute bottom-6 left-6 z-50 flex gap-4">
+      {
+        scopeStream && showControls && (
+          <>
+            {/* LEFT: MUSIC AND SETTINGS */}
+            <div className="absolute bottom-6 left-6 z-50 flex gap-4">
 
-            {/* Music/Audio Menu & FAB */}
-            <div className="flex flex-col justify-end items-start gap-3">
-              <div className={`transition-all duration-300 origin-bottom-left ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 left-0 ${showAudioMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
-                <div className="glass-radiant w-80 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-white/70">Audio Controls</span>
-                  </div>
-                  {/* Music Player */}
-                  <div className="w-full bg-black/20 rounded-xl p-2 border border-white/5">
-                    <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
-                  </div>
-                  {/* Analysis Meter */}
-                  {isPlaying && (
-                    <div className="w-full bg-black/20 rounded-xl p-3 border border-white/5">
-                      <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+              {/* Music/Audio Menu & FAB */}
+              <div className="flex flex-col justify-end items-start gap-3">
+                <div className={`transition-all duration-300 origin-bottom-left ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 left-0 ${showAudioMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
+                  <div className="glass-radiant w-80 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-white/70">Audio Controls</span>
                     </div>
-                  )}
+                    {/* Music Player */}
+                    <div className="w-full bg-black/20 rounded-xl p-2 border border-white/5">
+                      <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
+                    </div>
+                    {/* Analysis Meter */}
+                    {isPlaying && (
+                      <div className="w-full bg-black/20 rounded-xl p-3 border border-white/5">
+                        <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => { setShowAudioMenu(!showAudioMenu); setShowSettingsMenu(false); }}
+                  className={`relative z-50 w-[3.25rem] h-[3.25rem] flex items-center justify-center rounded-full transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showAudioMenu ? 'bg-scope-purple text-white shadow-[0_0_20px_rgba(139,92,246,0.6)] border-scope-purple/50 scale-105' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white hover:scale-105'}`}
+                  aria-label="Toggle Audio Controls"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                </button>
+              </div>
+
+            </div>
+
+            {/* RIGHT: SETTINGS & TELEMETRY */}
+            <div className="absolute bottom-6 right-6 z-50 flex flex-col justify-end items-end gap-3">
+              <div className={`transition-all duration-300 origin-bottom-right ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 right-0 ${showSettingsMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
+                <div className="glass-radiant w-64 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <span className={`flex items-center gap-2 text-[10px] uppercase font-mono tracking-[0.2em] font-bold ${connectionSummary.textClass}`}>
+                      <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
+                      {connectionSummary.label}
+                    </span>
+                  </div>
+
+                  {/* Telemetry Toggle */}
+                  <button
+                    type="button"
+                    onClick={showTelemetry ? handleHideTelemetry : handleShowTelemetry}
+                    className={`w-full py-2.5 rounded-lg transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border ${showTelemetry ? 'bg-scope-cyan/20 text-scope-cyan border-scope-cyan/30 shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white'}`}
+                  >
+                    {showTelemetry ? "Hide Telemetry" : "Show Telemetry"}
+                  </button>
+
+                  {/* Disconnect Button */}
+                  <button
+                    type="button"
+                    onClick={handleScopeDisconnect}
+                    className="w-full mt-1 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border border-red-500/20"
+                  >
+                    Disconnect
+                  </button>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => { setShowAudioMenu(!showAudioMenu); setShowSettingsMenu(false); }}
-                className={`relative z-50 w-[3.25rem] h-[3.25rem] flex items-center justify-center rounded-full transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showAudioMenu ? 'bg-scope-purple text-white hover:bg-scope-purple/90 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)]' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
-                aria-label="Toggle Audio Controls"
+                onClick={() => { setShowSettingsMenu(!showSettingsMenu); setShowAudioMenu(false); }}
+                className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showSettingsMenu ? 'bg-scope-cyan text-black shadow-[0_0_20px_rgba(6,182,212,0.6)] border-scope-cyan/50 scale-105' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white hover:scale-105'}`}
+                aria-label="Toggle Settings Menu"
+                title="Settings"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
               </button>
             </div>
-
-          </div>
-
-          {/* RIGHT: SETTINGS & TELEMETRY */}
-          <div className="absolute bottom-6 right-6 z-50 flex flex-col justify-end items-end gap-3">
-            <div className={`transition-all duration-300 origin-bottom-right ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 right-0 ${showSettingsMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
-              <div className="glass-radiant w-64 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
-                <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className={`flex items-center gap-2 text-[10px] uppercase font-mono tracking-[0.2em] font-bold ${connectionSummary.textClass}`}>
-                    <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
-                    {connectionSummary.label}
-                  </span>
-                </div>
-
-                {/* Telemetry Toggle */}
-                <button
-                  type="button"
-                  onClick={showTelemetry ? handleHideTelemetry : handleShowTelemetry}
-                  className={`w-full py-2.5 rounded-lg transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border ${showTelemetry ? 'bg-scope-cyan/20 text-scope-cyan border-scope-cyan/30 shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white'}`}
-                >
-                  {showTelemetry ? "Hide Telemetry" : "Show Telemetry"}
-                </button>
-
-                {/* Disconnect Button */}
-                <button
-                  type="button"
-                  onClick={handleScopeDisconnect}
-                  className="w-full mt-1 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border border-red-500/20"
-                >
-                  Disconnect
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { setShowSettingsMenu(!showSettingsMenu); setShowAudioMenu(false); }}
-              className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showSettingsMenu ? 'bg-scope-cyan text-black hover:bg-scope-cyan/90 hover:shadow-[0_0_20px_rgba(6,182,212,0.6)]' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
-              aria-label="Toggle Settings Menu"
-              title="Settings"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
-            </button>
-          </div>
-        </>
-      )}
-    </div >
+          </>
+        )}
+    </div>
   );
 }

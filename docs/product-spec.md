@@ -1,14 +1,13 @@
-# MetaDJ Soundscape - Public Capability Spec
+# MetaDJ Soundscape - Product Specification
 
-**Last Modified**: 2026-02-18 22:45 ET
+**Last Modified**: 2026-02-20
 **Status**: Active
-**Version**: 1.1.0-candidate
 
 ## Summary
 
 MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Scope. It analyzes in-browser audio signals, maps them to generation parameters, and streams those parameters to Scope in real time.
 
-## Included In Current Build
+## Core Capabilities
 
 - Demo track playback with infinite loop
 - Microphone input mode
@@ -30,7 +29,7 @@ MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Sco
 - Multi-track DAW-style mixing inside app
 - Full production deployment automation workflows
 
-## Technical Notes (Public)
+## Technical Defaults & Constants
 
 - Default pipeline: `longlive`
 - Default resolutions:
@@ -49,6 +48,6 @@ MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Sco
 - Prod dependency audit: no known vulnerabilities
 - Full dependency audit: track dev-tooling advisories in CI/security triage
 
-## Setup
+## Setup and Commands
 
-See `README.md` for run instructions, environment variables, and Scope setup guidance.
+See `README.md` for run instructions, environment variables, and core setup guidance.

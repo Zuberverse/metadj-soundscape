@@ -18,6 +18,8 @@ export interface PipelineLoadParams {
   height?: number;
   seed?: number;
   vace_enabled?: boolean;
+  output_ndi?: boolean;
+  output_spout?: boolean;
   loras?: Array<{ path: string; scale?: number }>;
   lora_merge_mode?: "permanent_merge" | "runtime_peft";
   [key: string]: unknown;
@@ -46,6 +48,7 @@ export interface HardwareInfoResponse {
   total_vram_mb?: number;
   free_vram_mb?: number;
   spout_available?: boolean;
+  ndi_available?: boolean;
   [key: string]: unknown;
 }
 

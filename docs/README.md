@@ -1,37 +1,20 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-02-12 09:23 ET
+**Last Modified**: 2026-02-20
 
 Documentation index for Soundscape.
 
-## Start Here
+## Core Pillars
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](./architecture.md) | System topology, connection lifecycle, recording + auto-theme behavior |
-| [Soundscape Mechanics](./soundscape-mechanics.md) | Signal processing, mapping, transitions, performance semantics |
-| [Feature Spec](./features/soundscape-mvp-spec.md) | Public capability summary for current build |
+| [System Architecture](./system-architecture.md) | Runtime topology, signal processing, connection lifecycle, semantics |
+| [Scope Integration](./scope-integration.md) | Single source of truth for Daydream Scope endpoints + technical parameters |
+| [Product Spec](./product-spec.md) | Public capabilities, baseline validation thresholds |
+| [Operations](./operations.md) | Tooling, Runpod references, deployment |
 
-## Scope Integration
+## Historical Context
 
-| Document | Description |
+| Location | Description |
 |----------|-------------|
-| [Scope Overview](./scope.md) | Scope context and official links |
-| [Scope Technical](./scope-technical.md) | Project-specific technical assumptions |
-| [API Reference](./api-reference.md) | Scope endpoint usage in this app |
-| [Scope Platform Reference](./scope-platform-reference.md) | Platform deltas and compatibility notes |
-
-## Operations
-
-| Document | Description |
-|----------|-------------|
-| [RunPod Reference](./runpod-reference.md) | Deployment context and operational notes |
-| [Tools](./tools.md) | Local tooling and scripts |
-| [Strategy](./strategy.md) | Project direction and scoping notes |
-
-## Historical / Research
-
-| Document | Description |
-|----------|-------------|
-| [Research Notes](./research.md) | Technical investigations and findings |
-| [Scope Track Overview](./scope-track-overview.md) | Hackathon/program context |
+| [Archive](./archive/) | Contains original hackathon scope-track research, submission notes, and early feature planning. |
