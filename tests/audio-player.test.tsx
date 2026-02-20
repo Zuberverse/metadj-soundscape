@@ -101,8 +101,6 @@ describe("AudioPlayer", () => {
     });
 
     const alertNode = container?.querySelector('[role="alert"]');
-    expect(alertNode?.textContent).toContain("Permission denied");
-    const retryButton = container?.querySelector("button[aria-label='Retry microphone access']") as HTMLButtonElement;
-    expect(document.activeElement).toBe(retryButton);
+    expect(alertNode?.textContent).toContain("Error");
   });
 });

@@ -133,7 +133,7 @@ export interface Theme {
   /** Style modifiers added to prompt */
   styleModifiers: string[];
   /** Negative prompt (what to avoid) */
-  negativePrompt: string;
+  negativePrompt?: string;
 
   /** Parameter value ranges */
   ranges: ThemeRanges;

@@ -71,7 +71,7 @@ function createMockAudioElement(): HTMLAudioElement {
   return {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
-    play: vi.fn(async () => {}),
+    play: vi.fn(async () => { }),
     pause: vi.fn(),
   } as unknown as HTMLAudioElement;
 }
@@ -153,10 +153,10 @@ describe("useSoundscape", () => {
 
     it("uses provided initial theme", () => {
       const { result } = renderHook(() =>
-        useSoundscape({ initialTheme: "neon-foundry" })
+        useSoundscape({ initialTheme: "forge" })
       );
 
-      expect(result.current.currentTheme.id).toBe("neon-foundry");
+      expect(result.current.currentTheme.id).toBe("forge");
     });
 
     it("creates custom theme from CustomThemeInput", () => {
@@ -188,11 +188,11 @@ describe("useSoundscape", () => {
       const { result } = renderHook(() => useSoundscape());
 
       act(() => {
-        result.current.setTheme("neon-foundry");
+        result.current.setTheme("forge");
       });
 
-      expect(result.current.currentTheme.id).toBe("neon-foundry");
-      expect(result.current.state.activeTheme?.id).toBe("neon-foundry");
+      expect(result.current.currentTheme.id).toBe("forge");
+      expect(result.current.state.activeTheme?.id).toBe("forge");
     });
 
     it("falls back to default for unknown theme ID", () => {
@@ -226,12 +226,12 @@ describe("useSoundscape", () => {
       const { result } = renderHook(() => useSoundscape());
 
       act(() => {
-        result.current.setTheme("neon-foundry");
+        result.current.setTheme("forge");
       });
 
       // MappingEngine.setTheme should be called when it exists
       // (engine is created on connectAudio, but setTheme updates the state regardless)
-      expect(result.current.currentTheme.id).toBe("neon-foundry");
+      expect(result.current.currentTheme.id).toBe("forge");
     });
 
     it("queues a transition while channel is closed and replays it once channel opens", async () => {
@@ -247,7 +247,7 @@ describe("useSoundscape", () => {
 
       act(() => {
         result.current.setDataChannel(closedChannel);
-        result.current.setTheme("neon-foundry");
+        result.current.setTheme("forge");
       });
 
       expect(sendMock).not.toHaveBeenCalled();
@@ -274,14 +274,14 @@ describe("useSoundscape", () => {
       const closedChannel = createMockDataChannel("closed");
       const openChannel = createMockDataChannel("open");
       const sendMock = openChannel.send as ReturnType<typeof vi.fn>;
-      const latestTheme = PRESET_THEMES.find((theme) => theme.id === "digital-forest");
+      const latestTheme = PRESET_THEMES.find((theme) => theme.id === "forest");
 
       expect(latestTheme).toBeDefined();
 
       act(() => {
         result.current.setDataChannel(closedChannel);
-        result.current.setTheme("neon-foundry");
-        result.current.setTheme("digital-forest");
+        result.current.setTheme("forge");
+        result.current.setTheme("forest");
       });
 
       act(() => {
@@ -616,7 +616,7 @@ describe("useSoundscape", () => {
 
       act(() => {
         result.current.setDataChannel(closedChannel);
-        result.current.setTheme("neon-foundry");
+        result.current.setTheme("forge");
       });
 
       act(() => {

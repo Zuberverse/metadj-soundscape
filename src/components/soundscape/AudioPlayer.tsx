@@ -394,7 +394,7 @@ export function AudioPlayer({
 
   const sourceSwitcher = (
     <div
-      className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5"
+      className="flex items-center gap-0 rounded-lg border border-white/10 bg-white/[0.03] p-0.5 overflow-hidden flex-shrink-0"
       role="radiogroup"
       aria-label="Audio source"
       onKeyDown={handleSourceSwitcherKeyDown}
@@ -409,11 +409,10 @@ export function AudioPlayer({
           void handleSourceChange("demo");
         }}
         disabled={disabled}
-        className={`px-2.5 py-1.5 min-h-[44px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
-          sourceMode === "demo"
-            ? "bg-scope-cyan/20 text-scope-cyan"
-            : "text-white/45 hover:text-white/70"
-        }`}
+        className={`px-2 py-1 min-h-[36px] lg:min-h-[44px] text-[9px] lg:text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${sourceMode === "demo"
+          ? "bg-scope-cyan/20 text-scope-cyan"
+          : "text-white/45 hover:text-white/70"
+          }`}
       >
         Demo
       </button>
@@ -427,11 +426,10 @@ export function AudioPlayer({
           void handleSourceChange("mic");
         }}
         disabled={disabled}
-        className={`px-2.5 py-1.5 min-h-[44px] text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${
-          sourceMode === "mic"
-            ? "bg-scope-purple/20 text-scope-purple"
-            : "text-white/45 hover:text-white/70"
-        }`}
+        className={`px-2 py-1 min-h-[36px] lg:min-h-[44px] text-[9px] lg:text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors duration-300 ${sourceMode === "mic"
+          ? "bg-scope-purple/20 text-scope-purple"
+          : "text-white/45 hover:text-white/70"
+          }`}
       >
         Mic
       </button>
@@ -470,7 +468,7 @@ export function AudioPlayer({
           </svg>
         )}
       </button>
-      
+
       {showVolumeSlider && (
         <div
           id={compactVolumePanelId}
@@ -506,75 +504,45 @@ export function AudioPlayer({
   // Compact mode for dock
   if (compact) {
     return (
-      <div className="flex items-center gap-3 w-full">
-        {/* Play/Pause */}
-        <button
-          type="button"
-          onClick={() => {
-            void togglePlayPause();
-          }}
-          disabled={disabled}
-          aria-label={isPlaying ? "Pause audio" : "Play audio"}
-          className={`
-            w-12 h-12 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center transition-all duration-300 border focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan group
-            ${isPlaying
-              ? "bg-scope-purple/30 text-white border-scope-purple/50 shadow-[0_0_20px_rgba(139,92,246,0.4)]"
-              : "glass bg-white/5 text-white/90 border-white/10 hover:bg-white/10"}
-            ${disabled ? "opacity-40 cursor-not-allowed" : ""}
-          `}
-        >
-          {isPlaying ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="drop-shadow-md">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="drop-shadow-md translate-x-[1px]">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-
-        {/* Restart */}
-        <button
-          type="button"
-          onClick={() => {
-            void handleRestart();
-          }}
-          disabled={disabled}
-          aria-label="Restart track"
-          className={`
-            w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-all duration-300 border bg-transparent text-white/40 border-transparent hover:bg-white/5 hover:text-white/80 focus:outline-none focus:ring-2 focus:ring-scope-cyan
-            ${disabled ? "opacity-40 cursor-not-allowed" : ""}
-          `}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 4v6h6" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
-        </button>
-
-        {/* Track info with integrated progress bar */}
-        <div className="flex-1 min-w-0 pr-2 pl-1 relative group">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-widest text-scope-cyan font-bold mb-0.5 opacity-80">{sourceMode === "demo" ? "Now Playing" : "Capture"}</span>
-              <p className="text-xs text-white truncate font-medium drop-shadow-sm tracking-wide">
-                {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone"}
+      <div className="flex flex-col gap-4 w-full p-2">
+        {/* Track Title and Progress Row */}
+        <div className="flex flex-col gap-2 w-full">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-mono tracking-[0.2em] font-bold text-scope-cyan opacity-80 mb-0.5">
+                {sourceMode === "demo" ? "Now Playing" : "Capture"}
+              </span>
+              <p className="font-bold text-white text-sm tracking-wide truncate drop-shadow-sm">
+                {sourceMode === "demo" ? DEMO_TRACK.name : "Live Microphone Input"}
               </p>
             </div>
             {sourceMode === "demo" && duration > 0 && (
-              <p className="text-[10px] text-white/50 tabular-nums font-mono mt-auto">
-                {formatTime(currentTime)} <span className="text-white/20 mx-0.5">/</span> {formatTime(duration)}
+              <p className="text-xs text-white/50 tabular-nums font-mono font-bold mt-auto self-end">
+                <span className="text-white/90">{formatTime(currentTime)}</span> <span className="text-white/20 mx-1">/</span> {formatTime(duration)}
               </p>
             )}
+            {sourceMode === "mic" && (
+              <div className="flex items-center gap-2 self-end mb-1">
+                <div className={`w-2 h-2 rounded-full ${micState === 'active' ? 'bg-scope-purple animate-pulse shadow-[0_0_8px_rgba(139,92,246,0.8)]' : 'bg-amber-400'}`} />
+                <p className={`text-[10px] font-mono tracking-[0.2em] font-bold uppercase ${micState === "active" ? "text-scope-purple" :
+                  micState === "requesting" ? "text-white/50 animate-pulse" :
+                    micState === "error" ? "text-red-400" :
+                      "text-white/40"
+                  }`} role={micState === "error" ? "alert" : "status"}>
+                  {micState === "requesting" ? "Requesting..." :
+                    micState === "active" ? "Listening" :
+                      micState === "error" && micError ? "Error" :
+                        "Ready"}
+                </p>
+              </div>
+            )}
           </div>
-          
+
           {/* Mini progress bar for compact mode */}
           {sourceMode === "demo" && duration > 0 && (
             <div
               ref={progressBarRef}
-              className="relative h-1.5 rounded-full cursor-pointer group/bar overflow-hidden bg-black/40 border border-white/5 shadow-inner"
+              className="relative h-2 rounded-full cursor-pointer group overflow-hidden bg-black/40 border border-white/10 shadow-inner mt-1"
               onClick={handleProgressBarClick}
             >
               <input
@@ -584,41 +552,78 @@ export function AudioPlayer({
                 value={currentTime}
                 onChange={handleSeek}
                 disabled={disabled}
-                className="peer absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="peer absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 aria-label="Seek audio position"
               />
               <div
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-scope-purple via-scope-cyan to-scope-cyan rounded-full transition-all duration-[50ms] peer-focus-visible:ring-2 peer-focus-visible:ring-scope-cyan"
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-scope-purple via-scope-cyan to-scope-cyan rounded-full transition-all duration-[50ms]"
                 style={{ width: `${(currentTime / duration) * 100}%` }}
               >
                 <div className="absolute top-0 right-0 bottom-0 w-2 bg-white/40 blur-[2px]" />
               </div>
             </div>
           )}
-          
-          {sourceMode === "mic" && (
-            <div className="flex items-center gap-2 mt-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${micState === 'active' ? 'bg-scope-purple animate-pulse shadow-[0_0_8px_rgba(139,92,246,0.8)]' : 'bg-amber-400'}`} />
-              <p className={`text-[10px] uppercase tracking-widest font-bold ${
-                micState === "active" ? "text-scope-purple" :
-                micState === "requesting" ? "text-white/50 animate-pulse" :
-                micState === "error" ? "text-red-400" :
-                "text-white/40"
-              }`} role={micState === "error" ? "alert" : "status"}>
-                {micState === "requesting" ? "Requesting..." :
-                 micState === "active" ? "Listening" :
-                 micState === "error" && micError ? "Error" :
-                 "Ready"}
-              </p>
-            </div>
-          )}
         </div>
 
-        <div className="h-8 w-px bg-white/10 mx-1" />
+        {/* Transport Controls Row */}
+        <div className="flex items-center justify-between w-full pt-1">
+          {/* Left: Play/Restart/Volume */}
+          <div className="flex items-center gap-3">
+            {/* Play/Pause */}
+            <button
+              type="button"
+              onClick={() => {
+                void togglePlayPause();
+              }}
+              disabled={disabled}
+              aria-label={isPlaying ? "Pause audio" : "Play audio"}
+              className={`
+                w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 border focus:outline-none focus:ring-2 focus:ring-scope-cyan group hover:scale-105 shadow-lg
+                ${isPlaying
+                  ? "bg-gradient-to-br from-scope-purple to-scope-cyan text-white shadow-[0_0_20px_rgba(139,92,246,0.5)] border-transparent"
+                  : "glass bg-white/10 text-white border-white/20 hover:bg-white/15"}
+                ${disabled ? "opacity-40 cursor-not-allowed" : ""}
+              `}
+            >
+              {isPlaying ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="drop-shadow-md">
+                  <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                  <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="drop-shadow-md translate-x-[2px]">
+                  <path d="M7 4.5v15L19.5 12z" />
+                </svg>
+              )}
+            </button>
 
-        {sourceSwitcher}
-        
-        {showVolume && <div className="ml-1">{volumeControl}</div>}
+            {/* Restart */}
+            <button
+              type="button"
+              onClick={() => {
+                void handleRestart();
+              }}
+              disabled={disabled}
+              aria-label="Restart track"
+              className={`
+                w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white/90 focus:outline-none focus:ring-2 focus:ring-scope-cyan
+                ${disabled ? "opacity-40 cursor-not-allowed" : ""}
+              `}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+            </button>
+
+            {showVolume && <div className="ml-1">{volumeControl}</div>}
+          </div>
+
+          {/* Right: Source Switcher */}
+          <div>
+            {sourceSwitcher}
+          </div>
+        </div>
 
         {/* Audio element */}
         <audio
@@ -657,7 +662,7 @@ export function AudioPlayer({
             </p>
           </div>
           <div className="mt-3 sm:mt-0 self-start sm:self-auto">
-             {sourceSwitcher}
+            {sourceSwitcher}
           </div>
         </div>
       </div>
@@ -678,7 +683,7 @@ export function AudioPlayer({
       <div className="space-y-6 pt-2">
         {sourceMode === "demo" ? (
           <div className="space-y-3 px-2">
-            <div 
+            <div
               ref={progressBarRef}
               className="relative h-2.5 group cursor-pointer bg-black/50 border border-white/10 rounded-full overflow-visible shadow-inner"
               onClick={handleProgressBarClick}
@@ -717,37 +722,36 @@ export function AudioPlayer({
           </div>
         ) : (
           <div className="glass-radiant p-4 rounded-2xl border border-white/5 flex items-start gap-4 mx-2">
-             <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${micState === 'active' ? 'bg-scope-purple shadow-[0_0_12px_rgba(139,92,246,0.8)] animate-pulse' : micState === 'error' ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]' : 'bg-amber-400'}`} />
-             <div className="flex-1">
-                <p className={`text-xs uppercase tracking-widest font-bold ${
-                  micState === "requesting" ? "text-white/50 animate-pulse" :
-                  micState === "active" ? "text-scope-purple" :
+            <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${micState === 'active' ? 'bg-scope-purple shadow-[0_0_12px_rgba(139,92,246,0.8)] animate-pulse' : micState === 'error' ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]' : 'bg-amber-400'}`} />
+            <div className="flex-1">
+              <p className={`text-xs uppercase tracking-widest font-bold ${micState === "requesting" ? "text-white/50 animate-pulse" :
+                micState === "active" ? "text-scope-purple" :
                   micState === 'error' ? "text-red-400" :
-                  "text-white/40"
+                    "text-white/40"
                 }`} role="status" aria-live="polite">
-                  {micState === "requesting" ? "Requesting access..." :
-                   micState === "active" ? "Active stream" :
-                   micState === "error" ? "Connection Event" :
-                   "Standby"}
-                </p>
-                {micError && (
-                  <div className="mt-2 text-[11px] text-white/60 leading-relaxed max-w-sm">
-                    {micError.includes("Permission") || micError.includes("denied")
-                      ? "Microphone access denied. Check your browser permissions and retry."
-                      : micError.includes("not supported")
+                {micState === "requesting" ? "Requesting access..." :
+                  micState === "active" ? "Active stream" :
+                    micState === "error" ? "Connection Event" :
+                      "Standby"}
+              </p>
+              {micError && (
+                <div className="mt-2 text-[11px] text-white/60 leading-relaxed max-w-sm">
+                  {micError.includes("Permission") || micError.includes("denied")
+                    ? "Microphone access denied. Check your browser permissions and retry."
+                    : micError.includes("not supported")
                       ? "Microphone not supported in this browser environment."
                       : micError}
-                    <button
-                      ref={retryButtonRef}
-                      type="button"
-                      onClick={() => void handleSourceChange("mic")}
-                      className="mt-3 block text-xs uppercase tracking-widest font-bold text-scope-cyan hover:text-white transition-colors focus:outline-none"
-                    >
-                      Retry Connection
-                    </button>
-                  </div>
-                )}
-             </div>
+                  <button
+                    ref={retryButtonRef}
+                    type="button"
+                    onClick={() => void handleSourceChange("mic")}
+                    className="mt-3 block text-xs uppercase tracking-widest font-bold text-scope-cyan hover:text-white transition-colors focus:outline-none"
+                  >
+                    Retry Connection
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -789,7 +793,7 @@ export function AudioPlayer({
               </svg>
             )}
           </button>
-          
+
           {/* Volume Control for full mode */}
           {showVolume && (
             <div className="flex items-center gap-4 glass bg-black/40 border border-white/5 rounded-2xl px-5 py-3 flex-1 max-w-[240px]">
@@ -829,7 +833,7 @@ export function AudioPlayer({
                   aria-label="Volume"
                 />
                 <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden shadow-inner">
-                  <div 
+                  <div
                     className="h-full bg-scope-cyan rounded-full transition-all duration-75 shadow-[0_0_10px_rgba(6,182,212,0.5)] group-hover/vol:bg-white"
                     style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
                   />

@@ -31,23 +31,22 @@ import type {
  * Cosmic Voyage - The signature MetaDJ journey through digital space
  */
 export const COSMIC_VOYAGE: Theme = {
-  id: "cosmic-voyage",
-  name: "Cosmic Voyage",
-  description: "Journey through neon-lit digital cosmos",
+  id: "astral",
+  name: "Astral",
+  description: "Endless high-speed journey through a neon-lit digital cosmos",
 
   basePrompt:
-    "adventurous flythrough, dynamic camera movement, soaring through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "cosmic digital landscape, neon purple and cyan nebula, " +
     "floating geometric structures, ethereal light particles, " +
     "deep space atmosphere, stars and galaxies rushing past, " +
     "magenta energy accents, epic journey forward",
   styleModifiers: ["cinematic lighting", "depth of field", "volumetric fog", "high definition", "ultra detailed"],
-  negativePrompt: "blurry, low quality, text, watermark, human faces",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.5, max: 0.7 }, // Higher floor for more evolution
-    transitionSpeed: { min: 4, max: 16 },
+    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -97,23 +96,22 @@ export const COSMIC_VOYAGE: Theme = {
  * Neon Foundry - The AI Foundry creative sanctuary
  */
 export const NEON_FOUNDRY: Theme = {
-  id: "neon-foundry",
-  name: "Neon Foundry",
-  description: "Inside the Zuberant AI Foundry - where creation happens",
+  id: "forge",
+  name: "Forge",
+  description: "Endless descent into the Zuberant AI Foundry",
 
   basePrompt:
-    "adventurous flythrough, sweeping camera movement, gliding through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "futuristic workshop interior, glowing machinery passing by, " +
     "holographic displays in cyan, purple ambient lighting, " +
     "gothic architecture meets technology, creative forge, " +
     "magenta sparks flying past, AI foundry exploration",
   styleModifiers: ["industrial aesthetic", "dramatic shadows", "neon accents", "high definition", "sharp details"],
-  negativePrompt: "outdoor, nature, daylight, cartoon",
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.5, max: 0.7 }, // Higher floor for more evolution
-    transitionSpeed: { min: 6, max: 20 },
+    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -156,23 +154,22 @@ export const NEON_FOUNDRY: Theme = {
  * Digital Forest - Nature meets technology
  */
 export const DIGITAL_FOREST: Theme = {
-  id: "digital-forest",
-  name: "Digital Forest",
-  description: "Bioluminescent nature infused with technology",
+  id: "forest",
+  name: "Forest",
+  description: "High-speed weave through a bioluminescent cyber-forest",
 
   basePrompt:
-    "adventurous flythrough, flowing camera movement, weaving through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "enchanted forest at night, bioluminescent plants rushing past, " +
     "floating particles streaming by, cyan and magenta glow, " +
     "mystical atmosphere, tech-organic fusion, " +
     "purple shadows, dynamic forest exploration",
   styleModifiers: ["magical realism", "soft glow", "ethereal", "high definition", "crisp details"],
-  negativePrompt: "urban, concrete, harsh lighting, realistic",
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.48, max: 0.65 }, // Higher floor for more evolution
-    transitionSpeed: { min: 8, max: 24 },
+    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -215,22 +212,21 @@ export const DIGITAL_FOREST: Theme = {
  * Synthwave Highway - 80s retro-futurism in motion
  */
 export const SYNTHWAVE_HIGHWAY: Theme = {
-  id: "synthwave-highway",
-  name: "Synthwave Highway",
-  description: "80s retro-futuristic endless drive",
+  id: "synthwave",
+  name: "Synthwave",
+  description: "Infinite flight towards a glowing synthwave sunset",
 
   basePrompt:
-    "high speed flythrough, racing forward, speeding down " +
-    "synthwave landscape, neon grid highway stretching ahead, " +
-    "sunset gradient sky in purple and magenta, palm trees rushing past, " +
-    "retro sports car POV, vaporwave aesthetic, cyan accent lights, motion blur",
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
+    "synthwave landscape, glowing neon grid stretching endlessly ahead, " +
+    "massive synthwave sunset gradient sky in purple and magenta, wireframe palm trees rushing past, " +
+    "vaporwave aesthetic, cyan ambient lighting, motion blur",
   styleModifiers: ["80s aesthetic", "chromatic aberration", "scan lines", "high definition", "vibrant colors"],
-  negativePrompt: "modern, realistic, daytime, cloudy",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [950, 700, 450] },
-    noiseScale: { min: 0.5, max: 0.72 }, // Higher floor for more evolution
-    transitionSpeed: { min: 4, max: 12 },
+    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -272,12 +268,12 @@ export const SYNTHWAVE_HIGHWAY: Theme = {
  * Crystal Sanctuary - The gothic castle interior
  */
 export const CRYSTAL_SANCTUARY: Theme = {
-  id: "crystal-sanctuary",
-  name: "Crystal Sanctuary",
-  description: "Inside the gothic castle where transformation happens",
+  id: "sanctuary",
+  name: "Sanctuary",
+  description: "Floating endlessly through a gothic crystal fortress",
 
   basePrompt:
-    "adventurous flythrough, graceful camera movement, floating through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "gothic castle interior, stained glass windows in purple and cyan, " +
     "crystal chandeliers passing overhead, candlelight and magical orbs, " +
     "stone arches sweeping past, mystical atmosphere, magenta light beams, " +
@@ -289,12 +285,11 @@ export const CRYSTAL_SANCTUARY: Theme = {
     "high definition",
     "intricate details",
   ],
-  negativePrompt: "modern, outdoor, daylight, minimalist",
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.48, max: 0.65 }, // Higher floor for more evolution
-    transitionSpeed: { min: 8, max: 20 },
+    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -344,22 +339,21 @@ export const CRYSTAL_SANCTUARY: Theme = {
  * Ocean Depths - Underwater bioluminescent exploration
  */
 export const OCEAN_DEPTHS: Theme = {
-  id: "ocean-depths",
-  name: "Ocean Depths",
-  description: "Diving through bioluminescent underwater worlds",
+  id: "ocean",
+  name: "Ocean",
+  description: "Deep dive flythrough in bioluminescent waters",
 
   basePrompt:
-    "adventurous underwater flythrough, diving camera movement, gliding through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "deep ocean abyss, bioluminescent creatures drifting past, " +
     "glowing jellyfish in cyan and purple, coral formations, " +
     "light rays filtering through dark water, magenta sea plants swaying, " +
     "mysterious depths exploration, bubbles rising",
   styleModifiers: ["underwater caustics", "volumetric light", "ethereal glow", "high definition", "dreamlike"],
-  negativePrompt: "surface, sky, land, harsh lighting",
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.48, max: 0.68 },
+    noiseScale: { min: 0.55, max: 0.75 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -403,23 +397,22 @@ export const OCEAN_DEPTHS: Theme = {
  * Cyber City - Neon-lit futuristic cityscape flight
  */
 export const CYBER_CITY: Theme = {
-  id: "cyber-city",
-  name: "Cyber City",
-  description: "Flying through neon-drenched futuristic metropolis",
+  id: "cyber",
+  name: "Cyber",
+  description: "Freefall flight through a cyberpunk cityscape",
 
   basePrompt:
-    "high speed flythrough, swooping camera movement, flying between " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "towering cyberpunk skyscrapers, neon signs in purple and cyan, " +
-    "holographic advertisements streaming past, flying cars, " +
+    "holographic advertisements streaming past, massive overhead transport ships, " +
     "rain-slicked streets below, magenta accent lights, " +
     "futuristic city exploration, glass and chrome architecture",
   styleModifiers: ["cyberpunk aesthetic", "neon reflections", "rain atmosphere", "high definition", "sharp details"],
-  negativePrompt: "nature, daylight, rural, vintage",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.52, max: 0.72 },
-    transitionSpeed: { min: 4, max: 14 },
+    noiseScale: { min: 0.55, max: 0.75 },
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -461,23 +454,22 @@ export const CYBER_CITY: Theme = {
  * Aurora Dreams - Flowing through ethereal northern lights
  */
 export const AURORA_DREAMS: Theme = {
-  id: "aurora-dreams",
-  name: "Aurora Dreams",
-  description: "Drifting through abstract aurora and light formations",
+  id: "aurora",
+  name: "Aurora",
+  description: "Flowing continuously through ethereal light ribbons",
 
   basePrompt:
-    "gentle flythrough, floating camera movement, drifting through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "aurora borealis, flowing curtains of purple and cyan light, " +
     "abstract light ribbons dancing, star field beyond, " +
     "ethereal mist swirling, magenta energy wisps, " +
     "dreamlike atmosphere, celestial light show",
   styleModifiers: ["ethereal", "soft glow", "abstract", "high definition", "flowing motion"],
-  negativePrompt: "ground, buildings, harsh edges, realistic",
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.45, max: 0.62 },
-    transitionSpeed: { min: 8, max: 24 },
+    noiseScale: { min: 0.55, max: 0.75 },
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -512,7 +504,7 @@ export const AURORA_DREAMS: Theme = {
       "aurora surge, purple light wave, cyan ribbon dance, celestial bloom",
       "light curtain pulse, magenta energy flow, ethereal burst, star shimmer",
     ],
-    blendDuration: 7,
+    blendDuration: 6,
   },
 };
 
@@ -520,23 +512,22 @@ export const AURORA_DREAMS: Theme = {
  * 8-Bit Adventure - Retro pixel art gaming worlds
  */
 export const EIGHT_BIT_ADVENTURE: Theme = {
-  id: "8-bit-adventure",
-  name: "8-Bit Adventure",
-  description: "Exploring vibrant retro pixel art game worlds",
+  id: "arcade",
+  name: "Arcade",
+  description: "High-velocity rush through a retro 8-bit voxel world",
 
   basePrompt:
-    "adventurous flythrough, dynamic camera movement, soaring through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "retro pixel art world, vibrant 8-bit aesthetic, blocky voxel terrain, " +
     "neon pixel particles, cyan and magenta color palette, " +
     "glowing power-ups floating, digital grid patterns, " +
     "game-like atmosphere, nostalgic adventure forward",
   styleModifiers: ["pixel art", "retro gaming", "vibrant colors", "blocky shapes", "glowing edges"],
-  negativePrompt: "realistic, photographic, smooth gradients, organic shapes",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.48, max: 0.68 },
-    transitionSpeed: { min: 4, max: 14 },
+    noiseScale: { min: 0.55, max: 0.75 },
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -577,7 +568,7 @@ export const EIGHT_BIT_ADVENTURE: Theme = {
       "pixel explosion, 8-bit particles burst, retro power-up collected, glowing coins scatter, cyan energy wave",
       "level warp zone, pixel portal opening, digital blocks transforming, magenta lightning, game world shift",
     ],
-    blendDuration: 5,
+    blendDuration: 6,
   },
 };
 
@@ -585,23 +576,22 @@ export const EIGHT_BIT_ADVENTURE: Theme = {
  * Volcanic Forge - Molten fire and ember landscapes
  */
 export const VOLCANIC_FORGE: Theme = {
-  id: "volcanic-forge",
-  name: "Volcanic Forge",
-  description: "Flying through molten fire and ember landscapes",
+  id: "volcano",
+  name: "Volcano",
+  description: "Endless dive through magma and molten embers",
 
   basePrompt:
-    "adventurous flythrough, dynamic camera movement, soaring through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "volcanic landscape, rivers of molten lava flowing below, " +
     "glowing embers and sparks rising, magma pools with cyan mineral veins, " +
     "obsidian rock formations, magenta heat shimmer, " +
     "dramatic fire plumes, forge of creation atmosphere",
   styleModifiers: ["dramatic lighting", "heat distortion", "ember particles", "molten glow", "volcanic atmosphere"],
-  negativePrompt: "ice, snow, cold, blue tones, peaceful",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.52, max: 0.72 },
-    transitionSpeed: { min: 4, max: 14 },
+    noiseScale: { min: 0.55, max: 0.75 },
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -635,7 +625,7 @@ export const VOLCANIC_FORGE: Theme = {
       "lava eruption burst, magma fountain, ember storm, cyan mineral flash, volcanic power surge",
       "fire tornado forming, molten wave, obsidian shattering, magenta plasma burst, forge ignition",
     ],
-    blendDuration: 5,
+    blendDuration: 6,
   },
 };
 
@@ -643,22 +633,21 @@ export const VOLCANIC_FORGE: Theme = {
  * Quantum Realm - Abstract particle physics visualizations
  */
 export const QUANTUM_REALM: Theme = {
-  id: "quantum-realm",
-  name: "Quantum Realm",
-  description: "Diving into abstract particle physics dimensions",
+  id: "quantum",
+  name: "Quantum",
+  description: "Infinite zoom through quantum particle dimensions",
 
   basePrompt:
-    "adventurous flythrough, fluid camera movement, diving through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "quantum particle field, subatomic structures swirling, " +
     "probability waves in cyan and purple, electron orbitals glowing, " +
     "string theory visualizations, magenta energy fluctuations, " +
     "abstract scientific beauty, microscopic cosmos",
   styleModifiers: ["abstract geometry", "particle effects", "quantum blur", "scientific aesthetic", "ethereal glow"],
-  negativePrompt: "realistic, macro, large scale, buildings, nature",
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.48, max: 0.68 },
+    noiseScale: { min: 0.55, max: 0.75 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -702,23 +691,22 @@ export const QUANTUM_REALM: Theme = {
  * Neon Tokyo - Japanese cyberpunk nightlife
  */
 export const NEON_TOKYO: Theme = {
-  id: "neon-tokyo",
-  name: "Neon Tokyo",
-  description: "Racing through Japanese cyberpunk streets",
+  id: "tokyo",
+  name: "Tokyo",
+  description: "Relentless night street race through cyberpunk Japan",
 
   basePrompt:
-    "high speed flythrough, dynamic camera movement, racing through " +
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
     "neon-lit Tokyo streets at night, Japanese signage glowing, " +
     "cherry blossoms mixed with holographic ads, cyan and magenta neon, " +
     "rain-slicked pavement reflections, izakaya lanterns, " +
     "anime aesthetic atmosphere, cyberpunk meets tradition",
   styleModifiers: ["Japanese aesthetic", "neon reflections", "rain atmosphere", "anime inspired", "urban night"],
-  negativePrompt: "daylight, western, rural, desert, nature only",
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.5, max: 0.7 },
-    transitionSpeed: { min: 4, max: 14 },
+    noiseScale: { min: 0.55, max: 0.75 },
+    transitionSpeed: { min: 6, max: 18 },
   },
 
   mappings: {
@@ -752,7 +740,7 @@ export const NEON_TOKYO: Theme = {
       "neon sign explosion, kanji characters flashing, cyan rain burst, tokyo night pulse",
       "hologram advertisement surge, cherry blossom storm, magenta light cascade, street racing flash",
     ],
-    blendDuration: 5,
+    blendDuration: 6,
   },
 };
 
@@ -776,18 +764,18 @@ export const PRESET_THEMES: Theme[] = [
 ];
 
 export const THEMES_BY_ID: Record<string, Theme> = {
-  "cosmic-voyage": COSMIC_VOYAGE,
-  "neon-foundry": NEON_FOUNDRY,
-  "digital-forest": DIGITAL_FOREST,
-  "synthwave-highway": SYNTHWAVE_HIGHWAY,
-  "crystal-sanctuary": CRYSTAL_SANCTUARY,
-  "ocean-depths": OCEAN_DEPTHS,
-  "cyber-city": CYBER_CITY,
-  "aurora-dreams": AURORA_DREAMS,
-  "8-bit-adventure": EIGHT_BIT_ADVENTURE,
-  "volcanic-forge": VOLCANIC_FORGE,
-  "quantum-realm": QUANTUM_REALM,
-  "neon-tokyo": NEON_TOKYO,
+  astral: COSMIC_VOYAGE,
+  forge: NEON_FOUNDRY,
+  forest: DIGITAL_FOREST,
+  synthwave: SYNTHWAVE_HIGHWAY,
+  sanctuary: CRYSTAL_SANCTUARY,
+  ocean: OCEAN_DEPTHS,
+  cyber: CYBER_CITY,
+  aurora: AURORA_DREAMS,
+  arcade: EIGHT_BIT_ADVENTURE,
+  volcano: VOLCANIC_FORGE,
+  quantum: QUANTUM_REALM,
+  tokyo: NEON_TOKYO,
 };
 
 // ============================================================================
@@ -830,12 +818,11 @@ export function createCustomTheme(input: CustomThemeInput): Theme {
 
     basePrompt: input.prompt,
     styleModifiers: input.style || ["high quality", "detailed"],
-    negativePrompt: "blurry, low quality, distorted",
 
     ranges: {
       denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-      noiseScale: { min: 0.5, max: 0.7 }, // Higher floor for more evolution
-      transitionSpeed: { min: 4, max: 16 },
+      noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+      transitionSpeed: { min: 6, max: 18 },
     },
 
     mappings: {

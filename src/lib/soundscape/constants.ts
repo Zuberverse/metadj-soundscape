@@ -165,6 +165,6 @@ export const TRANSITION_COMPLETION_MARGIN_MS = 100;
 
 /**
  * Default theme ID when no theme is specified or lookup fails.
- * Changed from cosmic-voyage to neon-foundry to prevent unexpected cosmic flashes.
+ * Changed from cosmic-voyage to cybernetic-core-forge for better baseline cohesion.
  */
-export const DEFAULT_THEME_ID = "neon-foundry";
+export const DEFAULT_THEME_ID = "forge";

@@ -175,6 +175,8 @@ export function SoundscapeStudio({
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [showControlsInternal, setShowControlsInternal] = useState(true);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
 
   // Resolve controlled vs uncontrolled state
   const showControls = showControlsProp ?? showControlsInternal;
@@ -243,7 +245,7 @@ export function SoundscapeStudio({
   const [copyCommandStatus, setCopyCommandStatus] = useState<"idle" | "copied" | "error">("idle");
   const [autoThemeEnabled, setAutoThemeEnabled] = useState(false);
   const [autoThemeSectionBeats, setAutoThemeSectionBeats] = useState(32);
-  const [showTelemetry, setShowTelemetry] = useState(true);
+  const [showTelemetry, setShowTelemetry] = useState(false);
   const [scopeCapabilities, setScopeCapabilities] = useState<ScopeCapabilities>({
     hardwareSummary: "Unknown",
     freeVramGb: null,
@@ -283,7 +285,6 @@ export function SoundscapeStudio({
     return selectedPipeline;
   }, [selectedPreprocessor, selectedPipeline]);
 
-  // Soundscape hook
   const {
     state: soundscapeState,
     parameters: soundscapeParameters,
@@ -306,7 +307,7 @@ export function SoundscapeStudio({
     setPromptAccent,
     composePromptEntries,
   } = useSoundscape({
-    initialTheme: "neon-foundry",
+    initialTheme: "astral",
     debug: process.env.NODE_ENV === "development",
   });
 
@@ -1248,10 +1249,10 @@ export function SoundscapeStudio({
         className={`absolute inset-0 z-0 flex items-center justify-center transition-opacity duration-1000 ${scopeStream ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
       >
-        <div className="absolute inset-0 p-4 md:p-8 flex items-center justify-center">
+        <div className={`absolute inset-0 p-4 md:p-8 flex items-center justify-center transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls && scopeStream ? 'pb-[180px] md:pb-[140px]' : ''}`}>
           {/* Magical fantastical frame - sized to video aspect ratio */}
           <div
-            className="relative shadow-[0_0_80px_rgba(6,182,212,0.15)] transition-all duration-700"
+            className="relative rounded-[1.75rem] shadow-[0_0_80px_rgba(6,182,212,0.15)] transition-all duration-700"
             style={{
               aspectRatio: `${aspectRatio.resolution.width} / ${aspectRatio.resolution.height}`,
               maxWidth: '100%',
@@ -1297,7 +1298,7 @@ export function SoundscapeStudio({
 
       {/* TELEMETRY OVERLAY */}
       {scopeStream && showTelemetry && (
-        <div className="absolute top-4 left-4 glass-radiant bg-black/70 backdrop-blur-md border border-white/10 rounded-2xl p-4 z-40 w-64 animate-fade-in shadow-2xl">
+        <div className={`absolute right-4 glass-radiant bg-black/70 backdrop-blur-md border border-white/10 rounded-2xl p-4 z-40 w-64 animate-fade-in shadow-[0_20px_40px_rgba(0,0,0,0.8)] transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls ? 'bottom-24' : 'bottom-20'}`}>
           <p className="sr-only" role="status" aria-live="polite">
             Scope stream connected. Active pipeline {activePipelineChain}.
           </p>
@@ -1342,17 +1343,7 @@ export function SoundscapeStudio({
         </div>
       )}
 
-      {scopeStream && !showTelemetry && (
-        <button
-          ref={showTelemetryButtonRef}
-          type="button"
-          onClick={handleShowTelemetry}
-          className="absolute top-4 left-4 z-40 w-12 h-12 glass bg-black/50 backdrop-blur-md rounded-full border border-white/10 text-white/50 hover:text-white/90 hover:border-scope-cyan/50 transition-all shadow-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-scope-cyan"
-          aria-label="Show telemetry"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-        </button>
-      )}
+
 
       {/* FOREGROUND UI STATES */}
       <div className={`absolute inset-0 z-20 transition-all duration-700 ${scopeStream ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
@@ -1385,49 +1376,34 @@ export function SoundscapeStudio({
             </div>
           </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-6 justify-center items-center pointer-events-auto overflow-y-auto">
+          <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-8 lg:gap-16 justify-center items-center pointer-events-auto overflow-y-auto w-full max-w-6xl mx-auto">
 
             {/* Left Column: Intro & Branding */}
             <div className="flex-1 w-full max-w-lg lg:pr-12 animate-fade-in">
-              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-scope-cyan/30 bg-scope-cyan/10">
-                <span className="w-2 h-2 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-                <span className="text-[10px] font-bold text-scope-cyan uppercase tracking-widest">MetaDJ Nexus</span>
-              </div>
               <h1 className="text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/50 mb-6 font-bold tracking-tight drop-shadow-lg" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                Soundscape
+                Daydream Scope
               </h1>
               <p className="text-lg text-white/60 mb-10 leading-relaxed font-light">
-                Transform your audio into breathtaking real-time visual experiences powered by Daydream Scope. Ready the pipeline and connect your stream.
+                Hardware-accelerated audio-reactive environment. Configure your AI synthesis pipeline and initiate connection.
               </p>
 
-              <div className="hidden md:block">
-                <div className="flex items-center gap-4 text-sm text-white/40 uppercase tracking-widest font-semibold mb-6">
-                  <span>Aspect Ratio</span>
-                  <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+              <div className="space-y-6">
+                <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading} className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg bg-white/5 text-whitehover:bg-white/10 hover:text-white transition-all border border-white/10 hover:border-scope-cyan/30 focus:outline-none focus:ring-2 focus:ring-scope-cyan">
+                  {isDiagnosticsLoading ? "Scanning..." : "Refresh"}
+                </button>
+              </div>
+
+              <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${scopeReadiness.dotClass} shadow-[0_0_10px_currentColor]`} />
+                  <span className={`text-sm font-bold uppercase tracking-wider ${scopeReadiness.textClass}`}>{scopeReadiness.label}</span>
                 </div>
-                <AspectRatioToggle current={aspectRatio} onChange={setAspectRatio} disabled={false} />
+                <span className="text-xs text-white/40 font-mono">{scopeCapabilities.totalVramGb ? `${scopeCapabilities.totalVramGb.toFixed(1)} GB VRAM` : "Scanning..."}</span>
               </div>
             </div>
 
             {/* Right Column: Configuration Panel */}
-            <div className="w-full max-w-md glass-radiant rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in">
-              <div className="p-6 border-b border-white/5 bg-white/[0.02]">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm uppercase tracking-widest text-white/80 font-bold">System Status</h3>
-                  <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading} className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg bg-white/5 text-whitehover:bg-white/10 hover:text-white transition-all border border-white/10 hover:border-scope-cyan/30 focus:outline-none focus:ring-2 focus:ring-scope-cyan">
-                    {isDiagnosticsLoading ? "Scanning..." : "Refresh"}
-                  </button>
-                </div>
-
-                <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${scopeReadiness.dotClass} shadow-[0_0_10px_currentColor]`} />
-                    <span className={`text-sm font-bold uppercase tracking-wider ${scopeReadiness.textClass}`}>{scopeReadiness.label}</span>
-                  </div>
-                  <span className="text-xs text-white/40 font-mono">{scopeCapabilities.totalVramGb ? `${scopeCapabilities.totalVramGb.toFixed(1)} GB VRAM` : "Scanning..."}</span>
-                </div>
-              </div>
-
+            <div className="w-full max-w-md shrink-0 flex flex-col glass-radiant rounded-3xl border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl overflow-hidden animate-fade-in-up" style={{ animationDelay: '100ms' }}>
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center gap-4 text-xs text-scope-cyan/70 uppercase tracking-widest font-semibold">
@@ -1443,15 +1419,18 @@ export function SoundscapeStudio({
                       </select>
                     </label>
 
-                    {preprocessorOptions.length > 0 && (
-                      <label className="block">
-                        <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Preprocessor</span>
-                        <select value={selectedPreprocessor} onChange={(e) => setSelectedPreprocessor(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none">
-                          <option value={NO_PREPROCESSOR}>None</option>
-                          {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </label>
-                    )}
+                    <label className="block">
+                      <span className="block text-[10px] text-white/50 uppercase tracking-widest font-bold mb-2">Preprocessor</span>
+                      <select
+                        value={selectedPreprocessor}
+                        onChange={(e) => setSelectedPreprocessor(e.target.value)}
+                        disabled={preprocessorOptions.length === 0}
+                        className={`w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-sm focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all outline-none appearance-none ${preprocessorOptions.length === 0 ? 'text-white/30 cursor-not-allowed' : 'text-white'}`}
+                      >
+                        <option value={NO_PREPROCESSOR}>{preprocessorOptions.length === 0 ? "Loading..." : "None"}</option>
+                        {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -1519,50 +1498,94 @@ export function SoundscapeStudio({
         )}
       </div>
 
-      {/* FLOATING CONTROLS DOCK - Redesigned for Glass-Neon Parity */}
-      <div className={`absolute bottom-0 md:bottom-6 left-0 right-0 z-40 w-full px-2 md:px-6 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
-        <div className="glass-radiant rounded-3xl p-3 md:p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col md:flex-row gap-4 md:items-center">
-
-          <div className="flex-1 min-w-0 bg-black/20 rounded-2xl p-2 border border-white/5">
-            <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
-          </div>
-
-          <div className="h-px md:h-12 w-full md:w-px bg-white/10 rounded-full" />
-
-          <div className="w-full md:w-64 flex-shrink-0 bg-black/20 rounded-2xl p-2 border border-white/5">
-            <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
-          </div>
-
-          <div className="h-px md:h-12 w-full md:w-px bg-white/10 rounded-full" />
-
-          <div className="w-full md:w-auto flex-shrink-0 flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
-              <span className={`flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold ${connectionSummary.textClass}`}>
-                <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
-                {connectionSummary.label}
-              </span>
-              {isPlaying && (
-                <div className="ml-4 pl-4 border-l border-white/10 hidden xl:block">
-                  <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={handleHideControls} className="md:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 border border-white/10 hover:bg-white/10 outline-none">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
+      {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker) */}
+      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-20 md:px-24 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
+        <div className="w-full max-w-[calc(100vw-12rem)] md:max-w-6xl">
+          <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
         </div>
       </div>
 
-      {/* Floating Toggle Controls Button (when dock is hidden) */}
-      <button
-        type="button"
-        onClick={handleShowControls}
-        className={`absolute bottom-6 right-6 z-40 px-6 py-4 rounded-full glass bg-black/40 backdrop-blur-md border border-white/10 text-white/70 hover:text-white hover:border-scope-cyan/50 hover:bg-black/60 shadow-xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] font-bold text-xs uppercase tracking-widest flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${!showControls ? 'translate-y-0 opacity-100' : 'translate-y-16 opacity-0 pointer-events-none'}`}
-      >
-        <svg className="w-4 h-4 text-scope-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-        Studio Controls
-      </button>
-    </div>
+      {/* FLOATING ACTION BUTTONS (FABs) */}
+      {scopeStream && showControls && (
+        <>
+          {/* LEFT: MUSIC AND SETTINGS */}
+          <div className="absolute bottom-6 left-6 z-50 flex gap-4">
+
+            {/* Music/Audio Menu & FAB */}
+            <div className="flex flex-col justify-end items-start gap-3">
+              <div className={`transition-all duration-300 origin-bottom-left ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 left-0 ${showAudioMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
+                <div className="glass-radiant w-80 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-white/70">Audio Controls</span>
+                  </div>
+                  {/* Music Player */}
+                  <div className="w-full bg-black/20 rounded-xl p-2 border border-white/5">
+                    <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
+                  </div>
+                  {/* Analysis Meter */}
+                  {isPlaying && (
+                    <div className="w-full bg-black/20 rounded-xl p-3 border border-white/5">
+                      <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { setShowAudioMenu(!showAudioMenu); setShowSettingsMenu(false); }}
+                className={`relative z-50 w-[3.25rem] h-[3.25rem] flex items-center justify-center rounded-full transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showAudioMenu ? 'bg-scope-purple text-white hover:bg-scope-purple/90 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)]' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
+                aria-label="Toggle Audio Controls"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+              </button>
+            </div>
+
+          </div>
+
+          {/* RIGHT: SETTINGS & TELEMETRY */}
+          <div className="absolute bottom-6 right-6 z-50 flex flex-col justify-end items-end gap-3">
+            <div className={`transition-all duration-300 origin-bottom-right ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 right-0 ${showSettingsMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
+              <div className="glass-radiant w-64 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <span className={`flex items-center gap-2 text-[10px] uppercase font-mono tracking-[0.2em] font-bold ${connectionSummary.textClass}`}>
+                    <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
+                    {connectionSummary.label}
+                  </span>
+                </div>
+
+                {/* Telemetry Toggle */}
+                <button
+                  type="button"
+                  onClick={showTelemetry ? handleHideTelemetry : handleShowTelemetry}
+                  className={`w-full py-2.5 rounded-lg transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border ${showTelemetry ? 'bg-scope-cyan/20 text-scope-cyan border-scope-cyan/30 shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white'}`}
+                >
+                  {showTelemetry ? "Hide Telemetry" : "Show Telemetry"}
+                </button>
+
+                {/* Disconnect Button */}
+                <button
+                  type="button"
+                  onClick={handleScopeDisconnect}
+                  className="w-full mt-1 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border border-red-500/20"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setShowSettingsMenu(!showSettingsMenu); setShowAudioMenu(false); }}
+              className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus:ring-2 focus:ring-scope-cyan ${showSettingsMenu ? 'bg-scope-cyan text-black hover:bg-scope-cyan/90 hover:shadow-[0_0_20px_rgba(6,182,212,0.6)]' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white'}`}
+              aria-label="Toggle Settings Menu"
+              title="Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
+            </button>
+          </div>
+        </>
+      )}
+    </div >
   );
 }

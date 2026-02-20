@@ -662,6 +662,27 @@ export class MappingEngine {
    * Get intensity level from energy value
    */
   private getIntensityLevel(energy: number): "low" | "medium" | "high" | "peak" {
+    // Implement hysteresis (deadbands) to prevent flapping when energy hovers on a boundary
+    if (this.lastIntensityLevel === "low") {
+      if (energy > 0.30) return "medium";
+      return "low";
+    }
+    if (this.lastIntensityLevel === "medium") {
+      if (energy < 0.20) return "low";
+      if (energy > 0.55) return "high";
+      return "medium";
+    }
+    if (this.lastIntensityLevel === "high") {
+      if (energy < 0.45) return "medium";
+      if (energy > 0.80) return "peak";
+      return "high";
+    }
+    if (this.lastIntensityLevel === "peak") {
+      if (energy < 0.70) return "high";
+      return "peak";
+    }
+
+    // Fallback for initial state
     if (energy < 0.25) return "low";
     if (energy < 0.5) return "medium";
     if (energy < 0.75) return "high";
@@ -728,26 +749,42 @@ export class MappingEngine {
 
   private getBrightnessDescriptor(brightness: number): string {
     let band: "dark" | "balanced" | "radiant" = this.lastBrightnessBand;
-    if (brightness < 0.3) {
-      band = "dark";
-    } else if (brightness > 0.7) {
-      band = "radiant";
+
+    // Implement hysteresis to prevent flapping around boundaries
+    if (band === "dark") {
+      if (brightness > 0.35) band = "balanced";
+    } else if (band === "balanced") {
+      if (brightness < 0.25) band = "dark";
+      else if (brightness > 0.75) band = "radiant";
+    } else if (band === "radiant") {
+      if (brightness < 0.65) band = "balanced";
     } else {
-      band = "balanced";
+      if (brightness < 0.3) band = "dark";
+      else if (brightness > 0.7) band = "radiant";
+      else band = "balanced";
     }
+
     this.lastBrightnessBand = band;
     return BRIGHTNESS_DESCRIPTORS[band];
   }
 
   private getTextureDescriptor(texture: number): string {
     let band: "smooth" | "granular" | "crystalline" = this.lastTextureBand;
-    if (texture < 0.33) {
-      band = "smooth";
-    } else if (texture > 0.72) {
-      band = "crystalline";
+
+    // Implement hysteresis to prevent flapping around boundaries
+    if (band === "smooth") {
+      if (texture > 0.38) band = "granular";
+    } else if (band === "granular") {
+      if (texture < 0.28) band = "smooth";
+      else if (texture > 0.77) band = "crystalline";
+    } else if (band === "crystalline") {
+      if (texture < 0.67) band = "granular";
     } else {
-      band = "granular";
+      if (texture < 0.33) band = "smooth";
+      else if (texture > 0.72) band = "crystalline";
+      else band = "granular";
     }
+
     this.lastTextureBand = band;
     return TEXTURE_DESCRIPTORS[band];
   }
@@ -755,12 +792,18 @@ export class MappingEngine {
   private getTempoDescriptor(beat: AnalysisState["beat"]): string {
     let band: "drift" | "drive" | "blitz" = this.lastTempoBand;
     if (beat.bpm && beat.confidence > 0.45) {
-      if (beat.bpm < 92) {
-        band = "drift";
-      } else if (beat.bpm < 132) {
-        band = "drive";
+      // Implement hysteresis for tempo bands
+      if (band === "drift") {
+        if (beat.bpm > 96) band = "drive";
+      } else if (band === "drive") {
+        if (beat.bpm < 88) band = "drift";
+        else if (beat.bpm > 136) band = "blitz";
+      } else if (band === "blitz") {
+        if (beat.bpm < 128) band = "drive";
       } else {
-        band = "blitz";
+        if (beat.bpm < 92) band = "drift";
+        else if (beat.bpm < 132) band = "drive";
+        else band = "blitz";
       }
     }
     this.lastTempoBand = band;
@@ -951,27 +994,20 @@ export class ParameterSender {
   private lastLoggedTheme: string | null = null;
 
   private formatParams(params: ScopeParameters): Record<string, unknown> {
-    // Debug: Log theme identification (only when theme changes)
+    // Debug: Log complete prompt when it changes
     if (process.env.NODE_ENV === "development") {
       const fullPrompt = params.prompts[0]?.text || "";
-      // Extract key theme identifier from prompt
-      let themeHint = "UNKNOWN";
-      if (fullPrompt.includes("cosmic")) themeHint = "COSMIC";
-      else if (fullPrompt.includes("foundry") || fullPrompt.includes("workshop")) themeHint = "FOUNDRY";
-      else if (fullPrompt.includes("forest") || fullPrompt.includes("bioluminescent")) themeHint = "FOREST";
-      else if (fullPrompt.includes("synthwave") || fullPrompt.includes("highway")) themeHint = "SYNTHWAVE";
-      else if (fullPrompt.includes("sanctuary") || fullPrompt.includes("gothic castle")) themeHint = "SANCTUARY";
-
-      if (themeHint !== this.lastLoggedTheme) {
-        // Log theme changes
-        console.log("[Scope] Theme:", themeHint);
-        this.lastLoggedTheme = themeHint;
+      if (fullPrompt !== this.lastLoggedTheme) {
+        // Log prompt changes roughly
+        console.log("[Scope] New Prompt sent to engine:", fullPrompt.substring(0, 100) + "...");
+        this.lastLoggedTheme = fullPrompt;
       }
     }
 
     const formatted: Record<string, unknown> = {
       prompts: params.prompts.map((p) => ({ text: p.text, weight: p.weight })),
       denoising_step_list: params.denoisingSteps,
+      noise_scale: params.noiseScale,
       manage_cache: true,
     };
 

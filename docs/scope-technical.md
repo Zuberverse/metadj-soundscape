@@ -1,6 +1,6 @@
 # Scope Technical Overview
 
-**Last Modified**: 2026-02-19 11:49 EST
+**Last Modified**: 2026-02-19 11:49 ET
 **Status**: Project Delta
 
 ## Purpose

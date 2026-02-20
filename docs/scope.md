@@ -1,6 +1,6 @@
 # Daydream Scope Overview (Soundscape)
 
-**Last Modified**: 2026-02-19 09:12 EST
+**Last Modified**: 2026-02-19 09:12 ET
 **Status**: Active Reference + Historical Context
 
 ## Overview

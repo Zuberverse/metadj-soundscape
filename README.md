@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-18 22:45 EST
+**Last Modified**: 2026-02-18 22:45 ET
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 

@@ -1,6 +1,6 @@
 # Daydream Scope Platform Reference
 
-**Last Modified**: 2026-02-19 09:14 EST
+**Last Modified**: 2026-02-19 09:14 ET
 **Status**: Project Delta
 
 ## Purpose

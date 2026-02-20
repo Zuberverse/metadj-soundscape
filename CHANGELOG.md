@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-18 22:45 EST
+**Last Modified**: 2026-02-18 22:45 ET
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 

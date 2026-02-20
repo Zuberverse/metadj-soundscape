@@ -13,18 +13,18 @@ import type { Theme, CustomThemeInput, ReactivityPreset, BeatResponse } from "@/
  * Maps theme IDs to a gradient pair (from, to) used for the indicator dot and active ring.
  */
 const THEME_ACCENTS: Record<string, { from: string; to: string }> = {
-  "cosmic-voyage": { from: "#8B5CF6", to: "#06B6D4" },
-  "neon-foundry": { from: "#8B5CF6", to: "#EC4899" },
-  "digital-forest": { from: "#10B981", to: "#06B6D4" },
-  "synthwave-highway": { from: "#EC4899", to: "#F59E0B" },
-  "crystal-sanctuary": { from: "#8B5CF6", to: "#A855F7" },
-  "ocean-depths": { from: "#06B6D4", to: "#3B82F6" },
-  "cyber-city": { from: "#06B6D4", to: "#EC4899" },
-  "aurora-dreams": { from: "#10B981", to: "#8B5CF6" },
-  "8-bit-adventure": { from: "#F59E0B", to: "#EC4899" },
-  "volcanic-forge": { from: "#EF4444", to: "#F59E0B" },
-  "quantum-realm": { from: "#3B82F6", to: "#8B5CF6" },
-  "neon-tokyo": { from: "#EC4899", to: "#06B6D4" },
+  astral: { from: "#8B5CF6", to: "#06B6D4" },
+  forge: { from: "#8B5CF6", to: "#EC4899" },
+  forest: { from: "#10B981", to: "#06B6D4" },
+  synthwave: { from: "#EC4899", to: "#F59E0B" },
+  sanctuary: { from: "#8B5CF6", to: "#A855F7" },
+  ocean: { from: "#06B6D4", to: "#3B82F6" },
+  cyber: { from: "#06B6D4", to: "#EC4899" },
+  aurora: { from: "#10B981", to: "#8B5CF6" },
+  arcade: { from: "#F59E0B", to: "#EC4899" },
+  volcano: { from: "#EF4444", to: "#F59E0B" },
+  quantum: { from: "#3B82F6", to: "#8B5CF6" },
+  tokyo: { from: "#EC4899", to: "#06B6D4" },
 };
 
 const DEFAULT_ACCENT = { from: "#8B5CF6", to: "#06B6D4" };
@@ -118,12 +118,12 @@ export function ThemeSelector({
     [currentTheme?.id, disabled, handlePresetSelect, themes]
   );
 
-  // Compact mode for dock -- horizontal scrollable strip with color indicators
+  // Compact mode for dock -- single cohesive sleek pill
   if (compact) {
     return (
-      <div className="relative group">
+      <div className="relative group glass-radiant rounded-full p-1.5 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl w-full">
         <div
-          className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5 pr-8"
+          className="flex items-center gap-1 overflow-x-auto hide-scrollbar scroll-smooth"
           role="radiogroup"
           aria-label="Visual themes"
           onKeyDown={handleThemeKeyDown}
@@ -142,32 +142,46 @@ export function ThemeSelector({
                 aria-label={`${theme.name} theme${isActive ? " (active)" : ""}`}
                 tabIndex={isActive || (!currentTheme && index === 0) ? 0 : -1}
                 className={`
-                  flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] rounded-lg text-[10px] font-semibold whitespace-nowrap
-                  transition-colors duration-300
+                  relative flex items-center justify-center gap-2.5 px-5 py-2 rounded-full text-[10px] uppercase font-mono tracking-[0.2em] font-bold whitespace-nowrap
+                  transition-all duration-300 overflow-hidden
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black
                   ${isActive
-                    ? "bg-white/12 text-white border border-white/20"
-                    : "bg-white/5 text-white/75 border border-transparent hover:bg-white/8 hover:text-white/90"}
+                    ? "text-white"
+                    : "text-white/40 hover:text-white/80 hover:bg-white/5"}
                   ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
                 `}
               >
+                {/* Active Background Wash */}
+                {isActive && (
+                  <div
+                    className="absolute inset-0 opacity-20 pointer-events-none"
+                    style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})` }}
+                  />
+                )}
+
                 {/* Color indicator dot */}
                 <span
-                  className={`w-2 h-2 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-50"}`}
+                  className={`relative z-10 w-2 h-2 rounded-full flex-shrink-0 transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-40"}`}
                   style={{
                     background: `linear-gradient(135deg, ${accent.from}, ${accent.to})`,
-                    boxShadow: isActive ? `0 0 6px ${accent.from}66` : "none",
+                    boxShadow: isActive ? `0 0 10px ${accent.from}80` : "none",
                   }}
                   aria-hidden="true"
                 />
-                {theme.name}
+
+                <span className="relative z-10 drop-shadow-sm">{theme.name}</span>
               </button>
             );
           })}
         </div>
-        {/* Scroll affordance - fade gradient */}
-        <div 
-          className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-scope-bg to-transparent pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-300"
+        {/* Scroll affordance - right edge fading */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black/40 via-black/10 to-transparent pointer-events-none rounded-r-full"
+          aria-hidden="true"
+        />
+        {/* Scroll affordance - left edge fading */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-black/40 via-black/10 to-transparent pointer-events-none rounded-l-full"
           aria-hidden="true"
         />
       </div>

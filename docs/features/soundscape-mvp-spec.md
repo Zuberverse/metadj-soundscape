@@ -1,6 +1,6 @@
 # MetaDJ Soundscape - Public Capability Spec
 
-**Last Modified**: 2026-02-18 22:45 EST
+**Last Modified**: 2026-02-18 22:45 ET
 **Status**: Active
 **Version**: 1.1.0-candidate
 
