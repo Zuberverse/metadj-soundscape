@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-18 22:45 ET
+**Last Modified**: 2026-02-20 15:09 ET
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Comprehensive operations runbook in `docs/operations.md` covering deployment checklist, monitoring thresholds, incident playbooks, and rollback procedures.
+- New `npm run check:launch` preflight script (`scripts/check-launch-config.mjs`) validating deployment-critical environment configuration before release.
 - **External Video Routing**: NDI and Spout output toggles in the Soundscape UI for routing generations to external VJ software directly from the Scope backend.
 - Full propagation of Reactivity Profile `smoothingFactor` down to the `MappingEngine`, unlocking smoother, configurable audio-to-visual parameter transitions.
 - Completed full visual transitions audit validating semantic `slerp` prompt mechanics, fallback behavior, and parameter overrides across 12 default themes.
@@ -48,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope connection regression coverage ensuring active session disposers run before repeated connect attempts.
 
 ### Changed
+- Soundscape diagnostics failures now render directly in the pre-connect UI as an assertive warning banner instead of remaining hidden in component state.
+- Soundscape parameter-sync failures now surface in UI so operators can detect stale visual state quickly during live sessions.
+- Scope connection error banners now use alert live-region semantics and include recovery suggestions when available.
+- Soundscape page regression tests were updated to validate the current page shell contract (studio mount, viewport classes, ambient layers) and remove stale modal expectations.
+- ParameterSender now avoids queue/timer scheduling when the RTC data channel is not open, reducing unnecessary timer churn during disconnected states.
+- README launch guidance now includes `HF_TOKEN`, a production launch checklist, and explicit runbook linkage.
+- Type-check now runs `next typegen` before `tsc --noEmit`, preventing missing `.next` route type artifacts in clean environments.
 - Scope proxy now requires a write token by default in production (`SCOPE_PROXY_REQUIRE_WRITE_TOKEN=true`) and returns a clear server-misconfiguration error when production writes are enabled without `SCOPE_PROXY_WRITE_TOKEN`.
 - Scope proxy now enforces configurable request-body size limits for write methods (`SCOPE_PROXY_MAX_BODY_BYTES`, default 512 KB) with explicit `413` responses for oversized payloads.
 - Scope connection now cleans up active WebRTC/data-channel resources before repeated `connect()` calls, preventing orphaned sessions.

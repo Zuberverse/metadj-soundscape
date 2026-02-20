@@ -929,6 +929,19 @@ export class ParameterSender {
    * Queue parameters for sending. Rate-limited to targetUpdateRate.
    */
   send(params: ScopeParameters): void {
+    if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+      this.consecutiveSendFailures++;
+      if (this.consecutiveSendFailures === 1 || this.consecutiveSendFailures % 30 === 0) {
+        console.warn(
+          "[ParameterSender] Skipping queue - channel not open:",
+          this.dataChannel ? `state=${this.dataChannel.readyState}` : "no channel",
+          `(${this.consecutiveSendFailures} consecutive drops)`
+        );
+      }
+      this.pendingParams = null;
+      return;
+    }
+
     this.pendingParams = params;
 
     if (!this.sendScheduled) {

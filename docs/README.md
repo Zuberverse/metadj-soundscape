@@ -1,6 +1,6 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-02-20
+**Last Modified**: 2026-02-20 15:09 ET
 
 Documentation index for Soundscape.
 
@@ -11,7 +11,7 @@ Documentation index for Soundscape.
 | [System Architecture](./system-architecture.md) | Runtime topology, signal processing, connection lifecycle, semantics |
 | [Scope Integration](./scope-integration.md) | Single source of truth for Daydream Scope endpoints + technical parameters |
 | [Product Spec](./product-spec.md) | Public capabilities, baseline validation thresholds |
-| [Operations](./operations.md) | Tooling, Runpod references, deployment |
+| [Operations](./operations.md) | Deployment checklist, monitoring, incident playbooks, rollback |
 
 ## Historical Context
 

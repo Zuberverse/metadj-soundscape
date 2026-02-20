@@ -73,6 +73,16 @@ describe("ParameterSender", () => {
     vi.advanceTimersByTime(50);
   });
 
+  it("does not schedule send timers when channel is not open", () => {
+    const channel = createMockDataChannel("closed");
+    sender.setDataChannel(channel);
+
+    sender.send(createTestParams());
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(channel.send).not.toHaveBeenCalled();
+  });
+
   it("rate limits sends", () => {
     const channel = createMockDataChannel("open");
     sender.setDataChannel(channel);

@@ -3,7 +3,6 @@
  * Video-first layout with collapsible controls
  */
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -22,18 +21,11 @@ import { getScopeClient, useScopeConnection } from "@/lib/scope";
 import type { HealthResponse, PipelineDescriptor, PipelineStatusResponse } from "@/lib/scope";
 import { AudioPlayer, type AudioPlayerControls } from "./AudioPlayer";
 import { ThemeSelector } from "./ThemeSelector";
-import { AspectRatioToggle } from "./AspectRatioToggle";
 import { AnalysisMeter } from "./AnalysisMeter";
 
 // Default pipeline for Soundscape (longlive = stylized, smooth transitions)
 const DEFAULT_PIPELINE = "longlive";
 const NO_PREPROCESSOR = "__none__";
-const PROMPT_ACCENT_PRESETS = [
-  "volumetric god rays",
-  "cinematic bokeh",
-  "prismatic particles",
-  "holographic fog",
-];
 const DEFAULT_PIPELINE_DESCRIPTOR: PipelineDescriptor = {
   id: DEFAULT_PIPELINE,
   name: "LongLive",
@@ -76,54 +68,6 @@ interface ScopeCapabilities {
 }
 
 /**
- * Collapsible section for the pre-connect panel.
- * Reduces cognitive load by hiding advanced settings behind expandable headers.
- */
-function CollapsibleSection({
-  title,
-  defaultOpen = false,
-  children,
-  badge,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-  badge?: React.ReactNode;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <div className="border border-white/8 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-inset"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">{title}</span>
-          {badge}
-        </div>
-        <svg
-          className={`w-3.5 h-3.5 text-white/60 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="px-4 pb-4 pt-2 animate-fade-in">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
  * Props for the SoundscapeStudio component.
  */
 interface SoundscapeStudioProps {
@@ -137,8 +81,6 @@ interface SoundscapeStudioProps {
   sharpenEnabled?: boolean;
   /** Whether to show bottom controls dock */
   showControls?: boolean;
-  /** Callback to toggle controls visibility */
-  onControlsToggle?: () => void;
   /** Callback to register the disconnect handler with the parent */
   onRegisterDisconnect?: (disconnectFn: () => void) => void;
   /** Whether global hotkeys should be active */
@@ -149,7 +91,6 @@ export function SoundscapeStudio({
   onConnectionChange,
   sharpenEnabled: sharpenEnabledProp,
   showControls: showControlsProp,
-  onControlsToggle,
   onRegisterDisconnect,
   hotkeysEnabled = true,
 }: SoundscapeStudioProps) {
@@ -164,9 +105,6 @@ export function SoundscapeStudio({
   const recordingStartRef = useRef<number | null>(null);
   const processedBeatTimestampRef = useRef<number>(0);
   const autoThemeBeatCounterRef = useRef(0);
-  const showControlsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const hideControlsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const pendingToggleFocusRef = useRef<"show-controls" | "hide-controls" | null>(null);
   const scopePcRef = useRef<RTCPeerConnection | null>(null);
   const scopeDataChannelRef = useRef<RTCDataChannel | null>(null);
   const attemptedNoFrameRecoveryRef = useRef(false);
@@ -175,48 +113,28 @@ export function SoundscapeStudio({
 
   // UI state - use props if provided (controlled), otherwise internal state (uncontrolled)
   const [hasLaunched, setHasLaunched] = useState(false);
-  const [showControlsInternal, setShowControlsInternal] = useState(true);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
 
-  // Resolve controlled vs uncontrolled state
-  const showControls = showControlsProp ?? showControlsInternal;
+  const showControls = showControlsProp ?? true;
   const sharpenEnabled = sharpenEnabledProp ?? true;
-
-  const handleToggleControls = useCallback(() => {
-    if (onControlsToggle) {
-      onControlsToggle();
-    } else {
-      setShowControlsInternal(prev => !prev);
-    }
-  }, [onControlsToggle]);
-
-  const handleShowControls = useCallback(() => {
-    pendingToggleFocusRef.current = "hide-controls";
-    handleToggleControls();
-  }, [handleToggleControls]);
-
-  const handleHideControls = useCallback(() => {
-    pendingToggleFocusRef.current = "show-controls";
-    handleToggleControls();
-  }, [handleToggleControls]);
 
   const handleRegisterAudioControls = useCallback((controls: AudioPlayerControls | null) => {
     transportControlsRef.current = controls;
   }, []);
 
   // Aspect ratio state (16:9 widescreen by default)
-  const [aspectRatio, setAspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
+  const [aspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
   const [selectedPipeline, setSelectedPipeline] = useState(DEFAULT_PIPELINE);
   const [selectedPreprocessor, setSelectedPreprocessor] = useState(NO_PREPROCESSOR);
   const [availablePipelines, setAvailablePipelines] = useState<PipelineDescriptor[]>([
     DEFAULT_PIPELINE_DESCRIPTOR,
   ]);
   const [scopeHealth, setScopeHealth] = useState<HealthResponse | null>(null);
-  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
+  const [, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
-  const [lastScopeCheckAt, setLastScopeCheckAt] = useState<number | null>(null);
+  const [, setLastScopeCheckAt] = useState<number | null>(null);
   const [videoStats, setVideoStats] = useState<VideoStats>({
     width: 0,
     height: 0,
@@ -229,7 +147,6 @@ export function SoundscapeStudio({
   const [recordedClipUrl, setRecordedClipUrl] = useState<string | null>(null);
   const [, setRecordedClipMimeType] = useState<string | null>(null);
   const [recordedClipSeconds, setRecordedClipSeconds] = useState<number | null>(null);
-  const [copyCommandStatus, setCopyCommandStatus] = useState<"idle" | "copied" | "error">("idle");
   const [autoThemeEnabled, setAutoThemeEnabled] = useState(false);
   const [autoThemeSectionBeats, setAutoThemeSectionBeats] = useState(32);
   const [ndiEnabled, setNdiEnabled] = useState(false);
@@ -261,14 +178,6 @@ export function SoundscapeStudio({
     () => availablePipelines.filter((pipeline) => isPreprocessorPipeline(pipeline)),
     [availablePipelines, isPreprocessorPipeline]
   );
-
-  const selectedPipelineDescriptor = useMemo(() => {
-    return (
-      mainPipelineOptions.find((pipeline) => pipeline.id === selectedPipeline) ??
-      availablePipelines.find((pipeline) => pipeline.id === selectedPipeline) ??
-      DEFAULT_PIPELINE_DESCRIPTOR
-    );
-  }, [mainPipelineOptions, availablePipelines, selectedPipeline]);
 
   const activePipelineChain = useMemo(() => {
     if (selectedPreprocessor !== NO_PREPROCESSOR) {
@@ -364,27 +273,11 @@ export function SoundscapeStudio({
     [setReactivityProfile]
   );
 
-  const handlePromptAccentTextChange = useCallback(
-    (value: string) => {
-      setPromptAccent(value, promptAccent.weight);
-    },
-    [setPromptAccent, promptAccent.weight]
-  );
-
   const handlePromptAccentWeightChange = useCallback(
     (weight: number) => {
       setPromptAccent(promptAccent.text, weight);
     },
     [setPromptAccent, promptAccent.text]
-  );
-
-  const handleApplyPromptAccentPreset = useCallback(
-    (preset: string) => {
-      const current = promptAccent.text.trim();
-      const next = current ? `${current}, ${preset}` : preset;
-      setPromptAccent(next, promptAccent.weight);
-    },
-    [promptAccent.text, promptAccent.weight, setPromptAccent]
   );
 
   const refreshScopeDiagnostics = useCallback(async (): Promise<DiagnosticsRefreshResult> => {
@@ -689,23 +582,6 @@ export function SoundscapeStudio({
     onConnectionChange?.(!!scopeStream);
   }, [scopeStream, onConnectionChange]);
 
-  useEffect(() => {
-    if (pendingToggleFocusRef.current === "show-controls" && !showControls) {
-      requestAnimationFrame(() => {
-        showControlsButtonRef.current?.focus();
-      });
-      pendingToggleFocusRef.current = null;
-      return;
-    }
-
-    if (pendingToggleFocusRef.current === "hide-controls" && showControls) {
-      requestAnimationFrame(() => {
-        hideControlsButtonRef.current?.focus();
-      });
-      pendingToggleFocusRef.current = null;
-    }
-  }, [showControls]);
-
   const loadParams = useMemo(() => {
     const params: Record<string, unknown> = {
       width: aspectRatio.resolution.width,
@@ -816,11 +692,9 @@ export function SoundscapeStudio({
     connectionState,
     statusMessage,
     error,
-    reconnectAttempts,
     peerConnection,
     connect,
     disconnect,
-    retry,
     clearError,
   } = useScopeConnection({
     scopeClient,
@@ -876,16 +750,6 @@ export function SoundscapeStudio({
     isNdiValid &&
     isSpoutValid;
 
-  const connectBlockedReason =
-    isConnecting
-      ? null
-      : !hasPipelineSelection
-        ? "Select a main pipeline before connecting."
-        : !isNdiValid
-          ? "NDI stream name is required."
-          : !isSpoutValid
-            ? "Spout stream name is required."
-            : null;
   const scopeReadiness = useMemo(() => {
     if (scopeHealth?.status === "ok") {
       return { label: "Online", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
@@ -914,6 +778,7 @@ export function SoundscapeStudio({
   const scopeErrorTitle = error?.userFriendly?.title ?? null;
   const scopeErrorDescription = error?.userFriendly?.description ?? null;
   const scopeErrorSuggestion = error?.userFriendly?.suggestion ?? null;
+  const soundscapeSyncError = soundscapeState.error ?? null;
 
   useEffect(() => {
     if (!error) return;
@@ -1006,16 +871,6 @@ export function SoundscapeStudio({
     });
   }, [clearError, refreshScopeDiagnostics, connect, selectedPipeline]);
 
-  const handleCopyScopeCommand = useCallback(async () => {
-    const command = "npm run check:scope";
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopyCommandStatus("copied");
-    } catch {
-      setCopyCommandStatus("error");
-    }
-  }, []);
-
   const handleResumeVideoPlayback = useCallback(async () => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
@@ -1050,8 +905,6 @@ export function SoundscapeStudio({
     }
     return { label: "Healthy", color: "text-scope-cyan", dotColor: "bg-scope-cyan" };
   }, [dropPercentage, videoStats.fps]);
-
-  const isScopeOffline = scopeHealth !== null && scopeHealth.status !== "ok";
 
   const startRecordingClip = useCallback(() => {
     if (!scopeStream || typeof MediaRecorder === "undefined") {
@@ -1110,12 +963,6 @@ export function SoundscapeStudio({
     mediaRecorderRef.current = null;
     setIsRecording(false);
   }, []);
-
-  useEffect(() => {
-    if (copyCommandStatus === "idle") return;
-    const timeoutId = setTimeout(() => setCopyCommandStatus("idle"), 1800);
-    return () => clearTimeout(timeoutId);
-  }, [copyCommandStatus]);
 
   useEffect(() => {
     if (scopeStream) return;
@@ -1389,6 +1236,19 @@ export function SoundscapeStudio({
                   {isDiagnosticsLoading ? "Scanning..." : "Refresh"}
                 </button>
               </div>
+
+              {diagnosticsError && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 shadow-[0_0_15px_rgba(245,158,11,0.08)]"
+                >
+                  <p className="text-amber-300 font-bold text-xs uppercase tracking-wider mb-1">
+                    Scope Diagnostics Warning
+                  </p>
+                  <p className="text-amber-100/85 text-[11px] leading-relaxed">{diagnosticsError}</p>
+                </div>
+              )}
             </div>
 
             {/* Right Column: Configuration Panel */}
@@ -1548,13 +1408,31 @@ export function SoundscapeStudio({
                   </label>
                 </div>
 
+                {soundscapeSyncError && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 animate-fade-in shadow-[0_0_15px_rgba(245,158,11,0.08)]"
+                  >
+                    <p className="text-amber-300 font-bold text-xs uppercase tracking-wider mb-1">
+                      Parameter Sync Warning
+                    </p>
+                    <p className="text-amber-100/85 text-[11px] leading-relaxed">{soundscapeSyncError}</p>
+                  </div>
+                )}
+
                 {scopeErrorTitle && (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 relative animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 relative animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+                  >
                     <button type="button" onClick={clearError} className="absolute top-2 right-2 text-red-400 hover:text-red-300">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                     <p className="text-red-400 font-bold text-xs uppercase tracking-wider mb-1">{scopeErrorTitle}</p>
                     {scopeErrorDescription && <p className="text-red-200/80 text-[11px] leading-relaxed">{scopeErrorDescription}</p>}
+                    {scopeErrorSuggestion && <p className="text-red-100/75 text-[11px] leading-relaxed mt-2">{scopeErrorSuggestion}</p>}
                   </div>
                 )}
               </div>
@@ -1667,6 +1545,16 @@ export function SoundscapeStudio({
                       <a href={recordedClipUrl} download={`clip-${Date.now()}.webm`} className="flex-1 text-center flex items-center justify-center rounded-lg border border-scope-cyan/30 bg-scope-cyan/10 py-2 text-[10px] uppercase tracking-widest font-bold text-scope-cyan hover:bg-scope-cyan/20 hover:border-scope-cyan/50 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Save</a>
                     )}
                   </div>
+                  {recordedClipSeconds !== null && (
+                    <p className="text-[10px] text-white/60">
+                      Last clip length: {recordedClipSeconds.toFixed(1)}s
+                    </p>
+                  )}
+                  {recordingError && (
+                    <p role="alert" aria-live="assertive" className="text-[10px] text-red-300">
+                      {recordingError}
+                    </p>
+                  )}
 
                   <div className="border-t border-white/10 -mb-2" />
 

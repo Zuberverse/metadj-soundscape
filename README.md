@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-18 22:45 ET
+**Last Modified**: 2026-02-20 15:09 ET
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -92,6 +92,12 @@ Then manage lifecycle with:
 npm run check:scope
 ```
 
+### Validate Launch Configuration
+
+```bash
+npm run check:launch
+```
+
 ## Typical Session Flow
 
 1. Open `/soundscape`.
@@ -118,6 +124,7 @@ Copy `.env.example` to `.env.local`.
 | `SCOPE_PROXY_MAX_BODY_BYTES` | Maximum proxied write payload size in bytes (default: `524288`) |
 | `SCOPE_PROXY_TRUST_FORWARDED_IP` | Set `true` to trust forwarded IP headers for rate limiting (default: `false` in production) |
 | `SCOPE_PROXY_IP_HEADER` | Optional forwarded IP header to trust when `SCOPE_PROXY_TRUST_FORWARDED_IP=true` |
+| `HF_TOKEN` | Required on RunPod Scope pods for Cloudflare TURN relay and gated model downloads |
 
 ### Security Note
 
@@ -125,6 +132,28 @@ The app defaults to `/api/scope` proxy routing. In production, proxying is disab
 When enabled, the proxy enforces strict endpoint/method allowlisting, same-origin `Origin` validation for writes, upstream safety checks, request-body limits, and request rate limiting.
 Production proxy safety expects `SCOPE_API_URL` to be set server-side. By default, production writes require `SCOPE_PROXY_WRITE_TOKEN` (`SCOPE_PROXY_REQUIRE_WRITE_TOKEN=true`).
 Deploy behind platform-level access controls for additional protection.
+
+## Production Launch Checklist
+
+1. CI must pass: lint, type-check, test, build.
+2. Scope backend healthy and reachable via `SCOPE_API_URL`.
+3. Launch preflight passes: `npm run check:launch`.
+4. Production proxy env set correctly:
+   - `SCOPE_PROXY_ENABLE=true`
+   - `SCOPE_PROXY_REQUIRE_WRITE_TOKEN=true` (recommended)
+   - `SCOPE_PROXY_WRITE_TOKEN` configured
+5. Validate `/soundscape` smoke flow:
+   - diagnostics refresh
+   - connect
+   - video playback
+   - audio reactivity
+   - short recording export
+6. Confirm rollback path is documented and tested in `docs/operations.md`.
+
+## Operations & Incident Response
+
+- Canonical runbook: `docs/operations.md`
+- Includes deployment sequence, monitoring signals, incident playbooks, and rollback procedures.
 
 ## Commands
 
@@ -137,6 +166,7 @@ Deploy behind platform-level access controls for additional protection.
 | `npm run type-check` | TypeScript type-check |
 | `npm run test` | Vitest test run |
 | `npm run check:scope` | Probe Scope endpoints |
+| `npm run check:launch` | Validate deployment-critical environment config |
 
 ## Architecture Snapshot
 

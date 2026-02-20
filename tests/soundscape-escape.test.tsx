@@ -41,71 +41,37 @@ afterEach(() => {
 });
 
 describe("Soundscape page", () => {
-  it("renders the soundscape studio", () => {
+  it("renders the studio inside the main content container", () => {
     const { container, unmount } = renderSoundscape();
 
     const studio = container.querySelector('[data-testid="soundscape-stub"]');
+    const main = container.querySelector("main#main-content");
+
     expect(studio).toBeTruthy();
-
-    // Verify branding is present
-    const heading = container.querySelector("h1");
-    expect(heading?.textContent).toContain("Soundscape");
+    expect(main).toBeTruthy();
+    expect(main?.contains(studio)).toBe(true);
 
     unmount();
   });
 
-  it("closes the help modal on Escape and restores focus", () => {
+  it("uses the expected viewport shell classes", () => {
     const { container, unmount } = renderSoundscape();
 
-    const helpButton = container.querySelector(
-      'button[aria-label="Show keyboard shortcuts"]'
-    ) as HTMLButtonElement;
-    expect(helpButton).toBeTruthy();
+    const shell = container.firstElementChild as HTMLElement | null;
 
-    helpButton.focus();
-    act(() => {
-      helpButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
-    const closeButton = container.querySelector('button[aria-label="Close help"]') as HTMLButtonElement;
-    expect(document.activeElement).toBe(closeButton);
-
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
-
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(helpButton);
+    expect(shell).toBeTruthy();
+    expect(shell?.className).toContain("min-h-dvh");
+    expect(shell?.className).toContain("h-dvh");
+    expect(shell?.className).toContain("bg-scope-bg");
 
     unmount();
   });
 
-  it("keeps keyboard focus trapped inside the help modal", () => {
+  it("renders both ambient glow background layers", () => {
     const { container, unmount } = renderSoundscape();
 
-    const helpButton = container.querySelector(
-      'button[aria-label="Show keyboard shortcuts"]'
-    ) as HTMLButtonElement;
-
-    act(() => {
-      helpButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const closeButton = container.querySelector('button[aria-label="Close help"]') as HTMLButtonElement;
-    expect(document.activeElement).toBe(closeButton);
-
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    });
-    expect(document.activeElement).toBe(closeButton);
-
-    act(() => {
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true })
-      );
-    });
-    expect(document.activeElement).toBe(closeButton);
+    const glowLayers = container.querySelectorAll(".glow-bg");
+    expect(glowLayers.length).toBe(2);
 
     unmount();
   });
