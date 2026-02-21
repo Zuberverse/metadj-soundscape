@@ -6,7 +6,7 @@
 
 **Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your music.**
 
-MetaDJ Soundscape turns audio into real-time AI visuals by analyzing browser audio signals and streaming generated parameters to a Daydream Scope engine. High energy in the audio drives intense visual motion, while low energy lets the imagery settle. Beats pulse through the frame via parameter spikes rather than jarring cuts. It’s an unbroken, continuous visual journey.
+MetaDJ Soundscape turns music into real-time AI visuals by analyzing browser audio signals and streaming generated parameters to a Daydream Scope engine. High energy in the music drives intense visual motion, while low energy lets the imagery settle. Beats pulse through the frame via parameter spikes rather than jarring cuts. It’s an unbroken, continuous visual journey.
 
 ---
 
@@ -21,8 +21,8 @@ Choose your canvas before connecting:
 **Input Modalities**:
 - **Autoplay Demo**: Ships with an original MetaDJ track that loops infinitely, plunging you straight into the experience.
 - **Microphone**: Transforms your physical environment—reacting to your voice, your instruments, or ambient room audio.
-- **Ambient Hold**: Disables audio reactivity for a smooth, slow-evolving visual drift when lower intensity is required.
-- **Video Input (NDI/Spout)**: Supports external live-camera feeds, funneling them through Scope’s preprocessor chains (Depth, Scribble, Flow) to fuse reality with generative synthesis.
+- **Ambient Hold**: Disables music reactivity for a smooth, slow-evolving visual drift when lower intensity is required.
+- **Video Input (NDI/Spout)**: Supports external video feeds, funneling them through Scope’s preprocessor chains (Depth, Scribble, Flow) to fuse reality with generative synthesis. *(Note: This feature is currently a work in progress.)*
 
 ## 🎛️ The Audio Pipeline
 

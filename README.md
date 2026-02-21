@@ -4,10 +4,7 @@
 
 **Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your music.**
 
-Soundscape turns music into real-time AI visuals. The browser analyzes audio signals, maps them to generation controls, and streams parameters to Daydream Scope over WebRTC.
-
-## What Is New In This Build
-
+MetaDJ Soundscape turns music into real-time AI visuals by analyzing browser audio signals and streaming generated parameters to a Daydream Scope engine. High energy in the music drives intense visual motion, while low energy lets the imagery settle. Beats pulse through the frame via parameter spikes rather than jarring cuts. It’s an unbroken, continuous visual journey.
 - **Mic input mode** in addition to the built-in demo track.
 - **Clip recording + download** from the live Scope stream (`webm`).
 - **Auto Theme Timeline** that rotates presets every N beats (16/32/64).
@@ -27,7 +24,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Beat Detection + BPM Estimation** — Energy-spike detector with cooldowns
 - **15 Visual Themes** — Preset prompt/mapping profiles for different aesthetics
 - **WebRTC Scope Streaming** — GPU output video + parameter data channel
-- **External Video Input Routing** — NDI and Spout toggles for feeding visualizer video into Scope (`input_mode: "video"`)
+- **External Video Input Routing** — NDI and Spout toggles for feeding external video feeds into Scope (`input_mode: "video"`). *(Note: This feature is currently a work in progress.)*
 - **Output Format + Resolution Tiers** — 16:9 and 9:16 with 3 selectable tiers each (`Low`, `Medium`, `High`; default first-launch tier: `576x320`)
 - **Ambient Mode** — Visual generation can continue without active audio playback
 - **Launch Demo Autoplay Control** — Optional demo-song autoplay immediately after Scope connect (enabled by default, can be disabled in Configuration)
