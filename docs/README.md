@@ -1,14 +1,15 @@
 # MetaDJ Soundscape Documentation
 
-**Last Modified**: 2026-02-20 20:11 ET
+**Last Modified**: 2026-02-20 20:49 ET
 
 Documentation index for Soundscape.
 
-**Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your audio.**
+**Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your music.**
 
 ## Current Runtime Defaults
 
 - First-launch output defaults to `16:9` at `576x320` (lowest tier).
+- Demo-song launch autoplay is enabled by default and can be toggled in Configuration (`Autoplay Demo Song`).
 - Three resolution tiers are available for each format (`16:9`, `9:16`) with labels `Low`, `Medium`, `High`.
 - NDI/Spout integration is configured as Scope video input (`input_mode: "video"`, `input_source`).
 - Studio includes live runtime tuning controls for beat/spike intensity, motion bias, and noise ceiling (applied without reconnect).

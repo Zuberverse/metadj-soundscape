@@ -1,8 +1,8 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20 20:11 ET
+**Last Modified**: 2026-02-20 20:49 ET
 
-**Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your audio.**
+**Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your music.**
 
 Soundscape turns music into real-time AI visuals. The browser analyzes audio signals, maps them to generation controls, and streams parameters to Daydream Scope over WebRTC.
 
@@ -11,6 +11,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Mic input mode** in addition to the built-in demo track.
 - **Clip recording + download** from the live Scope stream (`webm`).
 - **Auto Theme Timeline** that rotates presets every N beats (16/32/64).
+- **Launch Autoplay Toggle** for the demo song in Configuration (default ON, persisted preference).
 - **Hotkeys**: `Space` (play/pause), `1-9` (preset themes), `F` (fullscreen), arrows (theme cycle).
 - **Demo-Safe Mode** UX when Scope is offline, with quick diagnostics CTA.
 - **Performance HUD** with FPS sampling + dropped frame warning states.
@@ -29,6 +30,7 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **External Video Input Routing** — NDI and Spout toggles for feeding visualizer video into Scope (`input_mode: "video"`)
 - **Output Format + Resolution Tiers** — 16:9 and 9:16 with 3 selectable tiers each (`Low`, `Medium`, `High`; default first-launch tier: `576x320`)
 - **Ambient Mode** — Visual generation can continue without active audio playback
+- **Launch Demo Autoplay Control** — Optional demo-song autoplay immediately after Scope connect (enabled by default, can be disabled in Configuration)
 - **Generation Controls** — Denoising profile, reactivity profile, motion pace profile, prompt accent, and advanced runtime tuning sliders (beat/spike/motion/noise) applied live
 - **Diagnostics Panel** — Health, pipeline status, hardware, model readiness, plugins/LoRAs
 - **Telemetry Overlay** — Active pipeline, resolution, fps sample, dropped frame ratio, performance health
@@ -107,10 +109,11 @@ npm run check:launch
 3. Confirm server/pipeline readiness and choose output format + resolution tier + pipeline.
 4. If using NDI/Spout input, confirm Scope capability is available in diagnostics before enabling stream input toggles, then configure optional `Video Preprocessor` in the Input Streams block.
 5. Connect Scope.
-6. Pick audio source: **Demo** or **Mic**.
-7. Play audio; tune denoising/reactivity/motion pace/prompt accents, and optionally refine advanced runtime sliders live.
-8. Optionally enable **Auto Theme** for beat-driven preset rotation.
-9. Optionally record a clip and download the `webm` file.
+6. Keep **Autoplay Demo Song** enabled for immediate demo playback on connect, or disable it for manual transport control.
+7. Pick audio source: **Demo** or **Mic**.
+8. Play audio (if autoplay is disabled); tune denoising/reactivity/motion pace/prompt accents, and optionally refine advanced runtime sliders live.
+9. Optionally enable **Auto Theme** for beat-driven preset rotation.
+10. Optionally record a clip and download the `webm` file.
 
 ## Environment Variables
 
