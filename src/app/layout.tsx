@@ -38,6 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
+        suppressHydrationWarning
         className={`${poppins.variable} ${cinzel.variable} antialiased bg-scope-bg text-white min-h-screen`}
       >
         {/* Skip link for keyboard accessibility */}
