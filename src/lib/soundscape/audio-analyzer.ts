@@ -160,11 +160,32 @@ export class AudioAnalyzer {
     }
   }
 
+  private releaseMediaElementConnection(audioElement: HTMLAudioElement): void {
+    const existing = connectedElements.get(audioElement);
+    if (!existing) return;
+
+    try {
+      existing.sourceNode.disconnect();
+    } catch {
+      // No-op: source may already be disconnected.
+    }
+
+    try {
+      void existing.audioContext.close().catch(() => {
+        // No-op: context may already be closed or unable to close.
+      });
+    } catch {
+      // No-op: context may already be closing/closed.
+    }
+
+    connectedElements.delete(audioElement);
+  }
+
   /**
-   * Clean up analyzer resources
-   * Note: Audio context and source node are preserved for reuse (Web Audio API limitation)
+   * Clean up analyzer resources.
+   * Set releaseMediaElement=true when the associated audio element is being removed.
    */
-  destroy(): void {
+  destroy({ releaseMediaElement = false }: { releaseMediaElement?: boolean } = {}): void {
     this.stop();
 
     const analyzerNode = this.analyzerNode;
@@ -175,6 +196,10 @@ export class AudioAnalyzer {
           ...existing,
           analyzerNode: null,
         });
+      }
+
+      if (releaseMediaElement) {
+        this.releaseMediaElementConnection(this.connectedElement);
       }
     }
 
@@ -197,8 +222,8 @@ export class AudioAnalyzer {
       this.analyzerNode = null;
     }
 
-    // Don't close the audio context or source node - they're in the registry
-    // and will be reused if the same audio element is connected again
+    // Keep the audio context and source node in the registry by default.
+    // When releaseMediaElement=true, the registry entry is removed above.
     this.audioContext = null;
     this.sourceNode = null;
     this.connectedElement = null;

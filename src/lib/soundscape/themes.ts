@@ -98,7 +98,7 @@ export const COSMIC_VOYAGE: Theme = {
 export const NEON_FOUNDRY: Theme = {
   id: "forge",
   name: "Forge",
-  description: "Endless descent into the Zuberant AI Foundry",
+  description: "Endless descent into the AI Foundry",
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +

@@ -2,7 +2,7 @@
 
 **Last Modified**: 2026-02-20 20:11 ET
 
-**Audio-reactive AI video generation powered by Daydream Scope**
+**Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your audio.**
 
 Soundscape turns music into real-time AI visuals. The browser analyzes audio signals, maps them to generation controls, and streams parameters to Daydream Scope over WebRTC.
 
@@ -69,9 +69,9 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 
 - Node.js `>=20.19.0`
 - Running Scope server (RunPod or local)
-- Current recommended Scope GPU: `RTX PRO 6000` (`96GB` VRAM), active pod `xtt2dvnrtew5v1`
+- Current recommended Scope GPU: `RTX PRO 6000` (`96GB` VRAM), active pod `<YOUR_RUNPOD_ID>`
 - Feasible alternative GPU: `RTX 5090` (`32GB` VRAM) for default/lower tiers
-- Current pod capability report for `xtt2dvnrtew5v1`: `ndi_available=false`, `spout_available=false` (external video input requires a Scope runtime with those capabilities enabled)
+- Current pod capability report for `<YOUR_RUNPOD_ID>`: `ndi_available=false`, `spout_available=false` (external video input requires a Scope runtime with those capabilities enabled)
 
 ### Install
 
@@ -87,17 +87,6 @@ npm run dev
 
 > [!NOTE]
 > **Important**: Always open the application on **`https://localhost:3500`**, *not* the default Next.js port 3000. Dev mode runs with an experimental self-signed HTTPS cert on port 3500.
-
-For persistent launch from Codex/Claude sessions, from corpus root use:
-
-```bash
-./1-system/2-scripts/integration/ai-dev-server.sh start 3-projects/5-software/metadj-soundscape --port 3500
-```
-
-Then manage lifecycle with:
-`./1-system/2-scripts/integration/ai-dev-server.sh status metadj-soundscape`,
-`logs metadj-soundscape --lines 120`, and
-`stop metadj-soundscape`.
 
 ### Verify Scope Connectivity
 
@@ -212,4 +201,4 @@ Deploy behind platform-level access controls for additional protection.
 
 ## License
 
-Proprietary — Zuberant
+Soundscape is an original front-end application by Zuberant, built upon the foundation of powerful open-source technologies including Daydream Scope and StreamDiffusion. Please contact for specific licensing details regarding source code use.

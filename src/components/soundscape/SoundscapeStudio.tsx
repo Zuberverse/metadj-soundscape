@@ -274,8 +274,11 @@ export function SoundscapeStudio({
     if (!soundscapeState.analysis) {
       return "Waiting for analysis frames";
     }
-    const energy = soundscapeState.analysis.derived.energy.toFixed(2);
-    const beat = soundscapeState.analysis.beat.isBeat ? "Beat" : "No Beat";
+    const derived = soundscapeState.analysis.derived;
+    // Format to an integer percentage to avoid visual flickering from rapid decimal changes
+    const energy = Math.round(derived.energy * 100).toString().padStart(2, '0') + '%';
+    const bpm = soundscapeState.analysis.beat.bpm;
+    const beat = bpm ? `${Math.round(bpm)} BPM` : '--- BPM';
     return `Energy ${energy} · ${beat}`;
   }, [runtimeMode, soundscapeState.analysis]);
 
@@ -292,7 +295,7 @@ export function SoundscapeStudio({
           setAudioReady(false);
         }
       } else {
-        disconnectAudio();
+        disconnectAudio(true);
         setAudioReady(false);
         setIsPlaying(false);
       }
@@ -949,6 +952,29 @@ export function SoundscapeStudio({
     isSpoutValid &&
     isNdiAvailable &&
     isSpoutAvailable;
+  const showConnectedControls = connectionState === "connected" && showControls;
+
+  useEffect(() => {
+    if (!showConnectedControls) {
+      setShowAudioMenu(false);
+      setShowSettingsMenu(false);
+    }
+  }, [showConnectedControls]);
+
+  useEffect(() => {
+    if (!showConnectedControls) return;
+
+    const handleMenuEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (!showAudioMenu && !showSettingsMenu) return;
+      event.preventDefault();
+      setShowAudioMenu(false);
+      setShowSettingsMenu(false);
+    };
+
+    window.addEventListener("keydown", handleMenuEscape);
+    return () => window.removeEventListener("keydown", handleMenuEscape);
+  }, [showConnectedControls, showAudioMenu, showSettingsMenu]);
 
   const scopeReadiness = useMemo(() => {
     if (!hasResolvedInitialScopeHealth) {
@@ -1387,12 +1413,14 @@ export function SoundscapeStudio({
                   <defs><linearGradient id="initGrad" x1="16" y1="14" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stopColor="#06b6d4" /><stop offset="0.5" stopColor="#8b5cf6" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
                 </svg>
               </div>
-              <h2 className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-3 tracking-widest font-bold" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                {connectionState === "reconnecting" ? "RECONNECTING" : connectionState === "connected" ? "CONNECTED" : "INITIALIZING"}
-              </h2>
-              <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-wider">
-                {connectionState === "connected" ? "Link established. Synchronizing scene..." : statusMessage || "Establishing secure stream..."}
-              </p>
+              <div role="status" aria-live="polite" aria-atomic="true">
+                <h2 className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-3 tracking-widest font-bold" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
+                  {connectionState === "reconnecting" ? "RECONNECTING" : connectionState === "connected" ? "CONNECTED" : "INITIALIZING"}
+                </h2>
+                <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-wider">
+                  {connectionState === "connected" ? "Link established. Synchronizing scene..." : statusMessage || "Establishing secure stream..."}
+                </p>
+              </div>
               <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
                 <div className={`h-full bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta rounded-full transition-all duration-700 ease-out ${connectionState === "connected" ? "w-full" : "w-[80%] animate-pulse"}`} />
               </div>
@@ -1427,7 +1455,7 @@ export function SoundscapeStudio({
                 <span className="pb-2" style={{ paddingRight: '0.1em' }}>Soundscape</span>
               </h1>
               <p className="text-lg text-white/60 mb-10 leading-relaxed font-light">
-                Hardware-accelerated audio-reactive environment. Configure your AI synthesis pipeline and initiate connection.
+                Where music meets imagination. A real-time engine that sculpts dynamic visual experiences directly from the energy of your audio.
               </p>
 
               <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between">
@@ -1827,45 +1855,57 @@ export function SoundscapeStudio({
         ) : null}
       </div>
 
-      {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker - Only show conditionally when connected) */}
-      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-6 md:px-12 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${(connectionState === "connected" && showControls) ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
-        <div className="w-full max-w-[calc(100vw-4rem)] md:max-w-7xl">
-          <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
+      {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker) */}
+      {showConnectedControls && (
+        <div className="absolute bottom-6 left-0 right-0 z-40 w-full px-6 md:px-12 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center translate-y-0 opacity-100">
+          <div className="w-full max-w-[calc(100vw-4rem)] md:max-w-7xl">
+            <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* FLOATING ACTION BUTTONS (FABs) */}
-      {
-        connectionState === "connected" && showControls && (
+      {showConnectedControls && (
           <>
             {/* LEFT: MUSIC AND SETTINGS */}
             <div className="absolute bottom-6 left-6 z-50 flex gap-4">
 
               {/* Music/Audio Menu & FAB */}
               <div className="flex flex-col justify-end items-start gap-3">
-                <div className={`transition-all duration-300 origin-bottom-left ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 left-0 ${showAudioMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
-                  <div className="glass-radiant w-80 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                      <span className="text-[10px] uppercase tracking-widest font-bold text-white/70">Audio Controls</span>
-                    </div>
-                    {/* Music Player */}
-                    <div className="w-full bg-black/20 rounded-xl p-2 border border-white/5">
-                      <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
-                    </div>
-                    {/* Analysis Meter */}
-                    {isPlaying && (
-                      <div className="w-full bg-black/20 rounded-xl p-3 border border-white/5">
-                        <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+                {showAudioMenu && (
+                  <div
+                    id="soundscape-audio-menu"
+                    role="dialog"
+                    aria-modal="false"
+                    aria-label="Audio controls"
+                    className="transition-all duration-300 origin-bottom-left ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 left-0 opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                  >
+                    <div className="glass-radiant w-80 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-white/70">Audio Controls</span>
                       </div>
-                    )}
+                      {/* Music Player */}
+                      <div className="w-full bg-black/20 rounded-xl p-2 border border-white/5">
+                        <AudioPlayer onAudioElement={handleAudioElement} onPlayStateChange={handlePlayStateChange} onRegisterControls={handleRegisterAudioControls} compact />
+                      </div>
+                      {/* Analysis Meter */}
+                      {isPlaying && (
+                        <div className="w-full bg-black/20 rounded-xl p-3 border border-white/5">
+                          <AnalysisMeter analysis={soundscapeState.analysis} parameters={soundscapeParameters} compact />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button
                   type="button"
                   onClick={() => { setShowAudioMenu(!showAudioMenu); setShowSettingsMenu(false); }}
                   className={`relative z-50 w-[3.25rem] h-[3.25rem] flex items-center justify-center rounded-full transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan ${showAudioMenu ? 'bg-scope-purple text-white shadow-[0_0_20px_rgba(139,92,246,0.6)] border-scope-purple/50 scale-105' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white hover:scale-105'}`}
                   aria-label="Toggle Audio Controls"
+                  aria-expanded={showAudioMenu}
+                  aria-controls="soundscape-audio-menu"
+                  aria-haspopup="dialog"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
                 </button>
@@ -1875,72 +1915,83 @@ export function SoundscapeStudio({
 
             {/* RIGHT: SETTINGS & TELEMETRY */}
             <div className="absolute bottom-6 right-6 z-50 flex flex-col justify-end items-end gap-3">
-              <div className={`transition-all duration-300 origin-bottom-right ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 right-0 ${showSettingsMenu ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-8 pointer-events-none'}`}>
-                <div className="glass-radiant w-64 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                    <span className={`flex items-center gap-2 text-[10px] uppercase font-mono tracking-[0.2em] font-bold ${connectionSummary.textClass}`}>
-                      <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
-                      {connectionSummary.label}
-                    </span>
-                  </div>
-
-                  {/* Telemetry Display */}
-                  <div className="space-y-2 text-[11px] tabular-nums font-medium">
-                    <div className="flex justify-between"><span className="text-white/50">Mode</span><span className="text-white/90">{runtimeModeLabel}</span></div>
-                    <div className="flex justify-between"><span className="text-white/50">Signal</span><span className="text-white/90 text-right max-w-[9rem] truncate">{runtimeSignalLabel}</span></div>
-                    <div className="flex justify-between"><span className="text-white/50">Pipeline</span><span className="text-white/90 truncate ml-2">{activePipelineChain}</span></div>
-                    <div className="flex justify-between"><span className="text-white/50">Resolution</span><span className="text-white/90">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
-                    <div className="flex justify-between"><span className="text-white/50">FPS</span><span className="text-white/90">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
-                    <div className="flex justify-between"><span className="text-white/50">Drop Rate</span><span className="text-white/90">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
-                    <div className="flex justify-between items-center pt-1 mt-1 border-t border-white/5">
-                      <span className="text-white/50">Status</span>
-                      <span className={`font-bold flex items-center gap-1.5 ${performanceStatus.color}`}>
-                        <span className={`w-2 h-2 rounded-full ${performanceStatus.dotColor}`} aria-hidden="true" />
-                        {performanceStatus.label}
+              {showSettingsMenu && (
+                <div
+                  id="soundscape-settings-menu"
+                  role="dialog"
+                  aria-modal="false"
+                  aria-label="Settings and telemetry"
+                  className="transition-all duration-300 origin-bottom-right ease-[cubic-bezier(0.16,1,0.3,1)] absolute bottom-full mb-3 right-0 opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                >
+                  <div className="glass-radiant w-64 rounded-2xl p-4 border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl flex flex-col gap-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <span className={`flex items-center gap-2 text-[10px] uppercase font-mono tracking-[0.2em] font-bold ${connectionSummary.textClass}`}>
+                        <span className={`w-2 h-2 rounded-full ${connectionSummary.dotClass} ${connectionState === 'connected' ? 'animate-pulse shadow-[0_0_8px_currentColor]' : ''}`} />
+                        {connectionSummary.label}
                       </span>
                     </div>
-                  </div>
 
-                  {/* Recording Row */}
-                  <div className="flex gap-2">
-                    {!isRecording ? (
-                      <button type="button" onClick={startRecordingClip} className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 py-2 text-[10px] uppercase tracking-widest font-bold text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">Record</button>
-                    ) : (
-                      <button type="button" onClick={stopRecordingClip} className="flex-1 rounded-lg border border-red-500/50 bg-red-500/30 py-2 text-[10px] uppercase tracking-widest font-bold text-red-100 hover:bg-red-500/40 transition-all animate-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">Stop REC</button>
+                    {/* Telemetry Display */}
+                    <div className="space-y-2 text-[11px] tabular-nums font-medium">
+                      <div className="flex justify-between"><span className="text-white/50">Mode</span><span className="text-white/90">{runtimeModeLabel}</span></div>
+                      <div className="flex justify-between"><span className="text-white/50">Signal</span><span className="text-white/90 text-right max-w-[9rem] truncate">{runtimeSignalLabel}</span></div>
+                      <div className="flex justify-between"><span className="text-white/50">Pipeline</span><span className="text-white/90 truncate ml-2">{activePipelineChain}</span></div>
+                      <div className="flex justify-between"><span className="text-white/50">Resolution</span><span className="text-white/90">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
+                      <div className="flex justify-between"><span className="text-white/50">FPS</span><span className="text-white/90">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>
+                      <div className="flex justify-between"><span className="text-white/50">Drop Rate</span><span className="text-white/90">{dropPercentage !== null ? `${dropPercentage.toFixed(1)}%` : "..."}</span></div>
+                      <div className="flex justify-between items-center pt-1 mt-1 border-t border-white/5">
+                        <span className="text-white/50">Status</span>
+                        <span className={`font-bold flex items-center gap-1.5 ${performanceStatus.color}`}>
+                          <span className={`w-2 h-2 rounded-full ${performanceStatus.dotColor}`} aria-hidden="true" />
+                          {performanceStatus.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Recording Row */}
+                    <div className="flex gap-2">
+                      {!isRecording ? (
+                        <button type="button" onClick={startRecordingClip} className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 py-2 text-[10px] uppercase tracking-widest font-bold text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">Record</button>
+                      ) : (
+                        <button type="button" onClick={stopRecordingClip} className="flex-1 rounded-lg border border-red-500/50 bg-red-500/30 py-2 text-[10px] uppercase tracking-widest font-bold text-red-100 hover:bg-red-500/40 transition-all animate-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">Stop REC</button>
+                      )}
+                      {recordedClipUrl && (
+                        <a href={recordedClipUrl} download={`clip-${Date.now()}.webm`} className="flex-1 text-center flex items-center justify-center rounded-lg border border-scope-cyan/30 bg-scope-cyan/10 py-2 text-[10px] uppercase tracking-widest font-bold text-scope-cyan hover:bg-scope-cyan/20 hover:border-scope-cyan/50 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Save</a>
+                      )}
+                    </div>
+                    {recordedClipSeconds !== null && (
+                      <p className="text-[10px] text-white/60">
+                        Last clip length: {recordedClipSeconds.toFixed(1)}s
+                      </p>
                     )}
-                    {recordedClipUrl && (
-                      <a href={recordedClipUrl} download={`clip-${Date.now()}.webm`} className="flex-1 text-center flex items-center justify-center rounded-lg border border-scope-cyan/30 bg-scope-cyan/10 py-2 text-[10px] uppercase tracking-widest font-bold text-scope-cyan hover:bg-scope-cyan/20 hover:border-scope-cyan/50 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan">Save</a>
+                    {recordingError && (
+                      <p role="alert" aria-live="assertive" className="text-[10px] text-red-300">
+                        {recordingError}
+                      </p>
                     )}
+
+                    <div className="border-t border-white/10 -mb-2" />
+
+                    {/* Disconnect Button */}
+                    <button
+                      type="button"
+                      onClick={handleScopeDisconnect}
+                      className="w-full mt-1 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border border-red-500/20"
+                    >
+                      Disconnect
+                    </button>
                   </div>
-                  {recordedClipSeconds !== null && (
-                    <p className="text-[10px] text-white/60">
-                      Last clip length: {recordedClipSeconds.toFixed(1)}s
-                    </p>
-                  )}
-                  {recordingError && (
-                    <p role="alert" aria-live="assertive" className="text-[10px] text-red-300">
-                      {recordingError}
-                    </p>
-                  )}
-
-                  <div className="border-t border-white/10 -mb-2" />
-
-                  {/* Disconnect Button */}
-                  <button
-                    type="button"
-                    onClick={handleScopeDisconnect}
-                    className="w-full mt-1 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-[10px] font-bold font-mono tracking-[0.2em] uppercase border border-red-500/20"
-                  >
-                    Disconnect
-                  </button>
                 </div>
-              </div>
+              )}
 
               <button
                 type="button"
                 onClick={() => { setShowSettingsMenu(!showSettingsMenu); setShowAudioMenu(false); }}
                 className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan ${showSettingsMenu ? 'bg-scope-cyan text-black shadow-[0_0_20px_rgba(6,182,212,0.6)] border-scope-cyan/50 scale-105' : 'glass-radiant hover:border-white/20 text-white/80 hover:bg-white/10 hover:text-white hover:scale-105'}`}
                 aria-label="Toggle Settings Menu"
+                aria-expanded={showSettingsMenu}
+                aria-controls="soundscape-settings-menu"
+                aria-haspopup="dialog"
                 title="Settings"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>

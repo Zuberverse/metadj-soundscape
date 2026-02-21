@@ -115,7 +115,7 @@ export interface UseSoundscapeReturn {
   /** Connect to audio element */
   connectAudio: (audioElement: HTMLAudioElement) => Promise<void>;
   /** Disconnect audio */
-  disconnectAudio: () => void;
+  disconnectAudio: (releaseMediaElement?: boolean) => void;
   /** Set the data channel for Scope communication */
   setDataChannel: (channel: RTCDataChannel | null) => void;
 
@@ -601,7 +601,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
         disposeParameterSender();
 
         if (analyzerRef.current) {
-          analyzerRef.current.destroy();
+          analyzerRef.current.destroy({ releaseMediaElement: true });
           analyzerRef.current = null;
         }
 
@@ -648,9 +648,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     [effectiveUpdateRate, applyEngineControls, disposeParameterSender, log] // Removed currentTheme - we use currentThemeRef instead
   );
 
-  const disconnectAudio = useCallback(() => {
+  const disconnectAudio = useCallback((releaseMediaElement = false) => {
     if (analyzerRef.current) {
-      analyzerRef.current.destroy();
+      analyzerRef.current.destroy({ releaseMediaElement });
       analyzerRef.current = null;
     }
     disposeParameterSender();
@@ -874,7 +874,7 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
   useEffect(() => {
     return () => {
-      disconnectAudio();
+      disconnectAudio(true);
       stopAmbient();
     };
   }, [disconnectAudio, stopAmbient]);

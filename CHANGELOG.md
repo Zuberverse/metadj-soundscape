@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-20 20:11 ET
+**Last Modified**: 2026-02-20 20:33 ET
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope connection regression coverage ensuring active session disposers run before repeated connect attempts.
 
 ### Changed
+- Soundscape dock and floating menus now render only when controls are active, preventing hidden theme/audio/settings controls from remaining in the keyboard/screen-reader focus order.
+- Floating audio/settings FAB toggles now expose explicit expanded/control relationships (`aria-expanded`, `aria-controls`, `aria-haspopup`) and support Escape-to-close behavior for fast keyboard recovery.
+- Scope connection initialization/reconnect copy now lives in a polite live region to announce status transitions for assistive technologies.
+- `ParameterSender` now snapshots and clears pending params before transmission, preserving re-entrant parameter updates instead of risking stale-frame overwrites.
+- `AudioAnalyzer.destroy()` now supports explicit media-element release, including source disconnect + `AudioContext.close()`, and `useSoundscape` now opts into release on teardown/replacement to prevent long-session audio-context buildup.
+- Regression coverage expanded for: re-entrant `ParameterSender` queue behavior, positive energy-spike transition path + anti-stacking behavior, and `AudioAnalyzer` media-element release/reinitialize lifecycle.
 - Preprocessor control is now colocated with Input Streams controls (NDI/Spout) to match its video-input-only activation path.
 - Preprocessor chaining is now applied only when video input mode is active (NDI/Spout); text-mode sessions no longer include inactive preprocessors in `pipeline_ids`.
 - Audio/ambient mode switching now always falls back to ambient when the system is not in a valid audio-reactive state (`isPlaying && audioReady`), eliminating ambiguous in-between runtime behavior.

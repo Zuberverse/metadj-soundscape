@@ -44,7 +44,7 @@ MetaDJ Soundscape is an audio-reactive AI visual generator built on Daydream Sco
   - 16:9 -> `576x320`, `768x432`, `896x512`
   - 9:16 -> `320x576`, `432x768`, `512x896`
 - Resolution tier labels: `Low`, `Medium`, `High`
-- Current production Scope pod: `xtt2dvnrtew5v1` (`RTX PRO 6000`, `96GB` VRAM)
+- Current production Scope pod: `<YOUR_RUNPOD_ID>` (`RTX PRO 6000`, `96GB` VRAM)
 - Feasible alternative Scope GPU: `RTX 5090` (`32GB` VRAM) for default/lower tiers
 - Current production pod capability flags: `ndi_available=false`, `spout_available=false`
 - Preprocessor activation rule: preprocessor chain is applied only for NDI/Spout video-input sessions; text mode uses only the selected main pipeline.

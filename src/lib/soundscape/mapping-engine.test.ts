@@ -115,6 +115,37 @@ describe("MappingEngine", () => {
     expect(params.transition).toBeUndefined();
   });
 
+  it("builds an energy-spike transition and blocks immediate stacking", () => {
+    const themeWithVariation: Theme = {
+      ...NEON_FOUNDRY,
+      promptVariations: {
+        trigger: "energy_spike",
+        prompts: ["high-energy fracture lighting, kinetic neon turbulence"],
+        blendDuration: 5,
+      },
+    };
+    const engine = new MappingEngine(themeWithVariation);
+
+    const spikeAnalysis: AnalysisState = {
+      ...makeAnalysis(0.82, false),
+      derived: {
+        energy: 0.82,
+        brightness: 0.55,
+        texture: 0.5,
+        energyDerivative: 0.45,
+        peakEnergy: 0.86,
+      },
+    };
+
+    const first = engine.computeParameters(spikeAnalysis);
+    expect(first.transition).toBeDefined();
+    expect(first.transition?.num_steps).toBe(5);
+    expect(first.transition?.target_prompts[0]?.text).toContain("high-energy fracture lighting");
+
+    const second = engine.computeParameters(spikeAnalysis);
+    expect(second.transition).toBeUndefined();
+  });
+
   it("uses previous prompts as transition source when prompt text changes", () => {
     const engine = new MappingEngine(COSMIC_VOYAGE);
 

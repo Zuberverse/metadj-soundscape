@@ -14,6 +14,10 @@ class MockAudioContext {
   state: AudioContextState = "running";
   destination = {};
 
+  constructor() {
+    createdAudioContexts.push(this);
+  }
+
   createMediaElementSource = vi.fn(() => {
     const source = new MockMediaElementSourceNode();
     lastSourceNode = source;
@@ -49,6 +53,7 @@ let lastSourceNode: MockMediaElementSourceNode | null = null;
 let lastAnalyserNode: MockAnalyserNode | null = null;
 let createdSourceNodes: MockMediaElementSourceNode[] = [];
 let createdAnalyserNodes: MockAnalyserNode[] = [];
+let createdAudioContexts: MockAudioContext[] = [];
 
 // Mock HTMLAudioElement
 function createMockAudioElement(): HTMLAudioElement {
@@ -103,6 +108,7 @@ beforeEach(() => {
   lastAnalyserNode = null;
   createdSourceNodes = [];
   createdAnalyserNodes = [];
+  createdAudioContexts = [];
 });
 
 afterEach(() => {
@@ -429,6 +435,23 @@ describe("AudioAnalyzer", () => {
 
       expect(mockMeydaAnalyzer.stop).toHaveBeenCalled();
       expect(lastSourceNode?.disconnect).toHaveBeenCalledWith(lastAnalyserNode);
+    });
+
+    it("releases media element resources when destroy is called with releaseMediaElement", async () => {
+      const audioElement = createMockAudioElement();
+      const firstAnalyzer = new AudioAnalyzer();
+      await firstAnalyzer.initialize(audioElement);
+
+      expect(createdAudioContexts).toHaveLength(1);
+
+      firstAnalyzer.destroy({ releaseMediaElement: true });
+      expect(createdAudioContexts[0]?.close).toHaveBeenCalled();
+
+      const secondAnalyzer = new AudioAnalyzer();
+      await secondAnalyzer.initialize(audioElement);
+
+      expect(createdSourceNodes).toHaveLength(2);
+      expect(createdAudioContexts).toHaveLength(2);
     });
   });
 

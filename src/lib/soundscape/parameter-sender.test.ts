@@ -101,6 +101,32 @@ describe("ParameterSender", () => {
     expect(sent.noise_scale).toBe(0.9);
   });
 
+  it("keeps the latest queued params when send() is called re-entrantly", () => {
+    const channel = createMockDataChannel("open");
+    sender.setDataChannel(channel);
+
+    const firstParams = createTestParams({ noiseScale: 0.35 });
+    const secondParams = createTestParams({ noiseScale: 0.82 });
+    let queuedDuringSend = false;
+
+    (channel.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      if (!queuedDuringSend) {
+        queuedDuringSend = true;
+        sender.send(secondParams);
+      }
+    });
+
+    sender.send(firstParams);
+    vi.advanceTimersByTime(120);
+
+    expect(channel.send).toHaveBeenCalledTimes(2);
+
+    const firstSent = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    const secondSent = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0]);
+    expect(firstSent.noise_scale).toBe(0.35);
+    expect(secondSent.noise_scale).toBe(0.82);
+  });
+
   it("clears pending params", () => {
     const channel = createMockDataChannel("open");
     sender.setDataChannel(channel);

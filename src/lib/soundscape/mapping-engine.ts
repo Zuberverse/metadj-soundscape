@@ -1126,8 +1126,12 @@ export class ParameterSender {
         return;
       }
 
-      if (this.pendingParams) {
-        const formatted = this.formatParams(this.pendingParams);
+      const paramsToSend = this.pendingParams;
+      if (paramsToSend) {
+        // Snapshot and clear before send so re-entrant send() calls can safely queue the latest frame.
+        this.pendingParams = null;
+
+        const formatted = this.formatParams(paramsToSend);
         try {
           this.dataChannel.send(JSON.stringify(formatted));
           this.lastSendTime = performance.now();
@@ -1144,8 +1148,6 @@ export class ParameterSender {
         if (process.env.NODE_ENV === "development" && formatted.reset_cache) {
           console.log("[ParameterSender] Cache reset triggered");
         }
-
-        this.pendingParams = null;
       }
 
       // If more params arrived while waiting, schedule again

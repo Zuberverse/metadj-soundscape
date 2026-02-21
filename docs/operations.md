@@ -11,7 +11,7 @@ This runbook is the operational source of truth for deploying, validating, monit
 
 - Frontend: Next.js app on port `3500`
 - Scope backend: RunPod-hosted Daydream Scope instance
-- Current production Scope pod: `xtt2dvnrtew5v1` (`RTX PRO 6000`, `96GB` VRAM)
+- Current production Scope pod: `<YOUR_RUNPOD_ID>` (`RTX PRO 6000`, `96GB` VRAM)
 - Feasible alternate Scope pod class: `RTX 5090` (`32GB` VRAM) for default/lower tiers
 - Proxy: Next.js route `/api/scope/[...path]` with method/path allowlist, origin checks, and write-token policy
 - Transport: WebRTC video + data channel

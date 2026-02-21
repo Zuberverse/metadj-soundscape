@@ -200,7 +200,7 @@ export const DEFAULT_RUNTIME_TUNING_SETTINGS: RuntimeTuningSettings = {
 /**
  * Default transition frames for prompt changes (music mode).
  */
-export const DEFAULT_PROMPT_TRANSITION_STEPS = 5;
+export const DEFAULT_PROMPT_TRANSITION_STEPS = 8;
 
 /**
  * Theme change transition frames (music mode).

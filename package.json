@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "description": "MetaDJ Soundscape - Audio-reactive AI video generation powered by Daydream Scope",
   "author": "Zuberant",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "SEE LICENSE IN README.md",
   "scripts": {
     "dev": "next dev --experimental-https -p ${PORT:-3500}",
     "dev:turbo": "next dev --turbopack --experimental-https -p ${PORT:-3500}",

@@ -27,9 +27,7 @@ Audio-reactive AI video generation application for the Daydream 2025 Interactive
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run check:scope` | Probe Scope API endpoint |
 
-**AI CLI Runtime Note**: For persistent launches in Codex/Claude sessions, from corpus root use:
-`./1-system/2-scripts/integration/ai-dev-server.sh start 3-projects/5-software/metadj-soundscape --port 3500`
-Then use `status`, `logs`, and `stop` subcommands from the same script for lifecycle management.
+**Note**: For persistent background launches use a process manager like `pm2`.
 
 **Prerequisites**: Scope server must be running (RunPod or local).
 

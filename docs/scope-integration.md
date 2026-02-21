@@ -17,7 +17,7 @@ Single source of truth for Daydream Scope integration within MetaDJ Soundscape. 
 ## Current Technical Assumptions
 
 - **Upstream baseline**: Scope stable is `v0.1.4` (published 2026-02-19).
-- **Current production pod**: `xtt2dvnrtew5v1` on RunPod with `RTX PRO 6000` (`96GB` VRAM).
+- **Current production pod**: `<YOUR_RUNPOD_ID>` on RunPod with `RTX PRO 6000` (`96GB` VRAM).
 - **Feasible alternative hardware**: `RTX 5090` (`32GB` VRAM) for default/lower resolution tiers.
 - **Pipeline selection**: Soundscape defaults to the `longlive` pipeline for stylized, audio-reactive visuals.
 - **Default first-launch output**: `16:9` at `576x320` (lowest tier for stable startup).
@@ -25,8 +25,8 @@ Single source of truth for Daydream Scope integration within MetaDJ Soundscape. 
 - **Input mode**: Text-to-video (`input_mode: "text"`) by default, with optional server-side video input (`input_mode: "video"`) using Scope `input_source` for NDI/Spout feeds.
 - **Preprocessor activation**: Preprocessors are video-mode stages and are appended to `pipeline_ids` only when NDI/Spout input mode is active.
 - **UI placement note**: The preprocessor selector is grouped in Soundscape's Input Streams section alongside NDI/Spout controls to reflect this dependency.
-- **Current pod capability state**: `xtt2dvnrtew5v1` reports `ndi_available=false` and `spout_available=false`; external video input requires a Scope runtime where those flags are `true`.
-- **Current detected preprocessors on `xtt2dvnrtew5v1`**: `video-depth-anything`, `scribble`, `gray`, `optical-flow` (all usage: `preprocessor`, mode: `video`).
+- **Current pod capability state**: `<YOUR_RUNPOD_ID>` reports `ndi_available=false` and `spout_available=false`; external video input requires a Scope runtime where those flags are `true`.
+- **Current detected preprocessors on `<YOUR_RUNPOD_ID>`**: `video-depth-anything`, `scribble`, `gray`, `optical-flow` (all usage: `preprocessor`, mode: `video`).
 - **Transport**: WebRTC offer flow with data channel parameter updates.
 
 ---
@@ -132,7 +132,7 @@ Returns: `{ "iceServers": [ { "urls": "stun:..." } ] }`
 - `input_mode` is required in Scope v0.1.4+ (`"text"` or `"video"`).
 - For NDI/Spout feeds without a browser video track, include `input_source` in `initialParameters`.
 - Only enable NDI/Spout modes when Scope diagnostics report the relevant capability as available.
-- Current production pod `xtt2dvnrtew5v1` reports both NDI and Spout unavailable.
+- Current production pod `<YOUR_RUNPOD_ID>` reports both NDI and Spout unavailable.
 - Avoid sending `noise_scale` or `noise_controller` in text mode.
 
 **Trickle ICE**
