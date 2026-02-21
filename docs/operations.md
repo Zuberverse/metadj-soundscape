@@ -1,6 +1,6 @@
 # Operations & Deployment - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20 20:11 ET  
+**Last Modified**: 2026-02-20 20:11 ET
 **Status**: Active
 
 ## Purpose
@@ -52,7 +52,7 @@ This runbook is the operational source of truth for deploying, validating, monit
 
 ### 2. Deploy/Verify Scope (RunPod)
 
-1. Launch Scope using the official template:  
+1. Launch Scope using the official template:
    `https://console.runpod.io/deploy?template=aca8mw9ivw&ref=5k8hxjq3`
 2. Set pod env vars including `HF_TOKEN`.
 3. Confirm Scope responds:
@@ -78,12 +78,12 @@ This runbook is the operational source of truth for deploying, validating, monit
 3. Confirm default pre-connect format is `16:9` at `576x320`.
 4. Connect Scope successfully.
 5. Confirm live video renders.
-6. Start demo audio or microphone mode.
-7. Confirm visuals react to audio changes.
+6. Start demo music or microphone mode.
+7. Confirm visuals react to music changes.
 8. Toggle denoising/reactivity/accent controls and verify stream remains stable.
 9. Confirm runtime mode telemetry transitions correctly:
-   - playing + ready audio => `Audio Reactive`
-   - paused/stopped or audio-not-ready => `Ambient Hold`
+   - playing + ready music => `Music Reactive`
+   - paused/stopped or music-not-ready => `Ambient Hold`
 10. Optional NDI/Spout verification:
    - confirm Scope diagnostics reports NDI or Spout as available
    - if using a preprocessor, verify NDI/Spout is enabled and set it from the Input Streams section (preprocessors are video-mode only)
