@@ -1,5 +1,39 @@
-const baseUrl = (process.env.SCOPE_API_URL || process.env.NEXT_PUBLIC_SCOPE_API_URL || "http://localhost:8000")
-  .replace(/\/$/, "");
+import { existsSync, readFileSync } from "node:fs";
+
+function parseEnvFile(filePath) {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
+  const result = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    result[key] = value;
+  }
+
+  return result;
+}
+
+const mergedEnv = {
+  ...parseEnvFile(".env"),
+  ...parseEnvFile(".env.local"),
+  ...process.env,
+};
+
+const baseUrl = (
+  mergedEnv.SCOPE_API_URL ||
+  mergedEnv.NEXT_PUBLIC_SCOPE_API_URL ||
+  "http://localhost:8000"
+).replace(/\/$/, "");
 
 async function fetchJson(path) {
   const response = await fetch(`${baseUrl}${path}`, {

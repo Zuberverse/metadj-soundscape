@@ -8,20 +8,32 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   useSoundscape,
+  ASPECT_RESOLUTION_PRESETS,
+  DEFAULT_RUNTIME_TUNING_SETTINGS,
   DEFAULT_ASPECT_RATIO,
   DENOISING_PROFILES,
   MAX_RECONNECT_ATTEMPTS,
+  MOTION_PACE_PROFILES,
   REACTIVITY_PROFILES,
   RECONNECT_BASE_DELAY_MS,
+  RUNTIME_TUNING_BOUNDS,
   type DenoisingProfileId,
+  type MotionPaceProfileId,
   type ReactivityProfileId,
+  type RuntimeTuningSettings,
 } from "@/lib/soundscape";
 import type { AspectRatioConfig } from "@/lib/soundscape";
 import { getScopeClient, useScopeConnection } from "@/lib/scope";
-import type { HealthResponse, PipelineDescriptor, PipelineStatusResponse } from "@/lib/scope";
+import type {
+  HealthResponse,
+  PipelineDescriptor,
+  PipelineStatusResponse,
+  ScopeInputSourceConfig,
+} from "@/lib/scope";
 import { AudioPlayer, type AudioPlayerControls } from "./AudioPlayer";
 import { ThemeSelector } from "./ThemeSelector";
 import { AnalysisMeter } from "./AnalysisMeter";
+import { AspectRatioToggle } from "./AspectRatioToggle";
 
 // Default pipeline for Soundscape (longlive = stylized, smooth transitions)
 const DEFAULT_PIPELINE = "longlive";
@@ -41,6 +53,17 @@ const AUTO_THEME_BEAT_ESTIMATE_MIN_BPM = 60;
 const AUTO_THEME_BEAT_ESTIMATE_MAX_BPM = 200;
 const AUTO_THEME_MAX_ESTIMATED_BEAT_INCREMENT = 8;
 const AUTO_THEME_SECTION_BEAT_OPTIONS = [16, 32, 64] as const;
+
+const clampRuntimeSetting = (
+  key: keyof RuntimeTuningSettings,
+  value: number
+): number => {
+  const bounds = RUNTIME_TUNING_BOUNDS[key];
+  if (!Number.isFinite(value)) {
+    return DEFAULT_RUNTIME_TUNING_SETTINGS[key];
+  }
+  return Math.max(bounds.min, Math.min(bounds.max, value));
+};
 
 type DiagnosticsRefreshResult = {
   isHealthy: boolean;
@@ -115,6 +138,7 @@ export function SoundscapeStudio({
   const [hasLaunched, setHasLaunched] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const showControls = showControlsProp ?? true;
   const sharpenEnabled = sharpenEnabledProp ?? true;
@@ -123,14 +147,19 @@ export function SoundscapeStudio({
     transportControlsRef.current = controls;
   }, []);
 
-  // Aspect ratio state (16:9 widescreen by default)
-  const [aspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Aspect ratio state (first-launch default: 16:9 Low tier at 576x320)
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioConfig>(DEFAULT_ASPECT_RATIO);
   const [selectedPipeline, setSelectedPipeline] = useState(DEFAULT_PIPELINE);
   const [selectedPreprocessor, setSelectedPreprocessor] = useState(NO_PREPROCESSOR);
   const [availablePipelines, setAvailablePipelines] = useState<PipelineDescriptor[]>([
     DEFAULT_PIPELINE_DESCRIPTOR,
   ]);
   const [scopeHealth, setScopeHealth] = useState<HealthResponse | null>(null);
+  const [hasResolvedInitialScopeHealth, setHasResolvedInitialScopeHealth] = useState(false);
   const [, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
@@ -164,6 +193,7 @@ export function SoundscapeStudio({
     spoutAvailable: false,
   });
   const scopeClient = useMemo(() => getScopeClient(), []);
+  const hasLoadedInitialDiagnostics = useRef(false);
 
   const isPreprocessorPipeline = useCallback((pipeline: PipelineDescriptor) => {
     return pipeline.usage.some((usage) => usage.toLowerCase() === "preprocessor");
@@ -180,11 +210,14 @@ export function SoundscapeStudio({
   );
 
   const activePipelineChain = useMemo(() => {
-    if (selectedPreprocessor !== NO_PREPROCESSOR) {
+    if (selectedPreprocessor !== NO_PREPROCESSOR && (ndiEnabled || spoutEnabled)) {
       return `${selectedPreprocessor} → ${selectedPipeline}`;
     }
+    if (selectedPreprocessor !== NO_PREPROCESSOR) {
+      return `${selectedPreprocessor} (video-only inactive) → ${selectedPipeline}`;
+    }
     return selectedPipeline;
-  }, [selectedPreprocessor, selectedPipeline]);
+  }, [selectedPreprocessor, selectedPipeline, ndiEnabled, spoutEnabled]);
 
   const {
     state: soundscapeState,
@@ -201,11 +234,16 @@ export function SoundscapeStudio({
     stopAmbient,
     denoisingProfileId,
     reactivityProfileId,
+    motionPaceProfileId,
     promptAccent,
     activeDenoisingSteps,
     setDenoisingProfile,
     setReactivityProfile,
+    setMotionPaceProfile,
     setPromptAccent,
+    runtimeTuning,
+    setRuntimeTuning,
+    resetRuntimeTuning,
     composePromptEntries,
   } = useSoundscape({
     initialTheme: "astral",
@@ -216,6 +254,30 @@ export function SoundscapeStudio({
   const [audioReady, setAudioReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoAutoplayBlocked, setVideoAutoplayBlocked] = useState(false);
+
+  const runtimeMode = useMemo<"audio-reactive" | "ambient" | "inactive">(() => {
+    if (!scopeStream) return "inactive";
+    if (isPlaying && audioReady) return "audio-reactive";
+    return "ambient";
+  }, [scopeStream, isPlaying, audioReady]);
+
+  const runtimeModeLabel = useMemo(() => {
+    if (runtimeMode === "audio-reactive") return "Audio Reactive";
+    if (runtimeMode === "ambient") return "Ambient Hold";
+    return "Inactive";
+  }, [runtimeMode]);
+
+  const runtimeSignalLabel = useMemo(() => {
+    if (runtimeMode !== "audio-reactive") {
+      return "No live audio mapping";
+    }
+    if (!soundscapeState.analysis) {
+      return "Waiting for analysis frames";
+    }
+    const energy = soundscapeState.analysis.derived.energy.toFixed(2);
+    const beat = soundscapeState.analysis.beat.isBeat ? "Beat" : "No Beat";
+    return `Energy ${energy} · ${beat}`;
+  }, [runtimeMode, soundscapeState.analysis]);
 
   // Handle audio element connection
   const handleAudioElement = useCallback(
@@ -242,18 +304,23 @@ export function SoundscapeStudio({
   const handlePlayStateChange = useCallback(
     (playing: boolean) => {
       setIsPlaying(playing);
-      if (playing && audioReady) {
-        stopAmbient();
-        start();
-      } else {
-        stop();
-        if (scopeStream) {
-          startAmbient();
-        }
-      }
     },
-    [audioReady, start, stop, startAmbient, stopAmbient, scopeStream]
+    []
   );
+
+  // Restart audio analysis when audio becomes ready or play state changes
+  useEffect(() => {
+    if (isPlaying && audioReady) {
+      stopAmbient();
+      start();
+    } else {
+      // Any non-audio-reactive state falls back to ambient hold when Scope is connected.
+      stop();
+      if (scopeStream) {
+        startAmbient();
+      }
+    }
+  }, [isPlaying, audioReady, scopeStream, start, stop, startAmbient, stopAmbient]);
 
   const handleDenoisingProfileChange = useCallback(
     (value: string) => {
@@ -273,12 +340,32 @@ export function SoundscapeStudio({
     [setReactivityProfile]
   );
 
+  const handleMotionPaceProfileChange = useCallback(
+    (value: string) => {
+      if (value in MOTION_PACE_PROFILES) {
+        setMotionPaceProfile(value as MotionPaceProfileId);
+      }
+    },
+    [setMotionPaceProfile]
+  );
+
   const handlePromptAccentWeightChange = useCallback(
     (weight: number) => {
       setPromptAccent(promptAccent.text, weight);
     },
     [setPromptAccent, promptAccent.text]
   );
+
+  const handleRuntimeTuningChange = useCallback(
+    (key: keyof RuntimeTuningSettings, value: number) => {
+      setRuntimeTuning({ [key]: clampRuntimeSetting(key, value) });
+    },
+    [setRuntimeTuning]
+  );
+
+  const handleRuntimeTuningReset = useCallback(() => {
+    resetRuntimeTuning();
+  }, [resetRuntimeTuning]);
 
   const refreshScopeDiagnostics = useCallback(async (): Promise<DiagnosticsRefreshResult> => {
     setIsDiagnosticsLoading(true);
@@ -411,6 +498,7 @@ export function SoundscapeStudio({
       };
     } finally {
       setIsDiagnosticsLoading(false);
+      setHasResolvedInitialScopeHealth(true);
     }
   }, [scopeClient, isPreprocessorPipeline, selectedPipeline, selectedPreprocessor]);
 
@@ -452,6 +540,8 @@ export function SoundscapeStudio({
   }, [scopeStream]);
 
   useEffect(() => {
+    if (hasLoadedInitialDiagnostics.current) return;
+    hasLoadedInitialDiagnostics.current = true;
     void refreshScopeDiagnostics();
   }, [refreshScopeDiagnostics]);
 
@@ -460,6 +550,20 @@ export function SoundscapeStudio({
     if (hasHydratedFromStorage.current) return;
     hasHydratedFromStorage.current = true;
     try {
+      const storedAspectMode = window.localStorage.getItem("soundscape.aspectRatio.mode");
+      const storedAspectWidth = Number(window.localStorage.getItem("soundscape.aspectRatio.width") ?? "");
+      const storedAspectHeight = Number(window.localStorage.getItem("soundscape.aspectRatio.height") ?? "");
+      if (storedAspectMode === "16:9" || storedAspectMode === "9:16") {
+        const matchedPreset = ASPECT_RESOLUTION_PRESETS[storedAspectMode].find(
+          (preset) =>
+            preset.config.resolution.width === storedAspectWidth &&
+            preset.config.resolution.height === storedAspectHeight
+        );
+        if (matchedPreset) {
+          setAspectRatio(matchedPreset.config);
+        }
+      }
+
       // Pipeline and preprocessor are NOT restored here — they are validated
       // against server-reported schemas in refreshScopeDiagnostics() which runs
       // on mount. Blindly restoring stale values causes a visible flash when
@@ -472,6 +576,10 @@ export function SoundscapeStudio({
       if (storedReactivity && storedReactivity in REACTIVITY_PROFILES) {
         setReactivityProfile(storedReactivity as ReactivityProfileId);
       }
+      const storedMotionPace = window.localStorage.getItem("soundscape.motionPaceProfile");
+      if (storedMotionPace && storedMotionPace in MOTION_PACE_PROFILES) {
+        setMotionPaceProfile(storedMotionPace as MotionPaceProfileId);
+      }
       const storedAccentText = window.localStorage.getItem("soundscape.promptAccent.text") ?? "";
       const storedAccentWeight = Number(window.localStorage.getItem("soundscape.promptAccent.weight") ?? "0.25");
       const validAccentWeight =
@@ -479,6 +587,25 @@ export function SoundscapeStudio({
           ? storedAccentWeight
           : 0.25;
       setPromptAccent(storedAccentText, validAccentWeight);
+      const storedBeatBoostScale = Number(window.localStorage.getItem("soundscape.runtimeTuning.beatBoostScale") ?? "");
+      const storedSpikeBoostScale = Number(window.localStorage.getItem("soundscape.runtimeTuning.spikeBoostScale") ?? "");
+      const storedSpikeVariationWeightScale = Number(
+        window.localStorage.getItem("soundscape.runtimeTuning.spikeVariationWeightScale") ?? ""
+      );
+      const storedTempoThresholdScale = Number(
+        window.localStorage.getItem("soundscape.runtimeTuning.tempoThresholdScale") ?? ""
+      );
+      const storedNoiseCeiling = Number(window.localStorage.getItem("soundscape.runtimeTuning.noiseCeiling") ?? "");
+      setRuntimeTuning({
+        beatBoostScale: clampRuntimeSetting("beatBoostScale", storedBeatBoostScale),
+        spikeBoostScale: clampRuntimeSetting("spikeBoostScale", storedSpikeBoostScale),
+        spikeVariationWeightScale: clampRuntimeSetting(
+          "spikeVariationWeightScale",
+          storedSpikeVariationWeightScale
+        ),
+        tempoThresholdScale: clampRuntimeSetting("tempoThresholdScale", storedTempoThresholdScale),
+        noiseCeiling: clampRuntimeSetting("noiseCeiling", storedNoiseCeiling),
+      });
       const storedAutoThemeEnabled = window.localStorage.getItem("soundscape.autoTheme.enabled");
       if (storedAutoThemeEnabled === "true" || storedAutoThemeEnabled === "false") {
         setAutoThemeEnabled(storedAutoThemeEnabled === "true");
@@ -492,7 +619,17 @@ export function SoundscapeStudio({
     } catch {
       // localStorage unavailable (e.g., Safari private browsing)
     }
-  }, [setDenoisingProfile, setPromptAccent, setReactivityProfile]);
+  }, [setDenoisingProfile, setPromptAccent, setReactivityProfile, setMotionPaceProfile, setRuntimeTuning]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("soundscape.aspectRatio.mode", aspectRatio.mode);
+      window.localStorage.setItem("soundscape.aspectRatio.width", String(aspectRatio.resolution.width));
+      window.localStorage.setItem("soundscape.aspectRatio.height", String(aspectRatio.resolution.height));
+    } catch {
+      // localStorage unavailable
+    }
+  }, [aspectRatio]);
 
   useEffect(() => {
     try { window.localStorage.setItem("soundscape.pipeline", selectedPipeline); } catch { /* storage unavailable */ }
@@ -511,11 +648,42 @@ export function SoundscapeStudio({
   }, [reactivityProfileId]);
 
   useEffect(() => {
+    try { window.localStorage.setItem("soundscape.motionPaceProfile", motionPaceProfileId); } catch { /* storage unavailable */ }
+  }, [motionPaceProfileId]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem("soundscape.promptAccent.text", promptAccent.text);
       window.localStorage.setItem("soundscape.promptAccent.weight", String(promptAccent.weight));
     } catch { /* storage unavailable */ }
   }, [promptAccent]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "soundscape.runtimeTuning.beatBoostScale",
+        String(runtimeTuning.beatBoostScale)
+      );
+      window.localStorage.setItem(
+        "soundscape.runtimeTuning.spikeBoostScale",
+        String(runtimeTuning.spikeBoostScale)
+      );
+      window.localStorage.setItem(
+        "soundscape.runtimeTuning.spikeVariationWeightScale",
+        String(runtimeTuning.spikeVariationWeightScale)
+      );
+      window.localStorage.setItem(
+        "soundscape.runtimeTuning.tempoThresholdScale",
+        String(runtimeTuning.tempoThresholdScale)
+      );
+      window.localStorage.setItem(
+        "soundscape.runtimeTuning.noiseCeiling",
+        String(runtimeTuning.noiseCeiling)
+      );
+    } catch {
+      // storage unavailable
+    }
+  }, [runtimeTuning]);
 
   useEffect(() => {
     try { window.localStorage.setItem("soundscape.autoTheme.enabled", String(autoThemeEnabled)); } catch { /* storage unavailable */ }
@@ -582,6 +750,29 @@ export function SoundscapeStudio({
     onConnectionChange?.(!!scopeStream);
   }, [scopeStream, onConnectionChange]);
 
+  const videoInputSource = useMemo<ScopeInputSourceConfig | undefined>(() => {
+    if (ndiEnabled) {
+      return {
+        enabled: true,
+        source_type: "ndi",
+        source_name: ndiStreamName.trim(),
+      };
+    }
+    if (spoutEnabled) {
+      return {
+        enabled: true,
+        source_type: "spout",
+        source_name: spoutStreamName.trim(),
+      };
+    }
+    return undefined;
+  }, [ndiEnabled, ndiStreamName, spoutEnabled, spoutStreamName]);
+
+  const shouldApplyPreprocessor = useMemo(
+    () => selectedPreprocessor !== NO_PREPROCESSOR && !!videoInputSource,
+    [selectedPreprocessor, videoInputSource]
+  );
+
   const loadParams = useMemo(() => {
     const params: Record<string, unknown> = {
       width: aspectRatio.resolution.width,
@@ -595,30 +786,21 @@ export function SoundscapeStudio({
       params.lora_merge_mode = "permanent_merge"; // Maximize inference FPS
     }
 
-    // NDI / Spout Inputs
-    if (ndiEnabled || spoutEnabled) {
+    // External video input mode requires VACE for LongLive processing.
+    if (videoInputSource) {
       if (selectedPipeline === "longlive") {
-        params.vace_enabled = true; // VACE must be enabled to process input video
+        params.vace_enabled = true;
       }
-      params.vace_use_input_video = true;
-      params.controlnet_use_input_video = true;
-    }
-
-    if (ndiEnabled) {
-      params.ndi_receiver = { enabled: true, name: ndiStreamName };
-    }
-    if (spoutEnabled) {
-      params.spout_receiver = { enabled: true, name: spoutStreamName };
     }
     return params;
-  }, [aspectRatio, selectedPipeline, ndiEnabled, ndiStreamName, spoutEnabled, spoutStreamName]);
+  }, [aspectRatio, selectedPipeline, videoInputSource]);
 
   const pipelineIdsForConnect = useMemo(() => {
-    if (selectedPreprocessor !== NO_PREPROCESSOR) {
+    if (shouldApplyPreprocessor) {
       return [selectedPreprocessor, selectedPipeline];
     }
     return [selectedPipeline];
-  }, [selectedPreprocessor, selectedPipeline]);
+  }, [selectedPreprocessor, selectedPipeline, shouldApplyPreprocessor]);
 
   const initialParameters = useMemo(() => {
     if (!currentTheme) return undefined;
@@ -627,19 +809,27 @@ export function SoundscapeStudio({
       ...currentTheme.styleModifiers,
       "calm atmosphere, gentle flow",
     ].join(", ");
+    const composedPrompts = composePromptEntries(basePrompt);
+    const promptInterpolationMethod = composedPrompts.length === 2 ? "slerp" : "linear";
     const params = {
       pipeline_ids: pipelineIdsForConnect,
-      input_mode: (ndiEnabled || spoutEnabled) ? "video" : "text",
-      prompts: composePromptEntries(basePrompt),
-      prompt_interpolation_method: "linear" as const,
+      input_mode: videoInputSource ? "video" : "text",
+      prompts: composedPrompts,
+      prompt_interpolation_method: promptInterpolationMethod,
       denoising_step_list: [...activeDenoisingSteps],
       manage_cache: true,
-      kv_cache_attention_bias: 0.3,
+      kv_cache_attention_bias: 0.1, // Reduced from 0.3 to prevent strong initial prompts from bleeding/sticking too long
       recording: false,
+      ...(videoInputSource
+        ? {
+          input_source: videoInputSource,
+          vace_use_input_video: true,
+        }
+        : {}),
     };
     console.log("[Scope] initialParameters:", JSON.stringify(params, null, 2));
     return params;
-  }, [activeDenoisingSteps, composePromptEntries, currentTheme, pipelineIdsForConnect, ndiEnabled, spoutEnabled]);
+  }, [activeDenoisingSteps, composePromptEntries, currentTheme, pipelineIdsForConnect, videoInputSource]);
 
   const legacyInitialParameters = useMemo(() => {
     if (!currentTheme) return undefined;
@@ -650,13 +840,19 @@ export function SoundscapeStudio({
     ].join(", ");
     const params = {
       pipeline_ids: pipelineIdsForConnect,
-      input_mode: (ndiEnabled || spoutEnabled) ? "video" : "text",
+      input_mode: videoInputSource ? "video" : "text",
       prompts: composePromptEntries(basePrompt),
       manage_cache: true,
+      ...(videoInputSource
+        ? {
+          input_source: videoInputSource,
+          vace_use_input_video: true,
+        }
+        : {}),
     };
     console.log("[Scope] legacyInitialParameters:", JSON.stringify(params, null, 2));
     return params;
-  }, [composePromptEntries, currentTheme, pipelineIdsForConnect, ndiEnabled, spoutEnabled]);
+  }, [composePromptEntries, currentTheme, pipelineIdsForConnect, videoInputSource]);
 
   const stopPlaybackForDisconnect = useCallback(() => {
     stop();
@@ -743,24 +939,27 @@ export function SoundscapeStudio({
   const hasPipelineSelection = selectedPipeline.trim().length > 0;
   const isNdiValid = !ndiEnabled || ndiStreamName.trim().length > 0;
   const isSpoutValid = !spoutEnabled || spoutStreamName.trim().length > 0;
+  const isNdiAvailable = !ndiEnabled || scopeCapabilities.ndiAvailable;
+  const isSpoutAvailable = !spoutEnabled || scopeCapabilities.spoutAvailable;
 
   const canConnect =
     !isConnecting &&
     hasPipelineSelection &&
     isNdiValid &&
-    isSpoutValid;
+    isSpoutValid &&
+    isNdiAvailable &&
+    isSpoutAvailable;
 
   const scopeReadiness = useMemo(() => {
+    if (!hasResolvedInitialScopeHealth) {
+      return null;
+    }
     if (scopeHealth?.status === "ok") {
       return { label: "Online", textClass: "text-scope-cyan", dotClass: "bg-scope-cyan" };
     }
-
-    if (scopeHealth === null || isDiagnosticsLoading) {
-      return { label: "Checking", textClass: "text-white/70", dotClass: "bg-white/50" };
-    }
-
     return { label: "Offline", textClass: "text-red-300", dotClass: "bg-red-400" };
-  }, [scopeHealth, isDiagnosticsLoading]);
+  }, [scopeHealth, hasResolvedInitialScopeHealth]);
+
   const connectionSummary = useMemo(() => {
     switch (connectionState) {
       case "connected":
@@ -1106,6 +1305,10 @@ export function SoundscapeStudio({
   // RENDER
   // ====================================================================
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <div className="h-full w-full flex flex-col relative z-0 bg-black overflow-hidden font-sans">
       {/* ALWAYS-PRESENT VIDEO LAYER (solves WebRTC mounting issues on Safari/iOS) */}
@@ -1143,7 +1346,6 @@ export function SoundscapeStudio({
                 muted
                 className="w-full h-full object-cover"
                 style={sharpenEnabled ? {
-                  filter: "contrast(1.15) saturate(1.25) brightness(1.05)",
                   imageRendering: "crisp-edges",
                 } : undefined}
               />
@@ -1170,7 +1372,7 @@ export function SoundscapeStudio({
         {/* Background Ambience when disconnected */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.1),rgba(0,0,0,0.8)_60%)] pointer-events-none" />
 
-        {isConnecting ? (
+        {isConnecting || connectionState === "connected" ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">
             <div className="glass-radiant p-10 rounded-3xl max-w-sm w-full text-center border border-scope-cyan/20 shadow-[0_0_50px_rgba(6,182,212,0.15)] animate-fade-in relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-scope-cyan/10 to-transparent opacity-50 pointer-events-none" />
@@ -1186,11 +1388,13 @@ export function SoundscapeStudio({
                 </svg>
               </div>
               <h2 className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-3 tracking-widest font-bold" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif' }}>
-                {connectionState === "reconnecting" ? "RECONNECTING" : "INITIALIZING"}
+                {connectionState === "reconnecting" ? "RECONNECTING" : connectionState === "connected" ? "CONNECTED" : "INITIALIZING"}
               </h2>
-              <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-wider">{statusMessage || "Establishing secure stream..."}</p>
+              <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-wider">
+                {connectionState === "connected" ? "Link established. Synchronizing scene..." : statusMessage || "Establishing secure stream..."}
+              </p>
               <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
-                <div className="h-full bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta animate-pulse rounded-full w-[80%]" />
+                <div className={`h-full bg-gradient-to-r from-scope-cyan via-scope-purple to-scope-magenta rounded-full transition-all duration-700 ease-out ${connectionState === "connected" ? "w-full" : "w-[80%] animate-pulse"}`} />
               </div>
             </div>
           </div>
@@ -1214,10 +1418,10 @@ export function SoundscapeStudio({
             </div>
           </div>
         ) : !hasLaunched ? (
-          <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-8 lg:gap-16 justify-center items-center pointer-events-auto overflow-y-auto w-full max-w-6xl mx-auto">
+          <div className="absolute inset-0 flex flex-col md:flex-row p-4 md:p-8 gap-6 lg:gap-12 justify-center items-center pointer-events-auto overflow-y-auto md:overflow-hidden w-full max-w-7xl mx-auto">
 
             {/* Left Column: Intro & Branding */}
-            <div className="flex-1 w-full max-w-lg lg:pr-12 animate-fade-in flex flex-col justify-center overflow-visible">
+            <div className="flex-1 w-full max-w-lg lg:pr-12 flex flex-col justify-center overflow-visible">
               <h1 className="text-5xl md:text-7xl text-transparent bg-clip-text bg-gradient-to-r from-scope-cyan to-scope-purple mb-6 font-bold tracking-normal drop-shadow-[0_0_30px_rgba(6,182,212,0.3)] flex flex-col overflow-visible min-w-max" style={{ fontFamily: 'var(--font-cinzel), Cinzel, serif', lineHeight: '1.2' }}>
                 <span className="pb-1" style={{ paddingRight: '0.1em' }}>MetaDJ</span>
                 <span className="pb-2" style={{ paddingRight: '0.1em' }}>Soundscape</span>
@@ -1227,13 +1431,23 @@ export function SoundscapeStudio({
               </p>
 
               <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${scopeReadiness.dotClass} shadow-[0_0_10px_currentColor]`} />
-                  <span className={`text-sm font-bold uppercase tracking-wider ${scopeReadiness.textClass}`}>{scopeReadiness.label}</span>
+                <div className="flex items-center gap-3 min-h-[20px]">
+                  {scopeReadiness && (
+                    <>
+                      <div className={`w-3 h-3 rounded-full ${scopeReadiness.dotClass} shadow-[0_0_10px_currentColor]`} />
+                      <span className={`text-sm font-bold uppercase tracking-wider ${scopeReadiness.textClass}`}>{scopeReadiness.label}</span>
+                    </>
+                  )}
                 </div>
-
-                <button type="button" onClick={() => { void refreshScopeDiagnostics(); }} disabled={isDiagnosticsLoading} className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg bg-white/5 text-white hover:bg-white/10 hover:text-white transition-all border border-white/10 hover:border-scope-cyan/30 focus:outline-none focus:ring-2 focus:ring-scope-cyan disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isDiagnosticsLoading ? "Scanning..." : "Refresh"}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isDiagnosticsLoading) return;
+                    void refreshScopeDiagnostics();
+                  }}
+                  className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg bg-white/5 text-white hover:bg-white/10 hover:text-white transition-all border border-white/10 hover:border-scope-cyan/30 focus:outline-none focus:ring-2 focus:ring-scope-cyan"
+                >
+                  Refresh
                 </button>
               </div>
 
@@ -1252,197 +1466,348 @@ export function SoundscapeStudio({
             </div>
 
             {/* Right Column: Configuration Panel */}
-            <div className="w-full max-w-md shrink-0 flex flex-col glass-radiant rounded-3xl border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl overflow-visible animate-fade-in-up" style={{ animationDelay: '100ms' }}>
-              <div className="p-6 md:p-8 space-y-8 overflow-y-auto max-h-[85vh] fancy-scrollbar">
+            <div className="w-full max-w-xl lg:max-w-2xl shrink-0 flex flex-col glass-radiant rounded-3xl border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl overflow-visible">
+              <div className="p-5 md:p-6 overflow-y-auto max-h-[82vh] md:max-h-[72vh] fancy-scrollbar">
+                <div className="space-y-6 md:grid md:grid-cols-2 md:gap-6 md:space-y-0 items-start">
 
-                {/* Pipeline Configuration */}
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-bold tracking-[0.2em] text-scope-cyan/70 uppercase border-b border-white/5 pb-2 flex items-center gap-2">
-                    Pipeline Config
-                  </h3>
+                  {/* Pipeline Configuration */}
+                  <div className="space-y-4">
+                    <h3 className="text-[10px] font-bold tracking-[0.2em] text-scope-cyan/70 uppercase border-b border-white/5 pb-2 flex items-center gap-2">
+                      Pipeline Config
+                    </h3>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">Main Pipeline</label>
+                        <div className="relative">
+                          <select
+                            value={selectedPipeline}
+                            onChange={(e) => setSelectedPipeline(e.target.value)}
+                            className="w-full appearance-none bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all cursor-pointer font-medium"
+                          >
+                            {mainPipelineOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/30">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">View Format</label>
+                        <div className="rounded-xl border border-white/10 bg-black/40 p-3 space-y-2">
+                          <AspectRatioToggle
+                            current={aspectRatio}
+                            onChange={setAspectRatio}
+                            disabled={isConnecting}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Input Streams Configuration (Moved to balance layout) */}
+                      <div className="md:col-span-2 pt-2">
+                        <div className="flex items-center gap-4 text-xs text-scope-cyan/70 uppercase tracking-widest font-semibold mb-4">
+                          <span>Input Streams</span>
+                          <div className="h-px flex-1 bg-gradient-to-r from-scope-cyan/20 to-transparent" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* NDI Stream */}
+                          <div className={`p-3 rounded-xl border transition-all relative ${ndiEnabled ? 'bg-scope-cyan/10 border-scope-cyan/30' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
+                            {ndiEnabled && scopeCapabilities.ndiAvailable && (
+                              <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_5px_#06b6d4]" />
+                                <span className="text-[8px] font-bold text-scope-cyan tracking-widest uppercase">Active</span>
+                              </div>
+                            )}
+                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                              <input type="checkbox" className="sr-only" checked={ndiEnabled} onChange={(e) => {
+                                const c = e.target.checked;
+                                setNdiEnabled(c);
+                                if (c) setSpoutEnabled(false);
+                              }} />
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${ndiEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
+                                {ndiEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                              </div>
+                              <span className={`text-xs font-semibold ${ndiEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>NDI Stream</span>
+                            </label>
+                            {ndiEnabled && (
+                              <input
+                                type="text"
+                                value={ndiStreamName}
+                                onChange={(e) => setNdiStreamName(e.target.value)}
+                                placeholder="Enter NDI Source Name"
+                                className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 outline-none transition-all placeholder:text-white/30 mt-1"
+                              />
+                            )}
+                          </div>
+
+                          {/* Spout Stream */}
+                          <div className={`p-3 rounded-xl border transition-all relative ${spoutEnabled ? 'bg-scope-cyan/10 border-scope-cyan/30' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
+                            {spoutEnabled && scopeCapabilities.spoutAvailable && (
+                              <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_5px_#06b6d4]" />
+                                <span className="text-[8px] font-bold text-scope-cyan tracking-widest uppercase">Active</span>
+                              </div>
+                            )}
+                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                              <input type="checkbox" className="sr-only" checked={spoutEnabled} onChange={(e) => {
+                                const c = e.target.checked;
+                                setSpoutEnabled(c);
+                                if (c) setNdiEnabled(false);
+                              }} />
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${spoutEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
+                                {spoutEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                              </div>
+                              <span className={`text-xs font-semibold ${spoutEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>Spout Stream</span>
+                            </label>
+                            {spoutEnabled && (
+                              <input
+                                type="text"
+                                value={spoutStreamName}
+                                onChange={(e) => setSpoutStreamName(e.target.value)}
+                                placeholder="Enter Spout Source Name"
+                                className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 outline-none transition-all placeholder:text-white/30 mt-1"
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-3">
+                          <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">
+                            Video Preprocessor
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={selectedPreprocessor}
+                              onChange={(e) => setSelectedPreprocessor(e.target.value)}
+                              disabled={preprocessorOptions.length === 0 || !videoInputSource}
+                              className={`w-full appearance-none bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all cursor-pointer disabled:opacity-50 font-medium ${(preprocessorOptions.length === 0 || !videoInputSource) ? "text-white/30 cursor-not-allowed" : "text-white"}`}
+                            >
+                              <option value={NO_PREPROCESSOR}>None</option>
+                              {preprocessorOptions.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/30">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
 
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">Main Pipeline</label>
-                      <div className="relative">
-                        <select
-                          value={selectedPipeline}
-                          onChange={(e) => setSelectedPipeline(e.target.value)}
-                          className="w-full appearance-none bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all cursor-pointer font-medium"
-                        >
-                          {mainPipelineOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/30">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-4 text-xs text-scope-purple/70 uppercase tracking-widest font-semibold">
+                      <span>Generation Profile</span>
+                      <div className="h-px flex-1 bg-gradient-to-r from-scope-purple/20 to-transparent" />
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">Preprocessor</label>
-                      <div className="relative">
-                        <select
-                          value={selectedPreprocessor}
-                          onChange={(e) => setSelectedPreprocessor(e.target.value)}
-                          disabled={preprocessorOptions.length === 0}
-                          className={`w-full appearance-none bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 transition-all cursor-pointer disabled:opacity-50 font-medium ${preprocessorOptions.length === 0 ? 'text-white/30 cursor-not-allowed' : 'text-white'}`}
-                        >
-                          <option value={NO_PREPROCESSOR}>{preprocessorOptions.length === 0 ? "Loading..." : "None"}</option>
-                          {preprocessorOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/30">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <label className="block relative group">
+                        <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Denoising</span>
+                        <div className="relative">
+                          <select value={denoisingProfileId} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                            <option value="speed">Speed</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="quality">Quality</option>
+                          </select>
+                          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </div>
                         </div>
-                      </div>
+                      </label>
+                      <label className="block relative group">
+                        <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Reactivity</span>
+                        <div className="relative">
+                          <select value={reactivityProfileId} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                            <option value="cinematic">Cinematic</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="kinetic">Kinetic</option>
+                          </select>
+                          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </div>
+                        </div>
+                      </label>
+                      <label className="block relative group">
+                        <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Motion Pace</span>
+                        <div className="relative">
+                          <select value={motionPaceProfileId} onChange={(e) => handleMotionPaceProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
+                            {Object.entries(MOTION_PACE_PROFILES).map(([id, profile]) => (
+                              <option key={id} value={id}>
+                                {profile.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </div>
+                        </div>
+                      </label>
                     </div>
 
-                    {/* Input Streams Configuration */}
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold ml-1">Input Streams</label>
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* NDI Stream */}
-                        <div className={`p-3 rounded-xl border transition-all relative ${ndiEnabled ? 'bg-scope-cyan/10 border-scope-cyan/30' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
-                          {ndiEnabled && scopeCapabilities.ndiAvailable && (
-                            <div className="absolute top-2 right-2 flex items-center gap-1.5">
-                              <div className="w-1.5 h-1.5 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_5px_#06b6d4]" />
-                              <span className="text-[8px] font-bold text-scope-cyan tracking-widest uppercase">Active</span>
-                            </div>
-                          )}
-                          <label className="flex items-center gap-2 cursor-pointer mb-2">
-                            <input type="checkbox" className="sr-only" checked={ndiEnabled} onChange={(e) => {
-                              const c = e.target.checked;
-                              setNdiEnabled(c);
-                              if (c) setSpoutEnabled(false);
-                            }} />
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${ndiEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
-                              {ndiEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                            </div>
-                            <span className={`text-xs font-semibold ${ndiEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>NDI Stream</span>
-                          </label>
-                          {ndiEnabled && (
-                            <input
-                              type="text"
-                              value={ndiStreamName}
-                              onChange={(e) => setNdiStreamName(e.target.value)}
-                              placeholder="Enter NDI Source Name"
-                              className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 outline-none transition-all placeholder:text-white/30 mt-1"
-                            />
-                          )}
-                        </div>
-
-                        {/* Spout Stream */}
-                        <div className={`p-3 rounded-xl border transition-all relative ${spoutEnabled ? 'bg-scope-cyan/10 border-scope-cyan/30' : 'bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20'}`}>
-                          {spoutEnabled && scopeCapabilities.spoutAvailable && (
-                            <div className="absolute top-2 right-2 flex items-center gap-1.5">
-                              <div className="w-1.5 h-1.5 rounded-full bg-scope-cyan animate-pulse shadow-[0_0_5px_#06b6d4]" />
-                              <span className="text-[8px] font-bold text-scope-cyan tracking-widest uppercase">Active</span>
-                            </div>
-                          )}
-                          <label className="flex items-center gap-2 cursor-pointer mb-2">
-                            <input type="checkbox" className="sr-only" checked={spoutEnabled} onChange={(e) => {
-                              const c = e.target.checked;
-                              setSpoutEnabled(c);
-                              if (c) setNdiEnabled(false);
-                            }} />
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${spoutEnabled ? 'bg-scope-cyan border-scope-cyan text-black' : 'border-white/30 bg-black/50'} `}>
-                              {spoutEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                            </div>
-                            <span className={`text-xs font-semibold ${spoutEnabled ? 'text-scope-cyan' : 'text-white/70'}`}>Spout Stream</span>
-                          </label>
-                          {spoutEnabled && (
-                            <input
-                              type="text"
-                              value={spoutStreamName}
-                              onChange={(e) => setSpoutStreamName(e.target.value)}
-                              placeholder="Enter Spout Source Name"
-                              className="w-full px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-xs text-white focus:border-scope-cyan/50 focus:ring-1 focus:ring-scope-cyan/50 outline-none transition-all placeholder:text-white/30 mt-1"
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4 text-xs text-scope-purple/70 uppercase tracking-widest font-semibold">
-                    <span>Generation Profile</span>
-                    <div className="h-px flex-1 bg-gradient-to-r from-scope-purple/20 to-transparent" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
                     <label className="block relative group">
-                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Denoising</span>
-                      <div className="relative">
-                        <select value={denoisingProfileId} onChange={(e) => handleDenoisingProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
-                          <option value="speed">Speed</option>
-                          <option value="balanced">Balanced</option>
-                          <option value="quality">Quality</option>
-                        </select>
-                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        </div>
+                      <div className="flex justify-between items-end mb-2">
+                        <span className="text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold group-hover:text-scope-purple/80 transition-colors">Accent Weight</span>
+                        <span className="text-[10px] text-scope-purple font-mono bg-scope-purple/10 px-2 py-0.5 rounded border border-scope-purple/20">{promptAccent.weight.toFixed(2)}</span>
                       </div>
+                      <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="w-full accent-scope-purple cursor-pointer" />
                     </label>
-                    <label className="block relative group">
-                      <span className="block text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold mb-2 group-hover:text-scope-purple/80 transition-colors">Reactivity</span>
-                      <div className="relative">
-                        <select value={reactivityProfileId} onChange={(e) => handleReactivityProfileChange(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:border-scope-purple/50 focus:ring-1 focus:ring-scope-purple/50 transition-all outline-none appearance-none group-hover:bg-black/60">
-                          <option value="cinematic">Cinematic</option>
-                          <option value="balanced">Balanced</option>
-                          <option value="kinetic">Kinetic</option>
-                        </select>
-                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/30 group-hover:text-scope-purple/60 transition-colors">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        </div>
+
+                    <details className="group rounded-xl border border-white/10 bg-black/35 p-3">
+                      <summary className="flex items-center justify-between cursor-pointer list-none">
+                        <span className="text-[10px] font-mono text-scope-purple/80 uppercase tracking-[0.2em] font-bold">
+                          Advanced Runtime Controls
+                        </span>
+                        <span className="text-[10px] text-white/50 group-open:hidden">Expand</span>
+                        <span className="text-[10px] text-white/50 hidden group-open:inline">Collapse</span>
+                      </summary>
+
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="block">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-bold">Beat Boost</span>
+                            <span className="text-[10px] text-scope-cyan font-mono">{runtimeTuning.beatBoostScale.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={RUNTIME_TUNING_BOUNDS.beatBoostScale.min}
+                            max={RUNTIME_TUNING_BOUNDS.beatBoostScale.max}
+                            step={0.05}
+                            value={runtimeTuning.beatBoostScale}
+                            onChange={(e) => handleRuntimeTuningChange("beatBoostScale", Number(e.target.value))}
+                            className="w-full accent-scope-cyan cursor-pointer"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-bold">Spike Boost</span>
+                            <span className="text-[10px] text-scope-cyan font-mono">{runtimeTuning.spikeBoostScale.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={RUNTIME_TUNING_BOUNDS.spikeBoostScale.min}
+                            max={RUNTIME_TUNING_BOUNDS.spikeBoostScale.max}
+                            step={0.05}
+                            value={runtimeTuning.spikeBoostScale}
+                            onChange={(e) => handleRuntimeTuningChange("spikeBoostScale", Number(e.target.value))}
+                            className="w-full accent-scope-cyan cursor-pointer"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-bold">Variation Blend</span>
+                            <span className="text-[10px] text-scope-cyan font-mono">{runtimeTuning.spikeVariationWeightScale.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={RUNTIME_TUNING_BOUNDS.spikeVariationWeightScale.min}
+                            max={RUNTIME_TUNING_BOUNDS.spikeVariationWeightScale.max}
+                            step={0.05}
+                            value={runtimeTuning.spikeVariationWeightScale}
+                            onChange={(e) =>
+                              handleRuntimeTuningChange(
+                                "spikeVariationWeightScale",
+                                Number(e.target.value)
+                              )
+                            }
+                            className="w-full accent-scope-cyan cursor-pointer"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-bold">Motion Bias</span>
+                            <span className="text-[10px] text-scope-cyan font-mono">{runtimeTuning.tempoThresholdScale.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={RUNTIME_TUNING_BOUNDS.tempoThresholdScale.min}
+                            max={RUNTIME_TUNING_BOUNDS.tempoThresholdScale.max}
+                            step={0.01}
+                            value={runtimeTuning.tempoThresholdScale}
+                            onChange={(e) => handleRuntimeTuningChange("tempoThresholdScale", Number(e.target.value))}
+                            className="w-full accent-scope-cyan cursor-pointer"
+                          />
+                        </label>
+
+                        <label className="block md:col-span-2">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-bold">Noise Ceiling</span>
+                            <span className="text-[10px] text-scope-cyan font-mono">{runtimeTuning.noiseCeiling.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={RUNTIME_TUNING_BOUNDS.noiseCeiling.min}
+                            max={RUNTIME_TUNING_BOUNDS.noiseCeiling.max}
+                            step={0.01}
+                            value={runtimeTuning.noiseCeiling}
+                            onChange={(e) => handleRuntimeTuningChange("noiseCeiling", Number(e.target.value))}
+                            className="w-full accent-scope-cyan cursor-pointer"
+                          />
+                        </label>
                       </div>
-                    </label>
+
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-[10px] text-white/45 uppercase tracking-[0.12em]">
+                          Live updates, no reconnect required.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleRuntimeTuningReset}
+                          className="px-3 py-1.5 rounded-lg border border-white/15 bg-black/30 text-[10px] uppercase tracking-[0.12em] font-bold text-white/75 hover:text-white hover:border-scope-cyan/40 transition-all"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </details>
+
                   </div>
 
-                  <label className="block relative group">
-                    <div className="flex justify-between items-end mb-2">
-                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-[0.2em] font-bold group-hover:text-scope-purple/80 transition-colors">Accent Weight</span>
-                      <span className="text-[10px] text-scope-purple font-mono bg-scope-purple/10 px-2 py-0.5 rounded border border-scope-purple/20">{promptAccent.weight.toFixed(2)}</span>
+                  {soundscapeSyncError && (
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="md:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 animate-fade-in shadow-[0_0_15px_rgba(245,158,11,0.08)]"
+                    >
+                      <p className="text-amber-300 font-bold text-xs uppercase tracking-wider mb-1">
+                        Parameter Sync Warning
+                      </p>
+                      <p className="text-amber-100/85 text-[11px] leading-relaxed">{soundscapeSyncError}</p>
                     </div>
-                    <input type="range" min={0.05} max={1} step={0.05} value={promptAccent.weight} onChange={(e) => handlePromptAccentWeightChange(Number(e.target.value))} className="w-full accent-scope-purple cursor-pointer" />
-                  </label>
+                  )}
+
+                  {scopeErrorTitle && (
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="md:col-span-2 rounded-xl border border-red-500/30 bg-red-500/10 p-4 relative animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+                    >
+                      <button type="button" onClick={clearError} className="absolute top-2 right-2 text-red-400 hover:text-red-300">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                      <p className="text-red-400 font-bold text-xs uppercase tracking-wider mb-1">{scopeErrorTitle}</p>
+                      {scopeErrorDescription && <p className="text-red-200/80 text-[11px] leading-relaxed">{scopeErrorDescription}</p>}
+                      {scopeErrorSuggestion && <p className="text-red-100/75 text-[11px] leading-relaxed mt-2">{scopeErrorSuggestion}</p>}
+                    </div>
+                  )}
                 </div>
-
-                {soundscapeSyncError && (
-                  <div
-                    role="alert"
-                    aria-live="assertive"
-                    className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 animate-fade-in shadow-[0_0_15px_rgba(245,158,11,0.08)]"
-                  >
-                    <p className="text-amber-300 font-bold text-xs uppercase tracking-wider mb-1">
-                      Parameter Sync Warning
-                    </p>
-                    <p className="text-amber-100/85 text-[11px] leading-relaxed">{soundscapeSyncError}</p>
-                  </div>
-                )}
-
-                {scopeErrorTitle && (
-                  <div
-                    role="alert"
-                    aria-live="assertive"
-                    className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 relative animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]"
-                  >
-                    <button type="button" onClick={clearError} className="absolute top-2 right-2 text-red-400 hover:text-red-300">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                    <p className="text-red-400 font-bold text-xs uppercase tracking-wider mb-1">{scopeErrorTitle}</p>
-                    {scopeErrorDescription && <p className="text-red-200/80 text-[11px] leading-relaxed">{scopeErrorDescription}</p>}
-                    {scopeErrorSuggestion && <p className="text-red-100/75 text-[11px] leading-relaxed mt-2">{scopeErrorSuggestion}</p>}
-                  </div>
-                )}
               </div>
 
-              <div className="p-6 bg-black/40 border-t border-white/5">
+              <div className="p-5 md:p-6 bg-black/40 border-t border-white/5">
                 <button
                   type="button"
                   onClick={() => { void handleConnectScope(); }}
                   disabled={!canConnect}
-                  className={`w-full py-5 rounded-2xl text-[13px] uppercase tracking-[0.25em] font-black transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-scope-cyan overflow-hidden relative group ${canConnect
+                  className={`w-full py-4 rounded-2xl text-[13px] uppercase tracking-[0.25em] font-black transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-scope-cyan overflow-hidden relative group ${canConnect
                     ? 'bg-gradient-to-r from-scope-cyan to-scope-purple text-white shadow-[0_0_40px_rgba(6,182,212,0.4)] hover:shadow-[0_0_60px_rgba(139,92,246,0.6)] hover:scale-[1.02]'
                     : 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed'
                     }`}
@@ -1463,8 +1828,8 @@ export function SoundscapeStudio({
       </div>
 
       {/* FLOATING CONTROLS DOCK - Bottom (Theme Picker - Only show conditionally when connected) */}
-      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-20 md:px-24 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${(connectionState === "connected" && showControls) ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
-        <div className="w-full max-w-[calc(100vw-12rem)] md:max-w-6xl">
+      <div className={`absolute bottom-6 left-0 right-0 z-40 w-full px-6 md:px-12 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex justify-center items-center ${(connectionState === "connected" && showControls) ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
+        <div className="w-full max-w-[calc(100vw-4rem)] md:max-w-7xl">
           <ThemeSelector themes={presetThemes} currentTheme={currentTheme} onThemeChange={setTheme} compact />
         </div>
       </div>
@@ -1521,6 +1886,8 @@ export function SoundscapeStudio({
 
                   {/* Telemetry Display */}
                   <div className="space-y-2 text-[11px] tabular-nums font-medium">
+                    <div className="flex justify-between"><span className="text-white/50">Mode</span><span className="text-white/90">{runtimeModeLabel}</span></div>
+                    <div className="flex justify-between"><span className="text-white/50">Signal</span><span className="text-white/90 text-right max-w-[9rem] truncate">{runtimeSignalLabel}</span></div>
                     <div className="flex justify-between"><span className="text-white/50">Pipeline</span><span className="text-white/90 truncate ml-2">{activePipelineChain}</span></div>
                     <div className="flex justify-between"><span className="text-white/50">Resolution</span><span className="text-white/90">{videoStats.width > 0 ? `${videoStats.width}x${videoStats.height}` : "..."}</span></div>
                     <div className="flex justify-between"><span className="text-white/50">FPS</span><span className="text-white/90">{videoStats.fps !== null ? videoStats.fps.toFixed(1) : "..."}</span></div>

@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useRef, useState, useCallback, useEffect, useId, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useRef, useState, useCallback, useEffect, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 // Demo track path (in public folder)
 const DEMO_TRACK = {
@@ -68,7 +68,6 @@ export function AudioPlayer({
   const demoSourceButtonRef = useRef<HTMLButtonElement | null>(null);
   const micSourceButtonRef = useRef<HTMLButtonElement | null>(null);
   const compactVolumeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const compactVolumePanelId = useId();
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -78,7 +77,6 @@ export function AudioPlayer({
   const [micError, setMicError] = useState<string | null>(null);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -103,7 +101,7 @@ export function AudioPlayer({
     audio.loop = true;
     audio.muted = isMuted;
     audio.volume = volume;
-    audio.preload = "metadata";
+    audio.preload = "auto";
     audio.currentTime = 0;
     setCurrentTime(0);
     setMicError(null);
@@ -312,22 +310,7 @@ export function AudioPlayer({
     [disabled, handleSourceChange, sourceMode]
   );
 
-  const handleVolumeChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const newVolume = parseFloat(e.target.value);
-      setVolume(newVolume);
-      if (audioRef.current) {
-        audioRef.current.volume = newVolume;
-      }
-      if (newVolume > 0 && isMuted) {
-        setIsMuted(false);
-        if (audioRef.current) {
-          audioRef.current.muted = false;
-        }
-      }
-    },
-    [isMuted]
-  );
+
 
   const toggleMute = useCallback(() => {
     if (!audioRef.current) return;
@@ -335,18 +318,6 @@ export function AudioPlayer({
     setIsMuted(newMuted);
     audioRef.current.muted = newMuted;
   }, [isMuted]);
-
-  const handleVolumePanelKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      setShowVolumeSlider(false);
-      compactVolumeButtonRef.current?.focus();
-    },
-    []
-  );
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -437,68 +408,31 @@ export function AudioPlayer({
   );
 
   const volumeControl = (
-    <div className="relative">
-      <button
-        ref={compactVolumeButtonRef}
-        type="button"
-        onClick={() => setShowVolumeSlider(!showVolumeSlider)}
-        onMouseEnter={() => setShowVolumeSlider(true)}
-        onFocus={() => setShowVolumeSlider(true)}
-        aria-label={showVolumeSlider ? "Hide volume controls" : "Show volume controls"}
-        aria-expanded={showVolumeSlider}
-        aria-controls={compactVolumePanelId}
-        aria-haspopup="dialog"
-        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
-      >
-        {isMuted || volume === 0 ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <line x1="23" y1="9" x2="17" y2="15" />
-            <line x1="17" y1="9" x2="23" y2="15" />
-          </svg>
-        ) : volume < 0.5 ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-          </svg>
-        )}
-      </button>
-
-      {showVolumeSlider && (
-        <div
-          id={compactVolumePanelId}
-          role="dialog"
-          aria-modal="false"
-          aria-label="Volume controls"
-          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 glass bg-black/80 rounded-xl border border-white/10"
-          onMouseLeave={() => setShowVolumeSlider(false)}
-          onKeyDown={handleVolumePanelKeyDown}
-        >
-          <button
-            type="button"
-            onClick={toggleMute}
-            className="mb-2 w-full min-h-[44px] rounded-md border border-white/15 bg-white/5 px-2.5 py-2 text-[10px] uppercase tracking-wider text-white/80 hover:bg-white/10 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan"
-          >
-            {isMuted || volume === 0 ? "Unmute" : "Mute"}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={isMuted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-24 accent-scope-cyan"
-            aria-label="Volume"
-          />
-        </div>
+    <button
+      ref={compactVolumeButtonRef}
+      type="button"
+      onClick={toggleMute}
+      aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+      className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+    >
+      {isMuted || volume === 0 ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-400">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <line x1="23" y1="9" x2="17" y2="15" />
+          <line x1="17" y1="9" x2="23" y2="15" />
+        </svg>
+      ) : volume < 0.5 ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+        </svg>
       )}
-    </div>
+    </button>
   );
 
   // Compact mode for dock
@@ -632,7 +566,7 @@ export function AudioPlayer({
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
           loop={sourceMode === "demo"}
-          preload={sourceMode === "demo" ? "metadata" : "none"}
+          preload={sourceMode === "demo" ? "auto" : "none"}
           muted={sourceMode === "mic" || isMuted}
           playsInline
         />
@@ -674,7 +608,7 @@ export function AudioPlayer({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         loop={sourceMode === "demo"}
-        preload={sourceMode === "demo" ? "metadata" : "none"}
+        preload={sourceMode === "demo" ? "auto" : "none"}
         muted={sourceMode === "mic" || isMuted}
         playsInline
       />
@@ -796,12 +730,12 @@ export function AudioPlayer({
 
           {/* Volume Control for full mode */}
           {showVolume && (
-            <div className="flex items-center gap-4 glass bg-black/40 border border-white/5 rounded-2xl px-5 py-3 flex-1 max-w-[240px]">
+            <div className="flex items-center gap-4 glass bg-black/40 border border-white/5 rounded-2xl px-5 py-3 h-[52px]">
               <button
                 type="button"
                 onClick={toggleMute}
                 aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white transition-colors focus:outline-none"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors duration-300 border bg-white/5 text-white/60 border-white/15 hover:bg-white/10 hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-scope-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-black"
               >
                 {isMuted || volume === 0 ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400">
@@ -821,24 +755,6 @@ export function AudioPlayer({
                   </svg>
                 )}
               </button>
-              <div className="flex-1 relative flex items-center group/vol">
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={isMuted ? 0 : volume}
-                  onChange={handleVolumeChange}
-                  className="w-full absolute inset-0 opacity-0 cursor-pointer z-10"
-                  aria-label="Volume"
-                />
-                <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden shadow-inner">
-                  <div
-                    className="h-full bg-scope-cyan rounded-full transition-all duration-75 shadow-[0_0_10px_rgba(6,182,212,0.5)] group-hover/vol:bg-white"
-                    style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
-                  />
-                </div>
-              </div>
             </div>
           )}
         </div>

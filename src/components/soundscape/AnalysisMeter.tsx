@@ -73,13 +73,13 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
   // Compact mode for dock
   if (compact) {
     return (
-      <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-2">
         {/* Mini meters */}
-        <div className="flex items-center gap-4 flex-1">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
             <span className="text-[9px] text-scope-purple font-semibold uppercase tracking-wide" aria-hidden="true">E</span>
             <div
-              className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
+              className="w-12 h-1.5 bg-white/5 rounded-full overflow-hidden shrink-0"
               role="progressbar"
               aria-label="Energy level"
               aria-valuemin={0}
@@ -96,10 +96,10 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
             </div>
             <span className="sr-only">Energy {compactEnergy}%</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-[9px] text-scope-cyan font-semibold uppercase tracking-wide" aria-hidden="true">B</span>
             <div
-              className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden"
+              className="w-12 h-1.5 bg-white/5 rounded-full overflow-hidden shrink-0"
               role="progressbar"
               aria-label="Brightness level"
               aria-valuemin={0}
@@ -120,19 +120,18 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
 
         {/* BPM */}
         <div
-          className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/8"
+          className="flex items-center gap-2 bg-white/5 px-2.5 py-1 rounded-lg border border-white/8 shrink-0"
           role="group"
           aria-label={`Tempo: ${beat?.bpm ?? "unknown"} BPM`}
         >
           <div
-            className={`w-2 h-2 rounded-full transition-all duration-100 ${
-              beat?.isBeat
+            className={`w-2 h-2 rounded-full transition-all duration-100 ${beat?.isBeat
                 ? "bg-scope-magenta shadow-[0_0_6px_rgba(236,72,153,0.5)]"
                 : "bg-white/15"
-            }`}
+              }`}
             aria-hidden="true"
           />
-          <span className="text-sm text-white/80 font-semibold tabular-nums">{beat?.bpm ?? "--"}</span>
+          <span className="text-xs text-white/80 font-semibold tabular-nums">{beat?.bpm ?? "--"}</span>
           <span className="text-[9px] text-white/65 uppercase font-medium">bpm</span>
         </div>
       </div>
@@ -187,9 +186,8 @@ export function AnalysisMeter({ analysis, parameters, compact = false }: Analysi
               aria-hidden="true"
             >
               <div
-                className={`w-3 h-3 rounded-full transition-all duration-100 ${
-                  beat?.isBeat ? "bg-scope-magenta" : "bg-white/15"
-                }`}
+                className={`w-3 h-3 rounded-full transition-all duration-100 ${beat?.isBeat ? "bg-scope-magenta" : "bg-white/15"
+                  }`}
               />
             </div>
           </div>

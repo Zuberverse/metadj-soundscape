@@ -472,11 +472,11 @@ class BeatDetector {
   /** Number of frames to keep in history (~500ms at 86Hz analysis rate) */
   private readonly historyLength = 43;
 
-  /** Energy spike threshold multiplier (1.3 = 30% above average) */
-  private threshold = 1.3;
-  private readonly minBeatEnergy = 0.12;
+  /** Energy spike threshold multiplier (1.35 = 35% above average) */
+  private threshold = 1.35;
+  private readonly minBeatEnergy = 0.14;
   private readonly minAverageEnergy = 0.04;
-  private readonly minSpikeDelta = 0.05;
+  private readonly minSpikeDelta = 0.06;
 
   /** Frame number of last detected beat */
   private lastBeatFrame = 0;
@@ -521,7 +521,7 @@ class BeatDetector {
       energy > Math.max(this.minBeatEnergy, avgEnergy * this.threshold) &&
       avgEnergy > this.minAverageEnergy &&
       energy - avgEnergy > this.minSpikeDelta &&
-      this.frameCount - this.lastBeatFrame > 8; // Minimum 8 frames between beats
+      this.frameCount - this.lastBeatFrame > 10; // Minimum 10 frames between beats
 
     if (isBeat) {
       this.lastBeatFrame = this.frameCount;

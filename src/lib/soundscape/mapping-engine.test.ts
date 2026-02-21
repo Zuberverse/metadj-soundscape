@@ -57,6 +57,39 @@ describe("MappingEngine", () => {
     expect(paramsWithBeat.resetCache).toBeFalsy();
   });
 
+  it("applies runtime tuning ceiling for noise scale", () => {
+    const engine = new MappingEngine(NEON_FOUNDRY);
+    engine.setRuntimeTuning({ noiseCeiling: 0.4 });
+
+    const params = engine.computeParameters(
+      {
+        ...makeAnalysis(0.9, true),
+        derived: {
+          energy: 0.9,
+          brightness: 0.7,
+          texture: 0.7,
+          energyDerivative: 0.1,
+          peakEnergy: 0.95,
+        },
+      }
+    );
+
+    expect(params.noiseScale).toBeLessThanOrEqual(0.4);
+  });
+
+  it("applies runtime beat boost multiplier", () => {
+    const higherBeatBoost = new MappingEngine(NEON_FOUNDRY);
+    higherBeatBoost.setRuntimeTuning({ beatBoostScale: 1.4 });
+
+    const lowerBeatBoost = new MappingEngine(NEON_FOUNDRY);
+    lowerBeatBoost.setRuntimeTuning({ beatBoostScale: 0.6 });
+
+    const highParams = higherBeatBoost.computeParameters(makeAnalysis(0.5, true));
+    const lowParams = lowerBeatBoost.computeParameters(makeAnalysis(0.5, true));
+
+    expect(highParams.noiseScale).toBeGreaterThan(lowParams.noiseScale);
+  });
+
   it("skips energy-spike transitions when prompt variation list is empty", () => {
     const themeWithEmptyVariations: Theme = {
       ...NEON_FOUNDRY,
@@ -80,5 +113,27 @@ describe("MappingEngine", () => {
     });
 
     expect(params.transition).toBeUndefined();
+  });
+
+  it("uses previous prompts as transition source when prompt text changes", () => {
+    const engine = new MappingEngine(COSMIC_VOYAGE);
+
+    const lowEnergy = engine.computeParameters(makeAnalysis(0.1));
+    const highEnergy = engine.computeParameters(makeAnalysis(0.9));
+
+    expect(highEnergy.transition).toBeDefined();
+    expect(highEnergy.prompts).toEqual(lowEnergy.prompts);
+    expect(highEnergy.transition?.target_prompts).not.toEqual(lowEnergy.prompts);
+  });
+
+  it("holds previous prompts during external transition lock after theme swap", () => {
+    const engine = new MappingEngine(COSMIC_VOYAGE);
+    const baseline = engine.computeParameters(makeAnalysis(0.5));
+
+    engine.setTheme(NEON_FOUNDRY, true);
+    engine.markExternalTransitionActive(8);
+
+    const duringExternalTransition = engine.computeParameters(makeAnalysis(0.5));
+    expect(duringExternalTransition.prompts).toEqual(baseline.prompts);
   });
 });

@@ -1,6 +1,6 @@
 # System Architecture - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20
+**Last Modified**: 2026-02-20 20:11 ET
 **Status**: Active
 
 ## Purpose
@@ -23,8 +23,12 @@ System design reference for Soundscape. This document explains how Soundscape co
 - `/` redirects to `/soundscape`
 - `/soundscape` provides:
   - Connect screen (diagnostics, pipeline selection, generation controls)
+  - Scope readiness status (`Online`/`Offline`) with manual static-label `Refresh` control
+  - View format controls (16:9 / 9:16) with three resolution tiers per format
+  - Input Streams block containing NDI/Spout toggles and the video-only preprocessor selector
   - Full-frame video stage when connected
   - Telemetry overlay (pipeline, resolution, FPS, dropped-frame rate, recording)
+  - Runtime mode telemetry (`Audio Reactive` / `Ambient Hold`) with live signal state
   - Bottom dock (audio transport/source, theme selector, analysis meters)
 
 ## Audio Sources
@@ -59,28 +63,35 @@ Soundscape uses Meyda for audio feature extraction.
 
 - Audio energy maps to `noise_scale`.
 - Beat detection adds a controlled noise boost.
-- Prompt transitions use smooth `slerp` transitions.
+- Theme prompts are color-calibrated per preset so scene palettes stay aligned (instead of converging toward generic dark tones).
+- Prompt transitions use `slerp` for two-prompt blends and `linear` for larger prompt sets.
+- Brightness descriptor hysteresis is tuned to reduce over-triggering of low-light wording at moderate brightness levels.
+- Studio runtime controls can live-adjust beat boost, spike boost, spike variation blend, motion tempo thresholds, and noise ceiling without reconnecting Scope.
 - `manage_cache` remains enabled to preserve temporal continuity.
 
 Visual continuity relies on these invariants:
 1. Avoid cache-reset behavior for normal operation.
-2. Always send prompt transitions instead of abrupt prompt replacement.
+2. Keep transition source prompts stable and send prompt changes through `transition.target_prompts`.
 3. Prevent overlapping transition windows.
 4. Preserve analyzer/source graph integrity across reconnects.
 
 ## Transition Behavior & Ambient Mode
 
-- Theme change transition: 6 steps
+- Theme change transition: 8 steps
 - Prompt-change transition: 5 steps
 - Energy-spike transitions: theme-specific blend durations
-- Theme cooldown and energy-spike cooldown prevent transition stacking
+- Theme cooldown (`800ms`) and energy-spike cooldown (`2200ms`) prevent transition stacking
 
 **Ambient Mode**:
 When playback is paused but Scope remains connected:
-- Soundscape sends a single ambient prompt payload with transition.
+- Soundscape sends a single ambient bootstrap payload without transition.
 - Scope latent cache maintains continuity.
-- Theme changes still send transition payloads.
+- Theme changes still send transition payloads (queued/replayed when needed).
 - Denoising and prompt accent updates are re-sent immediately while ambient mode is active.
+
+**Mode Switching Rule**:
+- Audio-reactive mapping is active only when `isPlaying && audioReady`.
+- All other connected states fall back to ambient hold mode.
 
 ## Auto Theme Timeline
 
@@ -97,7 +108,7 @@ Primary implementation: `src/lib/scope/use-scope-connection.ts`
 ### Stages
 1. Health check (`/health`)
 2. Pipeline prepare (`/api/v1/pipeline/load` + wait for loaded state)
-3. WebRTC offer/answer session (VP8 codec forced via `setCodecPreferences`, `recvonly` direction — required for aiortc)
+3. WebRTC offer/answer session (VP8 codec forced via `setCodecPreferences`, `sendrecv` direction — required for aiortc frame output)
 4. ICE candidate exchange (trickle ICE with candidate queuing)
 5. Data channel open (`parameters`)
 6. First video track received -> connection state becomes `connected`
@@ -109,7 +120,10 @@ Primary implementation: `src/lib/scope/use-scope-connection.ts`
 - Connect overrides supported at call time (`connect({ pipelineIds, pipelineId })`).
 - Last successful connect overrides reused on automatic reconnect.
 - **Pipeline Selection Safety**: `SoundscapeStudio` refreshes diagnostics before connecting and computes resolved pipeline IDs from the live schema response to avoid stale `localStorage` pipeline mismatches.
-- **External Video Routing**: The connection payload defines `output_ndi` and `output_spout` flags (driven by user UI toggles) to instruct the Scope engine to broadcast generated frames to external VJ software mixing pipelines.
+- **Hydration Stability**: Client preference hydration restores format/reactivity controls immediately, while pipeline/preprocessor restore is validated against fresh diagnostics to avoid delayed selection corrections or UI flicker.
+- **External Video Input Routing**: When NDI or Spout is enabled, Soundscape sends `input_mode: "video"` with `input_source` (`source_type: "ndi" | "spout"`, `source_name`) in WebRTC `initialParameters`.
+- **Preprocessor Activation Rule**: Selected preprocessor is included in `pipeline_ids` only for video-input sessions (NDI/Spout). Text-mode sessions use only the main pipeline.
+- **Capability Gating**: Connect readiness enforces NDI/Spout availability flags from diagnostics before allowing those external input modes.
 
 ## Scope Proxy & Security Safety
 

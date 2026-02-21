@@ -37,16 +37,16 @@ export const COSMIC_VOYAGE: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "cosmic digital landscape, neon purple and cyan nebula, " +
-    "floating geometric structures, ethereal light particles, " +
+    "deep space void, vibrant neon purple and cyan nebulas, " +
+    "floating geometric structures with intense glowing edges, ethereal light particles, " +
     "deep space atmosphere, stars and galaxies rushing past, " +
-    "magenta energy accents, epic journey forward",
-  styleModifiers: ["cinematic lighting", "depth of field", "volumetric fog", "high definition", "ultra detailed"],
+    "high-contrast magenta energy accents, epic journey forward",
+  styleModifiers: ["cinematic lighting", "high contrast", "vibrant colors", "volumetric fog", "high definition", "ultra detailed"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
-    transitionSpeed: { min: 6, max: 18 },
+    noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
+    transitionSpeed: { min: 8, max: 18 },
   },
 
   mappings: {
@@ -88,7 +88,7 @@ export const COSMIC_VOYAGE: Theme = {
       "nebula explosion, purple energy burst, cosmic shockwave, stars accelerating, neon light surge, magenta plasma wave",
       "wormhole opening, cyan light vortex, reality bending, space folding, purple dimension shift, electric cosmos",
     ],
-    blendDuration: 6, // Faster transitions (was 8)
+    blendDuration: 8, // Smoother blend window
   },
 };
 
@@ -102,15 +102,15 @@ export const NEON_FOUNDRY: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "futuristic workshop interior, glowing machinery passing by, " +
-    "holographic displays in cyan, purple ambient lighting, " +
+    "futuristic workshop interior, massive glowing machinery passing by, " +
+    "vibrant holographic displays, high-contrast illumination, " +
     "gothic architecture meets technology, creative forge, " +
-    "magenta sparks flying past, AI foundry exploration",
-  styleModifiers: ["industrial aesthetic", "dramatic shadows", "neon accents", "high definition", "sharp details"],
+    "blinding plasma sparks flying past, AI foundry exploration, luminous metallic depth",
+  styleModifiers: ["industrial aesthetic", "luminous industrial atmosphere", "vibrant neon accents", "high contrast", "high definition"],
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -146,7 +146,7 @@ export const NEON_FOUNDRY: Theme = {
       "purple sparks eruption, neon surge, foundry power burst, cyan machinery flash",
       "hologram overload, magenta glitch, digital pulse, gothic energy wave",
     ],
-    blendDuration: 6, // Faster transitions (was 8)
+    blendDuration: 8, // Smoother blend window
   },
 };
 
@@ -160,15 +160,15 @@ export const DIGITAL_FOREST: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "enchanted forest at night, bioluminescent plants rushing past, " +
-    "floating particles streaming by, cyan and magenta glow, " +
+    "luminous enchanted forest at blue hour, deeply vibrant bioluminescent plants rushing past, " +
+    "luminous particles streaming by, intense magical botanical glow, " +
     "mystical atmosphere, tech-organic fusion, " +
-    "purple shadows, dynamic forest exploration",
-  styleModifiers: ["magical realism", "soft glow", "ethereal", "high definition", "crisp details"],
+    "layered forest depth with high-contrast glowing flora",
+  styleModifiers: ["lush bioluminescent atmosphere", "vibrant bioluminescence", "high contrast", "soft glow", "high definition"],
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -204,7 +204,7 @@ export const DIGITAL_FOREST: Theme = {
       "cyan fireflies swarm, bioluminescent burst, magenta particle dance",
       "purple aurora surge, light ribbons flow, magical forest pulse",
     ],
-    blendDuration: 6, // Faster transitions (was 8)
+    blendDuration: 8, // Smoother blend window
   },
 };
 
@@ -218,14 +218,14 @@ export const SYNTHWAVE_HIGHWAY: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "synthwave landscape, glowing neon grid stretching endlessly ahead, " +
-    "massive synthwave sunset gradient sky in purple and magenta, wireframe palm trees rushing past, " +
-    "vaporwave aesthetic, cyan ambient lighting, motion blur",
-  styleModifiers: ["80s aesthetic", "chromatic aberration", "scan lines", "high definition", "vibrant colors"],
+    "digital synthwave landscape, radiant cybernetic grid stretching endlessly ahead, " +
+    "massive prominent glowing sun in the center, vibrant electric pinks, cyan, and pastel teal accents, stylized wireframe palm trees rushing past, " +
+    "slick 80s retro-tech aesthetic, subtle miami vice vibes, intense lighting contrast, motion blur, starry night sky",
+  styleModifiers: ["digital synthwave", "sunset glow backdrop", "vibrant neon and cyan", "high contrast", "scan lines"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [950, 700, 450] },
-    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -260,7 +260,7 @@ export const SYNTHWAVE_HIGHWAY: Theme = {
       "magenta neon burst, purple grid explosion, synthwave lightning, retro surge",
       "cyan speed lines, motion blur, highway accelerating, vaporwave rush",
     ],
-    blendDuration: 6, // Faster transitions (was 8)
+    blendDuration: 8, // Smoother blend window
   },
 };
 
@@ -274,21 +274,21 @@ export const CRYSTAL_SANCTUARY: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "gothic castle interior, stained glass windows in purple and cyan, " +
-    "crystal chandeliers passing overhead, candlelight and magical orbs, " +
-    "stone arches sweeping past, mystical atmosphere, magenta light beams, " +
-    "sanctuary exploration, ethereal mist swirling",
+    "gothic crystal castle interior, blinding neon stained glass windows, " +
+    "glowing crystal chandeliers passing overhead, intense magical candlelight and floating orbs, " +
+    "stone arches sweeping past, mystical atmosphere, vibrant moonlight beams across crystal walls, " +
+    "sanctuary exploration, ethereal mist swirling, high contrast lighting",
   styleModifiers: [
+    "luminous gothic atmosphere",
     "dramatic lighting",
+    "vibrant crystals",
     "gothic architecture",
-    "magical realism",
-    "high definition",
-    "intricate details",
+    "high definition"
   ],
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+    noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -331,7 +331,7 @@ export const CRYSTAL_SANCTUARY: Theme = {
       "purple crystal surge, cyan stained glass glow, magenta energy awakening",
       "magical light burst, sanctuary illumination, gothic power pulse",
     ],
-    blendDuration: 6, // Faster transitions (was 8)
+    blendDuration: 8, // Smoother blend window
   },
 };
 
@@ -345,15 +345,15 @@ export const OCEAN_DEPTHS: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "deep ocean abyss, bioluminescent creatures drifting past, " +
-    "glowing jellyfish in cyan and purple, coral formations, " +
-    "light rays filtering through dark water, magenta sea plants swaying, " +
-    "mysterious depths exploration, bubbles rising",
-  styleModifiers: ["underwater caustics", "volumetric light", "ethereal glow", "high definition", "dreamlike"],
+    "deep ocean blue abyss, intensely vibrant bioluminescent creatures drifting past, " +
+    "glowing iridescent jellyfish, iridescent coral formations with neon accents, " +
+    "ethereal glowing light filtering through teal water, sea plants swaying, " +
+    "deep-sea glow with vivid neon accents",
+  styleModifiers: ["luminous underwater atmosphere", "vibrant bioluminescence", "high contrast", "volumetric light", "high definition"],
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -389,7 +389,7 @@ export const OCEAN_DEPTHS: Theme = {
       "jellyfish swarm pulse, cyan bioluminescent burst, purple depth surge",
       "ocean current rush, magenta creature bloom, underwater light dance",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -403,15 +403,15 @@ export const CYBER_CITY: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "towering cyberpunk skyscrapers, neon signs in purple and cyan, " +
-    "holographic advertisements streaming past, massive overhead transport ships, " +
-    "rain-slicked streets below, magenta accent lights, " +
-    "futuristic city exploration, glass and chrome architecture",
-  styleModifiers: ["cyberpunk aesthetic", "neon reflections", "rain atmosphere", "high definition", "sharp details"],
+    "towering cyberpunk skyscrapers by night, intensely vibrant neon signage, " +
+    "massive overhead transport ships, rain-slicked streets below reflecting bright neon, " +
+    "high-contrast glowing light panels, futuristic city exploration, luminous haze, " +
+    "glass and chrome architecture",
+  styleModifiers: ["neon-drenched atmosphere", "cyberpunk aesthetic", "vibrant neon reflections", "high contrast", "rain atmosphere"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -446,7 +446,7 @@ export const CYBER_CITY: Theme = {
       "neon explosion, purple hologram burst, cyan light cascade, city pulse",
       "electric surge, magenta sign flare, cyberpunk overload, glass reflections",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -460,15 +460,15 @@ export const AURORA_DREAMS: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "aurora borealis, flowing curtains of purple and cyan light, " +
-    "abstract light ribbons dancing, star field beyond, " +
-    "ethereal mist swirling, magenta energy wisps, " +
-    "dreamlike atmosphere, celestial light show",
-  styleModifiers: ["ethereal", "soft glow", "abstract", "high definition", "flowing motion"],
+    "midnight sky with vivid vibrant aurora borealis, intensely glowing curtains of neon light, " +
+    "abstract light ribbons dancing, dense star field beyond, " +
+    "ethereal mist swirling across a vast twilight sky, " +
+    "dreamlike atmosphere, high-contrast celestial light show",
+  styleModifiers: ["luminous celestial atmosphere", "ethereal", "vibrant colors", "high contrast", "flowing motion"],
 
   ranges: {
     denoisingSteps: { min: [800, 500], max: [1000, 800, 600, 400] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -504,7 +504,7 @@ export const AURORA_DREAMS: Theme = {
       "aurora surge, purple light wave, cyan ribbon dance, celestial bloom",
       "light curtain pulse, magenta energy flow, ethereal burst, star shimmer",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -518,15 +518,15 @@ export const EIGHT_BIT_ADVENTURE: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "retro pixel art world, vibrant 8-bit aesthetic, blocky voxel terrain, " +
-    "neon pixel particles, cyan and magenta color palette, " +
-    "glowing power-ups floating, digital grid patterns, " +
-    "game-like atmosphere, nostalgic adventure forward",
-  styleModifiers: ["pixel art", "retro gaming", "vibrant colors", "blocky shapes", "glowing edges"],
+    "vibrant retro pixel art world, colorful 8-bit aesthetic, blocky voxel terrain, " +
+    "cyan magenta and yellow pixel particles across a bright arcade backdrop, " +
+    "intensely glowing power-ups floating, rainbow digital grid patterns, " +
+    "game-like atmosphere, playful high-energy adventure",
+  styleModifiers: ["bright pixel art", "retro gaming", "saturated colors", "vibrant glowing edges", "clean contrast"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -568,7 +568,7 @@ export const EIGHT_BIT_ADVENTURE: Theme = {
       "pixel explosion, 8-bit particles burst, retro power-up collected, glowing coins scatter, cyan energy wave",
       "level warp zone, pixel portal opening, digital blocks transforming, magenta lightning, game world shift",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -582,15 +582,15 @@ export const VOLCANIC_FORGE: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "volcanic landscape, rivers of molten lava flowing below, " +
-    "glowing embers and sparks rising, magma pools with cyan mineral veins, " +
-    "obsidian rock formations, magenta heat shimmer, " +
-    "dramatic fire plumes, forge of creation atmosphere",
-  styleModifiers: ["dramatic lighting", "heat distortion", "ember particles", "molten glow", "volcanic atmosphere"],
+    "glowing volcanic landscape, intensely glowing rivers of molten lava flowing far below, " +
+    "vibrant embers and sparks rising, magma pools with blinding mineral glow, " +
+    "massive obsidian rock formations creating high contrast, heat shimmer, " +
+    "dramatic fire plumes across a blazing forge of creation",
+  styleModifiers: ["fiery luminous atmosphere", "dramatic lighting", "vibrant fiery colors", "high contrast", "volcanic atmosphere"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -625,7 +625,7 @@ export const VOLCANIC_FORGE: Theme = {
       "lava eruption burst, magma fountain, ember storm, cyan mineral flash, volcanic power surge",
       "fire tornado forming, molten wave, obsidian shattering, magenta plasma burst, forge ignition",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -639,15 +639,15 @@ export const QUANTUM_REALM: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "quantum particle field, subatomic structures swirling, " +
-    "probability waves in cyan and purple, electron orbitals glowing, " +
-    "string theory visualizations, magenta energy fluctuations, " +
-    "abstract scientific beauty, microscopic cosmos",
-  styleModifiers: ["abstract geometry", "particle effects", "quantum blur", "scientific aesthetic", "ethereal glow"],
+    "deep indigo quantum particle field, structured subatomic geometry, " +
+    "intensely vibrant probability waves, electron orbitals blindingly glowing across the field, " +
+    "string theory visualizations mixed with high-contrast energy bursts, " +
+    "astrophysical scientific beauty, glowing microscopic cosmos",
+  styleModifiers: ["luminous scientific atmosphere", "vibrant subatomic glow", "high contrast", "scientific aesthetic", "dimensional depth"],
 
   ranges: {
     denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -683,7 +683,7 @@ export const QUANTUM_REALM: Theme = {
       "particle collision burst, quantum entanglement flash, cyan wave function collapse, probability surge",
       "string vibration cascade, magenta dimension fold, subatomic dance, quantum tunnel opening",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
@@ -697,15 +697,15 @@ export const NEON_TOKYO: Theme = {
 
   basePrompt:
     "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
-    "neon-lit Tokyo streets at night, Japanese signage glowing, " +
-    "cherry blossoms mixed with holographic ads, cyan and magenta neon, " +
-    "rain-slicked pavement reflections, izakaya lanterns, " +
-    "anime aesthetic atmosphere, cyberpunk meets tradition",
-  styleModifiers: ["Japanese aesthetic", "neon reflections", "rain atmosphere", "anime inspired", "urban night"],
+    "neon Tokyo streets at night, Japanese signage glowing in the distance, " +
+    "subtle cherry blossoms mixed with holographic ads, vivid neon light, " +
+    "rain-slicked pavement reflections, scattered izakaya lanterns, " +
+    "dynamic anime aesthetic atmosphere, cyberpunk meets tradition",
+  styleModifiers: ["neon urban atmosphere", "Japanese aesthetic", "rain atmosphere", "high definition", "urban night"],
 
   ranges: {
     denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-    noiseScale: { min: 0.55, max: 0.75 },
+    noiseScale: { min: 0.48, max: 0.68 },
     transitionSpeed: { min: 6, max: 18 },
   },
 
@@ -740,13 +740,185 @@ export const NEON_TOKYO: Theme = {
       "neon sign explosion, kanji characters flashing, cyan rain burst, tokyo night pulse",
       "hologram advertisement surge, cherry blossom storm, magenta light cascade, street racing flash",
     ],
-    blendDuration: 6,
+    blendDuration: 8,
   },
 };
 
 // ============================================================================
 // All Preset Themes
 // ============================================================================
+
+/**
+ * Circuit Board - Macro photography of a digital motherboard
+ */
+export const CIRCUIT_BOARD: Theme = {
+  id: "circuit",
+  name: "Circuit",
+  description: "Infinite macro flight over a glowing microchip and data streams",
+
+  basePrompt:
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
+    "macro photography of a futuristic circuit board, emerald and obsidian PCB, " +
+    "golden data streams flowing through copper traces, microchips passing by, " +
+    "amber glowing components, digital motherboard landscape, " +
+    "high contrast lighting, technological interior",
+  styleModifiers: ["macro photography", "depth of field", "luminous tech aesthetic", "high definition", "ultra detailed"],
+
+  ranges: {
+    denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
+    noiseScale: { min: 0.48, max: 0.68 },
+    transitionSpeed: { min: 6, max: 18 },
+  },
+
+  mappings: {
+    energy: [
+      {
+        parameter: "noiseScale",
+        curve: "exponential",
+        sensitivity: 1.4,
+        invert: false,
+      },
+      {
+        parameter: "denoisingSteps",
+        curve: "stepped",
+        sensitivity: 1.0,
+        invert: true,
+      },
+    ],
+    brightness: [],
+    texture: [],
+    beats: {
+      enabled: true,
+      action: "pulse_noise",
+      intensity: 0.55,
+      cooldownMs: 200,
+    },
+  },
+
+  promptVariations: {
+    trigger: "energy_spike",
+    prompts: [
+      "golden data surge, copper trace overload, circuit board spark, component glowing",
+      "amber power burst, microchip activation, digital motherboard pulse, high-tech energy",
+    ],
+    blendDuration: 8,
+  },
+};
+
+/**
+ * Amethyst Caves - Deep underground crystal caverns
+ */
+export const AMETHYST_CAVES: Theme = {
+  id: "amethyst",
+  name: "Amethyst",
+  description: "Deep underground flight through glowing crystal caverns",
+
+  basePrompt:
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
+    "vast underground cavern, massive purple amethyst crystals, " +
+    "faint bio-luminescence, floating rock formations glowing subtly, " +
+    "mysterious underground expanse with crystalline light shafts, " +
+    "subtle violet reflections, cinematic cavern exploration",
+  styleModifiers: ["luminous crystal atmosphere", "cinematic lighting", "depth-rich contrast", "high definition", "subtle glow"],
+
+  ranges: {
+    denoisingSteps: { min: [750, 450], max: [1000, 750, 500, 250] },
+    noiseScale: { min: 0.48, max: 0.68 },
+    transitionSpeed: { min: 6, max: 18 },
+  },
+
+  mappings: {
+    energy: [
+      {
+        parameter: "noiseScale",
+        curve: "logarithmic",
+        sensitivity: 1.1,
+        invert: false,
+      },
+    ],
+    brightness: [
+      {
+        parameter: "promptWeight",
+        curve: "linear",
+        sensitivity: 0.9,
+        invert: false,
+      },
+    ],
+    texture: [],
+    beats: {
+      enabled: true,
+      action: "pulse_noise",
+      intensity: 0.45,
+      cooldownMs: 250,
+    },
+  },
+
+  promptVariations: {
+    trigger: "energy_spike",
+    prompts: [
+      "amethyst crystal resonance, purple glow intensifying, cavern echo, bio-luminescent pulse",
+      "subtle violet energy wave, crystal formation shimmering, cavern light movement",
+    ],
+    blendDuration: 8,
+  },
+};
+
+/**
+ * Digital Matrix - Minimalist retro wireframe grid
+ */
+export const DIGITAL_MATRIX: Theme = {
+  id: "matrix",
+  name: "Matrix",
+  description: "Minimalist infinite wireframe grid in deep void space",
+
+  basePrompt:
+    "infinite forward motion, endless high-speed flythrough, camera rushing forward, deep parallax perspective, passing through " +
+    "deep emerald void space, infinite minimalist wireframe grid in bright green, " +
+    "faint cascading data symbols, floating geometric outlines, " +
+    "retro computer graphics aesthetic, high-contrast vector glow, " +
+    "digital cyberspace structure, pure geometry",
+  styleModifiers: ["minimalist", "wireframe", "high-contrast backdrop", "high definition", "retro digital"],
+
+  ranges: {
+    denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
+    noiseScale: { min: 0.48, max: 0.68 },
+    transitionSpeed: { min: 6, max: 18 },
+  },
+
+  mappings: {
+    energy: [
+      {
+        parameter: "noiseScale",
+        curve: "exponential",
+        sensitivity: 1.3,
+        invert: false,
+      },
+      {
+        parameter: "denoisingSteps",
+        curve: "stepped",
+        sensitivity: 1.0,
+        invert: true,
+      },
+    ],
+    brightness: [],
+    texture: [],
+    beats: {
+      enabled: true,
+      action: "pulse_noise",
+      intensity: 0.5,
+      cooldownMs: 200,
+    },
+  },
+
+  promptVariations: {
+    trigger: "energy_spike",
+    prompts: [
+      "wireframe grid acceleration, cascading data storm, geometric outline flash, digital space warping",
+      "vector graphics surge, minimalist geometry multiplying, green data surge, void expansion",
+    ],
+    blendDuration: 8,
+  },
+};
 
 export const PRESET_THEMES: Theme[] = [
   COSMIC_VOYAGE,
@@ -761,6 +933,9 @@ export const PRESET_THEMES: Theme[] = [
   VOLCANIC_FORGE,
   QUANTUM_REALM,
   NEON_TOKYO,
+  CIRCUIT_BOARD,
+  AMETHYST_CAVES,
+  DIGITAL_MATRIX,
 ];
 
 export const THEMES_BY_ID: Record<string, Theme> = {
@@ -776,6 +951,9 @@ export const THEMES_BY_ID: Record<string, Theme> = {
   volcano: VOLCANIC_FORGE,
   quantum: QUANTUM_REALM,
   tokyo: NEON_TOKYO,
+  circuit: CIRCUIT_BOARD,
+  amethyst: AMETHYST_CAVES,
+  matrix: DIGITAL_MATRIX,
 };
 
 // ============================================================================
@@ -821,7 +999,7 @@ export function createCustomTheme(input: CustomThemeInput): Theme {
 
     ranges: {
       denoisingSteps: { min: [700, 400], max: [1000, 750, 500, 250] },
-      noiseScale: { min: 0.55, max: 0.75 }, // Higher floor for more evolution
+      noiseScale: { min: 0.48, max: 0.68 }, // Tuned for higher fidelity and smoother motion
       transitionSpeed: { min: 6, max: 18 },
     },
 
@@ -866,7 +1044,7 @@ export function createCustomTheme(input: CustomThemeInput): Theme {
 export const SUGGESTED_STYLE_MODIFIERS = [
   "cinematic",
   "dreamy",
-  "dark",
+  "luminous",
   "vibrant",
   "minimal",
   "abstract",

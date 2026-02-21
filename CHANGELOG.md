@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Modified**: 2026-02-20 15:09 ET
+**Last Modified**: 2026-02-20 20:11 ET
 
 All notable changes to MetaDJ Soundscape will be documented in this file.
 
@@ -10,11 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Advanced live runtime tuning controls in Studio (Beat Boost, Spike Boost, Variation Blend, Motion Bias, Noise Ceiling) with persisted settings and immediate application to the active mapping engine.
+- Runtime telemetry rows in the compact settings panel to explicitly show active mode (`Audio Reactive` vs `Ambient Hold`) and current audio signal status.
+- Live `Motion Pace` Studio control (`Stable` / `Balanced` / `Dynamic`) with runtime persistence (`soundscape.motionPaceProfile`) and immediate mapping-engine application during active sessions.
+- **New Soundscape Themes**: Added `CIRCUIT_BOARD`, `AMETHYST_CAVES`, and `DIGITAL_MATRIX` themes for expansive visual variety.
+- Resolution tier labels standardized to `Low`/`Medium`/`High` for both `16:9` and `9:16` formats.
 - Comprehensive operations runbook in `docs/operations.md` covering deployment checklist, monitoring thresholds, incident playbooks, and rollback procedures.
 - New `npm run check:launch` preflight script (`scripts/check-launch-config.mjs`) validating deployment-critical environment configuration before release.
-- **External Video Routing**: NDI and Spout output toggles in the Soundscape UI for routing generations to external VJ software directly from the Scope backend.
+- **External Video Input Routing**: NDI and Spout toggles in the Soundscape UI for feeding external visualizer streams into Scope sessions.
 - Full propagation of Reactivity Profile `smoothingFactor` down to the `MappingEngine`, unlocking smoother, configurable audio-to-visual parameter transitions.
-- Completed full visual transitions audit validating semantic `slerp` prompt mechanics, fallback behavior, and parameter overrides across 12 default themes.
+- Completed full visual transitions audit validating semantic `slerp` prompt mechanics, fallback behavior, and parameter overrides across current preset theme catalog.
 - Microphone audio input mode in `AudioPlayer` alongside the built-in demo track source.
 - Live clip recording workflow for Scope stream output with downloadable `webm` export.
 - Beat-synced Auto Theme timeline controls (16/32/64 beat sections) for hands-free preset rotation.
@@ -50,6 +55,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scope connection regression coverage ensuring active session disposers run before repeated connect attempts.
 
 ### Changed
+- Preprocessor control is now colocated with Input Streams controls (NDI/Spout) to match its video-input-only activation path.
+- Preprocessor chaining is now applied only when video input mode is active (NDI/Spout); text-mode sessions no longer include inactive preprocessors in `pipeline_ids`.
+- Audio/ambient mode switching now always falls back to ambient when the system is not in a valid audio-reactive state (`isPlaying && audioReady`), eliminating ambiguous in-between runtime behavior.
+- Scope readiness indicator on the connect screen now shows only `Online`/`Offline`, and the diagnostics action keeps a static `Refresh` label.
+- Documentation parity pass completed across README + docs (`operations`, `scope-integration`, `system-architecture`, `product-spec`, docs index) to reflect runtime mode telemetry, video-only preprocessor activation, and current detected preprocessor catalog.
+- Audio-reactivity stability tuning: lowered theme noise-scale ranges to `0.48-0.68`, reduced beat/spike noise boosts, increased spike cooldown to `2200ms`, tightened beat detector thresholds, and added prompt-level motion pacing constraints to reduce excessive forward-speed surges.
+- Documentation alignment pass: clarified prompt accent controls as text + weight (removed stale preset reference), documented hydration-safe preference restore behavior for pipeline/preprocessor selections, and marked deep-dive Scope version references as historical snapshot context.
+- Deployment documentation now tracks the current RunPod production pod (`xtt2dvnrtew5v1`, `RTX PRO 6000`) and preserves `RTX 5090` as a feasible fallback profile.
+- **Theme Enhancement**: Refined prompt descriptions across all themes to keep color palettes aligned to each scene while reducing global dark-bias drift.
+- **Resolution Stability**: Updated high tier dimensions to `896x512` (`16:9`) and `512x896` (`9:16`) for reliable pipeline load on current Scope runtime.
+- **Theme Selector UI**: Widened the Theme Selector docking container to optimally accommodate elements and labels.
+- Updated docs and runbooks to reflect current pod capability flags (`ndi_available=false`, `spout_available=false`) and HTTPS local dev URL (`https://localhost:3500`).
+- **Connection Fallback UX**: Refactored connection state transitions to persist the loading UI during the fade-out, ensuring fluid crossfades into live video generation.
+- **Prompt Bleed Mitigation**: Reduced the WebRTC payload's `kv_cache_attention_bias` from `0.3` to `0.1` to prevent the initial default theme from aggressively bleeding into newly selected themes.
+- **Visual Clarity**: Removed an abrasive CSS filter from the main video feed to restore natural generation colors and saturation.
+- Scope NDI/Spout integration now uses Scope `v0.1.4` video-input contract by sending `input_source` in WebRTC `initialParameters` (instead of legacy `ndi_receiver`/`spout_receiver` load params), and ambient updates no longer force `input_mode: "text"` after connect.
 - Soundscape diagnostics failures now render directly in the pre-connect UI as an assertive warning banner instead of remaining hidden in component state.
 - Soundscape parameter-sync failures now surface in UI so operators can detect stale visual state quickly during live sessions.
 - Scope connection error banners now use alert live-region semantics and include recovery suggestions when available.

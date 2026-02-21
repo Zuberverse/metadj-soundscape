@@ -238,12 +238,53 @@ export interface AspectRatioConfig {
   resolution: Resolution;
 }
 
+export interface AspectResolutionPreset {
+  id: string;
+  label: string;
+  config: AspectRatioConfig;
+}
+
+export const ASPECT_RESOLUTION_PRESETS: Record<AspectRatioMode, AspectResolutionPreset[]> = {
+  "16:9": [
+    {
+      id: "widescreen-base",
+      label: "Low",
+      config: { mode: "16:9", resolution: { width: 576, height: 320 } },
+    },
+    {
+      id: "widescreen-current",
+      label: "Medium",
+      config: { mode: "16:9", resolution: { width: 768, height: 432 } },
+    },
+    {
+      id: "widescreen-high",
+      label: "High",
+      config: { mode: "16:9", resolution: { width: 896, height: 512 } },
+    },
+  ],
+  "9:16": [
+    {
+      id: "portrait-base",
+      label: "Low",
+      config: { mode: "9:16", resolution: { width: 320, height: 576 } },
+    },
+    {
+      id: "portrait-current",
+      label: "Medium",
+      config: { mode: "9:16", resolution: { width: 432, height: 768 } },
+    },
+    {
+      id: "portrait-high",
+      label: "High",
+      config: { mode: "9:16", resolution: { width: 512, height: 896 } },
+    },
+  ],
+};
+
 export const ASPECT_PRESETS: Record<string, AspectRatioConfig> = {
-  // Lower resolution for better FPS (~15-20 FPS on RTX 6000)
-  // Dimensions must be divisible by 64 for diffusion models
-  widescreen: { mode: "16:9", resolution: { width: 576, height: 320 } },
-  // 320×576 is the Daydream default for longlive (184K pixels)
-  portrait: { mode: "9:16", resolution: { width: 320, height: 576 } },
+  // Lowest tier defaults for first-launch stability.
+  widescreen: ASPECT_RESOLUTION_PRESETS["16:9"][0].config,
+  portrait: ASPECT_RESOLUTION_PRESETS["9:16"][0].config,
 };
 
 export const DEFAULT_ASPECT_RATIO: AspectRatioConfig = ASPECT_PRESETS.widescreen;

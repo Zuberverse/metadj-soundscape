@@ -23,6 +23,9 @@ export {
   VOLCANIC_FORGE,
   QUANTUM_REALM,
   NEON_TOKYO,
+  CIRCUIT_BOARD,
+  AMETHYST_CAVES,
+  DIGITAL_MATRIX,
   createCustomTheme,
   SUGGESTED_STYLE_MODIFIERS,
 } from "./themes";
@@ -71,12 +74,14 @@ export type {
   AspectRatioMode,
   Resolution,
   AspectRatioConfig,
+  AspectResolutionPreset,
 } from "./types";
 
 // Re-export type constants
 export {
   DEFAULT_NORMALIZATION,
   ASPECT_PRESETS,
+  ASPECT_RESOLUTION_PRESETS,
   DEFAULT_ASPECT_RATIO,
 } from "./types";
 
@@ -94,9 +99,15 @@ export {
   RECONNECT_BASE_DELAY_MS,
   PARAMETER_SMOOTHING_FACTOR,
   REACTIVITY_PROFILES,
+  MOTION_PACE_PROFILES,
+  DEFAULT_RUNTIME_TUNING_SETTINGS,
+  RUNTIME_TUNING_BOUNDS,
   DEFAULT_REACTIVITY_PROFILE_ID,
+  DEFAULT_MOTION_PACE_PROFILE_ID,
   DEFAULT_PROMPT_TRANSITION_STEPS,
   THEME_CHANGE_TRANSITION_STEPS,
   ENERGY_SPIKE_COOLDOWN_MS,
   DEFAULT_THEME_ID,
+  type MotionPaceProfileId,
+  type RuntimeTuningSettings,
 } from "./constants";

@@ -64,15 +64,15 @@ export const AUDIO_ANALYSIS_RATE_HZ = 86;
 
 /**
  * Number of transition frames for theme changes in ambient mode.
- * 6 steps at ~10fps = ~0.6 seconds - snappy and responsive.
+ * 10 steps at ~10fps = ~1.0 seconds - smoother crossfade.
  */
-export const AMBIENT_THEME_CHANGE_TRANSITION_STEPS = 6;
+export const AMBIENT_THEME_CHANGE_TRANSITION_STEPS = 8;
 
 /**
  * Initial ambient start transition frames.
  * Moderate length for smooth visual initialization.
  */
-export const AMBIENT_START_TRANSITION_STEPS = 12;
+export const AMBIENT_START_TRANSITION_STEPS = 8;
 
 // ============================================================================
 // Connection Configuration
@@ -97,29 +97,105 @@ export const RECONNECT_BASE_DELAY_MS = 2000;
  * Smoothing factor for parameter interpolation.
  * Lower = smoother transitions, higher = more responsive.
  */
-export const PARAMETER_SMOOTHING_FACTOR = 0.15;
+export const PARAMETER_SMOOTHING_FACTOR = 0.12;
 
 export const REACTIVITY_PROFILES = {
   cinematic: {
-    smoothingFactor: 0.08,
-    beatNoiseMultiplier: 0.85,
-    energySpikeThreshold: 0.11,
+    smoothingFactor: 0.06,
+    beatNoiseMultiplier: 0.7,
+    energySpikeThreshold: 0.14,
   },
   balanced: {
     smoothingFactor: PARAMETER_SMOOTHING_FACTOR,
-    beatNoiseMultiplier: 1.0,
-    energySpikeThreshold: 0.08,
+    beatNoiseMultiplier: 0.85,
+    energySpikeThreshold: 0.11,
   },
   kinetic: {
-    smoothingFactor: 0.28,
-    beatNoiseMultiplier: 1.25,
-    energySpikeThreshold: 0.06,
+    smoothingFactor: 0.2,
+    beatNoiseMultiplier: 1.05,
+    energySpikeThreshold: 0.09,
   },
 } as const;
 
 export type ReactivityProfileId = keyof typeof REACTIVITY_PROFILES;
 
 export const DEFAULT_REACTIVITY_PROFILE_ID: ReactivityProfileId = "balanced";
+
+export const MOTION_PACE_PROFILES = {
+  stable: {
+    label: "Stable",
+    motionDescriptor: "ultra-stable camera velocity, no acceleration surges",
+    beatBoostScale: 0.8,
+    spikeBoostScale: 0.85,
+    spikeVariationWeightScale: 0.85,
+    tempoBands: {
+      driftToDriveEnter: 106,
+      driveToDriftExit: 96,
+      driveToBlitzEnter: 154,
+      blitzToDriveExit: 142,
+      fallbackDriftMax: 100,
+      fallbackDriveMax: 148,
+    },
+  },
+  balanced: {
+    label: "Balanced",
+    motionDescriptor: "stable camera velocity, no abrupt acceleration spikes",
+    beatBoostScale: 1.0,
+    spikeBoostScale: 1.0,
+    spikeVariationWeightScale: 1.0,
+    tempoBands: {
+      driftToDriveEnter: 100,
+      driveToDriftExit: 92,
+      driveToBlitzEnter: 146,
+      blitzToDriveExit: 136,
+      fallbackDriftMax: 96,
+      fallbackDriveMax: 140,
+    },
+  },
+  dynamic: {
+    label: "Dynamic",
+    motionDescriptor: "dynamic forward momentum with controlled acceleration",
+    beatBoostScale: 1.15,
+    spikeBoostScale: 1.1,
+    spikeVariationWeightScale: 1.08,
+    tempoBands: {
+      driftToDriveEnter: 94,
+      driveToDriftExit: 88,
+      driveToBlitzEnter: 134,
+      blitzToDriveExit: 126,
+      fallbackDriftMax: 90,
+      fallbackDriveMax: 130,
+    },
+  },
+} as const;
+
+export type MotionPaceProfileId = keyof typeof MOTION_PACE_PROFILES;
+
+export const DEFAULT_MOTION_PACE_PROFILE_ID: MotionPaceProfileId = "balanced";
+
+export interface RuntimeTuningSettings {
+  beatBoostScale: number;
+  spikeBoostScale: number;
+  spikeVariationWeightScale: number;
+  tempoThresholdScale: number;
+  noiseCeiling: number;
+}
+
+export const RUNTIME_TUNING_BOUNDS = {
+  beatBoostScale: { min: 0.6, max: 1.4 },
+  spikeBoostScale: { min: 0.6, max: 1.4 },
+  spikeVariationWeightScale: { min: 0.7, max: 1.35 },
+  tempoThresholdScale: { min: 0.85, max: 1.2 },
+  noiseCeiling: { min: 0.35, max: 1 },
+} as const;
+
+export const DEFAULT_RUNTIME_TUNING_SETTINGS: RuntimeTuningSettings = {
+  beatBoostScale: 1,
+  spikeBoostScale: 1,
+  spikeVariationWeightScale: 1,
+  tempoThresholdScale: 1,
+  noiseCeiling: 1,
+};
 
 /**
  * Default transition frames for prompt changes (music mode).
@@ -128,9 +204,9 @@ export const DEFAULT_PROMPT_TRANSITION_STEPS = 5;
 
 /**
  * Theme change transition frames (music mode).
- * 6 steps at ~10fps = ~0.6 seconds - snappy and responsive.
+ * 10 steps at ~10fps = ~1.0 seconds - smoother crossfade.
  */
-export const THEME_CHANGE_TRANSITION_STEPS = 6;
+export const THEME_CHANGE_TRANSITION_STEPS = 8;
 
 /**
  * Cooldown after theme change where no other transitions are allowed (ms).
@@ -143,7 +219,7 @@ export const THEME_CHANGE_COOLDOWN_MS = 800;
  * Cooldown between energy spike transitions (ms).
  * Prevents transition stacking. Reduced from 3000ms for more responsiveness.
  */
-export const ENERGY_SPIKE_COOLDOWN_MS = 1500;
+export const ENERGY_SPIKE_COOLDOWN_MS = 2200;
 
 /**
  * Estimated Scope output frame rate (FPS).

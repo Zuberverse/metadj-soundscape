@@ -1,6 +1,6 @@
 # MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20 15:09 ET
+**Last Modified**: 2026-02-20 20:11 ET
 
 **Audio-reactive AI video generation powered by Daydream Scope**
 
@@ -15,34 +15,44 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 - **Demo-Safe Mode** UX when Scope is offline, with quick diagnostics CTA.
 - **Performance HUD** with FPS sampling + dropped frame warning states.
 - **Hardened connect flow** that resolves pipelines from fresh diagnostics before connecting.
+- **Hydration-safe preference restore** that avoids delayed pipeline/preprocessor selection flicker on load.
+- **Resolution Tiers Standardized** to `Low` / `Medium` / `High` with validated dimensions for stable Scope pipeline startup.
+- **Theme Prompt Color Calibration** to keep palettes aligned per scene and reduce dark-bias prompt drift.
 - **Security patch baseline** upgraded to `next@16.1.6` (no known production dependency vulnerabilities via `npm audit --omit=dev`).
 
 ## Core Features
 
 - **Real-time Audio Analysis** — Meyda extraction (RMS, spectral centroid, flatness, ZCR)
 - **Beat Detection + BPM Estimation** — Energy-spike detector with cooldowns
-- **12 Visual Themes** — Preset prompt/mapping profiles for different aesthetics
+- **15 Visual Themes** — Preset prompt/mapping profiles for different aesthetics
 - **WebRTC Scope Streaming** — GPU output video + parameter data channel
-- **External Video Routing** — NDI and Spout toggles for streaming frames directly to VJ software
+- **External Video Input Routing** — NDI and Spout toggles for feeding visualizer video into Scope (`input_mode: "video"`)
+- **Output Format + Resolution Tiers** — 16:9 and 9:16 with 3 selectable tiers each (`Low`, `Medium`, `High`; default first-launch tier: `576x320`)
 - **Ambient Mode** — Visual generation can continue without active audio playback
-- **Generation Controls** — Denoising profile, reactivity profile, prompt accent, pipeline chain
+- **Generation Controls** — Denoising profile, reactivity profile, motion pace profile, prompt accent, and advanced runtime tuning sliders (beat/spike/motion/noise) applied live
 - **Diagnostics Panel** — Health, pipeline status, hardware, model readiness, plugins/LoRAs
 - **Telemetry Overlay** — Active pipeline, resolution, fps sample, dropped frame ratio, performance health
+- **Runtime Mode Telemetry** — Explicit `Audio Reactive` vs `Ambient Hold` state with live signal readout
+- **Preprocessor Clarity** — Video preprocessors are enabled only for NDI/Spout input mode and remain inactive in text mode
+- **Scope Readiness Simplified** — Connect screen status displays `Online`/`Offline` only, with a static `Refresh` control
 
 ## Preset Themes
 
-- Cosmic Voyage
-- Neon Foundry
-- Digital Forest
-- Synthwave Highway
-- Crystal Sanctuary
-- Ocean Depths
-- Cyber City
-- Aurora Dreams
-- 8-Bit Adventure
-- Volcanic Forge
-- Quantum Realm
-- Neon Tokyo
+- Astral
+- Forge
+- Forest
+- Synthwave
+- Sanctuary
+- Ocean
+- Cyber
+- Aurora
+- Arcade
+- Volcano
+- Quantum
+- Tokyo
+- Circuit
+- Amethyst
+- Matrix
 
 ## Keyboard Shortcuts
 
@@ -59,6 +69,9 @@ Soundscape turns music into real-time AI visuals. The browser analyzes audio sig
 
 - Node.js `>=20.19.0`
 - Running Scope server (RunPod or local)
+- Current recommended Scope GPU: `RTX PRO 6000` (`96GB` VRAM), active pod `xtt2dvnrtew5v1`
+- Feasible alternative GPU: `RTX 5090` (`32GB` VRAM) for default/lower tiers
+- Current pod capability report for `xtt2dvnrtew5v1`: `ndi_available=false`, `spout_available=false` (external video input requires a Scope runtime with those capabilities enabled)
 
 ### Install
 
@@ -73,7 +86,7 @@ npm run dev
 ```
 
 > [!NOTE]
-> **Important**: Always open the application on **`http://localhost:3500`**, *not* the default Next.js port 3000. The application is configured to expect port 3500, and using 3000 may lead to unexpected behavior or conflicts.
+> **Important**: Always open the application on **`https://localhost:3500`**, *not* the default Next.js port 3000. Dev mode runs with an experimental self-signed HTTPS cert on port 3500.
 
 For persistent launch from Codex/Claude sessions, from corpus root use:
 
@@ -102,12 +115,13 @@ npm run check:launch
 
 1. Open `/soundscape`.
 2. Click **Refresh** in Scope Readiness.
-3. Confirm server/pipeline readiness and choose output aspect ratio + pipeline.
-4. Connect Scope.
-5. Pick audio source: **Demo** or **Mic**.
-6. Play audio; tune denoising/reactivity/prompt accents.
-7. Optionally enable **Auto Theme** for beat-driven preset rotation.
-8. Optionally record a clip and download the `webm` file.
+3. Confirm server/pipeline readiness and choose output format + resolution tier + pipeline.
+4. If using NDI/Spout input, confirm Scope capability is available in diagnostics before enabling stream input toggles, then configure optional `Video Preprocessor` in the Input Streams block.
+5. Connect Scope.
+6. Pick audio source: **Demo** or **Mic**.
+7. Play audio; tune denoising/reactivity/motion pace/prompt accents, and optionally refine advanced runtime sliders live.
+8. Optionally enable **Auto Theme** for beat-driven preset rotation.
+9. Optionally record a clip and download the `webm` file.
 
 ## Environment Variables
 
@@ -183,6 +197,7 @@ Deploy behind platform-level access controls for additional protection.
 | Server shows offline | Run `npm run check:scope`; verify `SCOPE_API_URL`; restart Scope pod |
 | Connect fails on stale pipeline | Use Scope diagnostics refresh and reconnect (resolved pipeline is now enforced) |
 | No frames but connected | Verify pipeline loaded (`/api/v1/pipeline/status`) and avoid conflicting Scope tabs |
+| NDI/Spout toggle won’t connect | Check Scope capabilities in diagnostics; current production pod reports `ndi_available=false` and `spout_available=false` |
 | Mic mode silent | Check browser microphone permission + input device selection |
 | Recording unavailable | Browser lacks `MediaRecorder` support for the current stream codec |
 

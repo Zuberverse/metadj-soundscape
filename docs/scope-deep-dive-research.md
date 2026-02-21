@@ -1,8 +1,14 @@
 # Daydream Scope Platform: Deep Dive Research
 
-**Last Modified**: 2026-02-12 20:29 ET
+**Last Modified**: 2026-02-20 20:02 ET
 **Purpose**: Comprehensive intelligence on Scope API, pipelines, WebRTC protocol, and integration opportunities for MetaDJ Soundscape.
 **Sources**: DeepWiki analysis of `daydreamlive/scope` repo, official GitHub docs (`server.md`, `vace.md`, `lora.md`, `vae.md`), existing Soundscape codebase.
+
+> [!IMPORTANT]
+> This file is an exploratory research snapshot and may include historical assumptions.
+> Statements using "current/currently" reflect the snapshot period and are not guaranteed to match active production runtime behavior.
+> For current runtime behavior and production defaults, use `docs/scope-integration.md`, `docs/system-architecture.md`, and `docs/operations.md`.
+> As of 2026-02-20, production runtime preprocessing capabilities include `video-depth-anything`, `scribble`, `gray`, and `optical-flow` (see `docs/scope-integration.md`).
 
 ---
 
@@ -32,9 +38,9 @@
 
 Scope is a real-time, interactive AI video generation server built on autoregressive video diffusion models (primarily Wan2.1). The platform runs as a FastAPI server exposing REST endpoints for pipeline management and WebRTC for real-time video streaming with parameter control via data channels.
 
-**Current Scope version**: `0.1.0-beta.3`
+**Scope version at snapshot time**: `0.1.0-beta.3` (historical)
 
-**Key findings for Soundscape**:
+**Historical findings for Soundscape (snapshot period)**:
 
 | Category | What We Use | What We're Missing |
 |----------|-------------|-------------------|

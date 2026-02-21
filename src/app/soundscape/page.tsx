@@ -3,8 +3,6 @@
  * Audio-reactive AI video generation powered by Daydream Scope
  */
 
-"use client";
-
 import { SoundscapeStudio } from "@/components/soundscape";
 
 export default function SoundscapePage() {

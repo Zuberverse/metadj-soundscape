@@ -1,6 +1,6 @@
 # Scope Integration - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20
+**Last Modified**: 2026-02-20 20:11 ET
 **Status**: Active
 
 ## Purpose
@@ -17,8 +17,16 @@ Single source of truth for Daydream Scope integration within MetaDJ Soundscape. 
 ## Current Technical Assumptions
 
 - **Upstream baseline**: Scope stable is `v0.1.4` (published 2026-02-19).
+- **Current production pod**: `xtt2dvnrtew5v1` on RunPod with `RTX PRO 6000` (`96GB` VRAM).
+- **Feasible alternative hardware**: `RTX 5090` (`32GB` VRAM) for default/lower resolution tiers.
 - **Pipeline selection**: Soundscape defaults to the `longlive` pipeline for stylized, audio-reactive visuals.
-- **Input mode**: Text-to-video (`input_mode: "text"`). No VACE or asset uploads in MVP.
+- **Default first-launch output**: `16:9` at `576x320` (lowest tier for stable startup).
+- **Resolution tiers**: `16:9` -> `576x320`, `768x432`, `896x512`; `9:16` -> `320x576`, `432x768`, `512x896` (labels: `Low`, `Medium`, `High`).
+- **Input mode**: Text-to-video (`input_mode: "text"`) by default, with optional server-side video input (`input_mode: "video"`) using Scope `input_source` for NDI/Spout feeds.
+- **Preprocessor activation**: Preprocessors are video-mode stages and are appended to `pipeline_ids` only when NDI/Spout input mode is active.
+- **UI placement note**: The preprocessor selector is grouped in Soundscape's Input Streams section alongside NDI/Spout controls to reflect this dependency.
+- **Current pod capability state**: `xtt2dvnrtew5v1` reports `ndi_available=false` and `spout_available=false`; external video input requires a Scope runtime where those flags are `true`.
+- **Current detected preprocessors on `xtt2dvnrtew5v1`**: `video-depth-anything`, `scribble`, `gray`, `optical-flow` (all usage: `preprocessor`, mode: `video`).
 - **Transport**: WebRTC offer flow with data channel parameter updates.
 
 ---
@@ -63,16 +71,18 @@ Returns: `{ "status": "loaded" }` (or similar)
     "vace_enabled": false,
     "vae_type": "lightvae",
     "quantization": null,
-    "lora_merge_mode": "permanent_merge",
-    "output_ndi": false,
-    "output_spout": false
+    "lora_merge_mode": "permanent_merge"
   }
 }
 ```
 **Notes**: 
-- `width` and `height` must be divisible by 64. 
+- `width` and `height` should follow the selected pipeline schema constraints (LongLive supports 16-2048 with dimensions divisible by 16).
+- Soundscape high tier is intentionally `896x512` (instead of `896x504`) to match current stable pipeline-load behavior on the active Scope runtime.
 - `pipeline_ids` is the canonical shape for loading. Soundscape uses `vace_enabled: false` with `longlive`.
-- **Hardware Target**: Soundscape is optimized for the RTX 5090 (32GB VRAM), utilizing `"lightvae"`, uncompressed weights (`"quantization": null`), and `"permanent_merge"` for a balance of maximum visual fidelity and inference FPS.
+- For text-mode sessions, Soundscape sends only the selected main pipeline in `pipeline_ids`.
+- For video-input sessions with a selected preprocessor, Soundscape sends `[preprocessor, mainPipeline]` in `pipeline_ids`.
+- **Hardware Target**: Soundscape is currently tuned for `RTX PRO 6000` (`96GB` VRAM) using `"lightvae"`, uncompressed weights (`"quantization": null`), and `"permanent_merge"` to maximize fidelity at higher resolution tiers.
+- **Compatibility Note**: `RTX 5090` (`32GB`) remains a viable option for default/lower tiers with the same parameter profile.
 
 ### 3. WebRTC Negotiation
 
@@ -92,15 +102,37 @@ Returns: `{ "iceServers": [ { "urls": "stun:..." } ] }`
     "input_mode": "text",
     "prompts": [{ "text": "...", "weight": 1.0 }],
     "prompt_interpolation_method": "linear",
-    "denoising_step_list": [700, 500],
+    "denoising_step_list": [1000, 750, 500, 250],
     "manage_cache": true,
-    "kv_cache_attention_bias": 0.3,
+    "kv_cache_attention_bias": 0.1,
     "recording": false
   }
 }
 ```
+**Video Input Example (NDI/Spout feed)**:
+```json
+{
+  "sdp": "...",
+  "type": "offer",
+  "initialParameters": {
+    "input_mode": "video",
+    "input_source": {
+      "enabled": true,
+      "source_type": "ndi",
+      "source_name": "Soundscape NDI"
+    },
+    "vace_use_input_video": true,
+    "prompts": [{ "text": "...", "weight": 1.0 }],
+    "denoising_step_list": [1000, 750, 500, 250],
+    "manage_cache": true
+  }
+}
+```
 **Notes**: 
-- `input_mode: "text"` is required in Scope v0.1.4+.
+- `input_mode` is required in Scope v0.1.4+ (`"text"` or `"video"`).
+- For NDI/Spout feeds without a browser video track, include `input_source` in `initialParameters`.
+- Only enable NDI/Spout modes when Scope diagnostics report the relevant capability as available.
+- Current production pod `xtt2dvnrtew5v1` reports both NDI and Spout unavailable.
 - Avoid sending `noise_scale` or `noise_controller` in text mode.
 
 **Trickle ICE**
@@ -115,12 +147,13 @@ Soundscape sends parameter updates over a `parameters` data channel at ~30 Hz.
 ```json
 {
   "prompts": [{ "text": "...", "weight": 1.0 }],
-  "denoising_step_list": [700, 500],
+  "denoising_step_list": [1000, 750, 500, 250],
+  "noise_scale": 0.55,
   "manage_cache": true,
   "transition": {
     "target_prompts": [{ "text": "...", "weight": 1.0 }],
     "num_steps": 5,
-    "temporal_interpolation_method": "slerp"
+    "temporal_interpolation_method": "linear"
   }
 }
 ```
@@ -128,3 +161,4 @@ Soundscape sends parameter updates over a `parameters` data channel at ~30 Hz.
 **Notes**:
 - Generate pauses by sending `{"paused": true}`.
 - Resume by sending `{"paused": false}`.
+- Soundscape uses `slerp` only when exactly two prompts are present (for example base + accent); otherwise it sends `linear`.

@@ -1,6 +1,6 @@
 # Operations & Deployment - MetaDJ Soundscape
 
-**Last Modified**: 2026-02-20 15:09 ET  
+**Last Modified**: 2026-02-20 20:11 ET  
 **Status**: Active
 
 ## Purpose
@@ -11,8 +11,15 @@ This runbook is the operational source of truth for deploying, validating, monit
 
 - Frontend: Next.js app on port `3500`
 - Scope backend: RunPod-hosted Daydream Scope instance
+- Current production Scope pod: `xtt2dvnrtew5v1` (`RTX PRO 6000`, `96GB` VRAM)
+- Feasible alternate Scope pod class: `RTX 5090` (`32GB` VRAM) for default/lower tiers
 - Proxy: Next.js route `/api/scope/[...path]` with method/path allowlist, origin checks, and write-token policy
 - Transport: WebRTC video + data channel
+- Default first-launch output: `16:9` at `576x320` (low tier; tier labels are `Low`/`Medium`/`High`)
+- Input stream routing: NDI/Spout toggles send Scope video-input config (`input_mode: "video"` + `input_source`)
+- Preprocessor chaining is video-mode only; selected preprocessors are ignored for text-mode sessions.
+- Scope readiness UI presents only `Online`/`Offline` states; refresh control label is static (`Refresh`).
+- Current production pod capability flags: `ndi_available=false`, `spout_available=false`
 
 ## Environment Contract
 
@@ -68,16 +75,26 @@ This runbook is the operational source of truth for deploying, validating, monit
 
 1. Open `/soundscape`.
 2. Click **Refresh** in Scope readiness.
-3. Connect Scope successfully.
-4. Confirm live video renders.
-5. Start demo audio or microphone mode.
-6. Confirm visuals react to audio changes.
-7. Toggle a generation profile control and verify stream remains stable.
-8. Record and download a short clip.
+3. Confirm default pre-connect format is `16:9` at `576x320`.
+4. Connect Scope successfully.
+5. Confirm live video renders.
+6. Start demo audio or microphone mode.
+7. Confirm visuals react to audio changes.
+8. Toggle denoising/reactivity/accent controls and verify stream remains stable.
+9. Confirm runtime mode telemetry transitions correctly:
+   - playing + ready audio => `Audio Reactive`
+   - paused/stopped or audio-not-ready => `Ambient Hold`
+10. Optional NDI/Spout verification:
+   - confirm Scope diagnostics reports NDI or Spout as available
+   - if using a preprocessor, verify NDI/Spout is enabled and set it from the Input Streams section (preprocessors are video-mode only)
+   - enable one stream input toggle (not both)
+   - provide source name
+   - reconnect and confirm Scope accepts `input_mode: "video"` session
+11. Record and download a short clip.
 
 ## Security Audit Policy
 
-- Required gate: `npm audit --production` must report zero high/critical issues.
+- Required gate: `npm audit --omit=dev --audit-level=high` must report zero high/critical production issues.
 - Advisory visibility: run full `npm audit` for developer-tooling visibility and track unresolved upstream advisories separately.
 - Current known limitation: ESLint toolchain transitive advisories may remain until compatible upstream releases land; do not treat these as production-runtime CVEs for this app.
 
@@ -132,6 +149,13 @@ This runbook is the operational source of truth for deploying, validating, monit
    - disable auxiliary input stream features if not required
 3. Recycle Scope instance if GPU state appears degraded.
 
+### Incident E: NDI/Spout Input Not Available
+
+1. Check `Scope Readiness` capability flags in-app (`ndi_available`, `spout_available`).
+2. Confirm Scope runtime has required SDK/runtime support for selected input source.
+3. If both flags are `false`, disable external input toggles and run text-mode session.
+4. Provision a Scope runtime/pod variant with NDI/Spout support for visualizer ingest workflows.
+
 ## Rollback Plan
 
 ### Frontend Rollback
@@ -160,4 +184,4 @@ This runbook is the operational source of truth for deploying, validating, monit
 ## Local Development Note
 
 > [!IMPORTANT]
-> Soundscape runs on port `3500`. Use `http://localhost:3500` for local operation.
+> Soundscape runs on port `3500`. Use `https://localhost:3500` for local operation (self-signed dev cert).

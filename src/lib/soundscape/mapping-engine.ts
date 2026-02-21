@@ -37,15 +37,21 @@ import type {
 } from "./types";
 import {
   DENOISING_STEPS,
+  DEFAULT_RUNTIME_TUNING_SETTINGS,
+  DEFAULT_MOTION_PACE_PROFILE_ID,
   DEFAULT_REACTIVITY_PROFILE_ID,
+  MOTION_PACE_PROFILES,
   PARAMETER_SMOOTHING_FACTOR,
   REACTIVITY_PROFILES,
+  RUNTIME_TUNING_BOUNDS,
   DEFAULT_PROMPT_TRANSITION_STEPS,
   THEME_CHANGE_TRANSITION_STEPS,
   THEME_CHANGE_COOLDOWN_MS,
   ENERGY_SPIKE_COOLDOWN_MS,
   ESTIMATED_SCOPE_FPS,
   TRANSITION_COMPLETION_MARGIN_MS,
+  type MotionPaceProfileId,
+  type RuntimeTuningSettings,
 } from "./constants";
 
 // ============================================================================
@@ -62,7 +68,7 @@ const INTENSITY_DESCRIPTORS: Record<string, string> = {
 } as const;
 
 const BRIGHTNESS_DESCRIPTORS: Record<string, string> = {
-  dark: "deep shadows, moody contrast",
+  dark: "low-light ambience, preserved highlight detail",
   balanced: "balanced luminance, cinematic exposure",
   radiant: "radiant highlights, luminous details",
 } as const;
@@ -74,9 +80,9 @@ const TEXTURE_DESCRIPTORS: Record<string, string> = {
 } as const;
 
 const TEMPO_DESCRIPTORS: Record<string, string> = {
-  drift: "slow evolving camera drift",
-  drive: "rhythmic forward momentum",
-  blitz: "high-velocity kinetic cadence",
+  drift: "steady cinematic glide, gentle forward motion",
+  drive: "controlled forward momentum, smooth pacing",
+  blitz: "elevated momentum with stabilized camera speed",
 } as const;
 
 // NOTE: Temporal variations REMOVED - user requested no prompt looping
@@ -114,6 +120,8 @@ export class MappingEngine {
     REACTIVITY_PROFILES[DEFAULT_REACTIVITY_PROFILE_ID].beatNoiseMultiplier;
   private energySpikeThreshold =
     REACTIVITY_PROFILES[DEFAULT_REACTIVITY_PROFILE_ID].energySpikeThreshold;
+  private motionPaceSettings = MOTION_PACE_PROFILES[DEFAULT_MOTION_PACE_PROFILE_ID];
+  private runtimeTuning: RuntimeTuningSettings = { ...DEFAULT_RUNTIME_TUNING_SETTINGS };
 
   // Beat handling
   private lastBeatTriggerTime = 0;
@@ -132,7 +140,10 @@ export class MappingEngine {
   private lastEnergySpikeTime = 0;
 
   // Prompt transition tracking
+  private lastPrompts: PromptEntry[] = [];
   private lastPromptText: string | null = null;
+  private transitionSourcePrompts: PromptEntry[] | null = null;
+  private transitionTargetPrompts: PromptEntry[] | null = null;
 
   // Theme change flag - triggers smooth transition (NOT cache reset) on next parameter computation
   private pendingThemeTransition = false;
@@ -158,6 +169,7 @@ export class MappingEngine {
     this.theme = theme;
     this.normalization = normalization;
     this.setReactivityProfile(DEFAULT_REACTIVITY_PROFILE_ID);
+    this.setMotionPaceProfile(DEFAULT_MOTION_PACE_PROFILE_ID);
   }
 
   /**
@@ -244,6 +256,42 @@ export class MappingEngine {
   }
 
   /**
+   * Control motion pacing behavior (tempo banding + beat/spike aggression).
+   */
+  setMotionPaceProfile(profile: MotionPaceProfileId): void {
+    const resolved = MOTION_PACE_PROFILES[profile] ?? MOTION_PACE_PROFILES[DEFAULT_MOTION_PACE_PROFILE_ID];
+    this.motionPaceSettings = resolved;
+  }
+
+  /**
+   * Apply live runtime tuning multipliers without changing profile selection.
+   */
+  setRuntimeTuning(settings: Partial<RuntimeTuningSettings>): void {
+    this.runtimeTuning = {
+      beatBoostScale: this.clampWithBounds(
+        settings.beatBoostScale ?? this.runtimeTuning.beatBoostScale,
+        RUNTIME_TUNING_BOUNDS.beatBoostScale
+      ),
+      spikeBoostScale: this.clampWithBounds(
+        settings.spikeBoostScale ?? this.runtimeTuning.spikeBoostScale,
+        RUNTIME_TUNING_BOUNDS.spikeBoostScale
+      ),
+      spikeVariationWeightScale: this.clampWithBounds(
+        settings.spikeVariationWeightScale ?? this.runtimeTuning.spikeVariationWeightScale,
+        RUNTIME_TUNING_BOUNDS.spikeVariationWeightScale
+      ),
+      tempoThresholdScale: this.clampWithBounds(
+        settings.tempoThresholdScale ?? this.runtimeTuning.tempoThresholdScale,
+        RUNTIME_TUNING_BOUNDS.tempoThresholdScale
+      ),
+      noiseCeiling: this.clampWithBounds(
+        settings.noiseCeiling ?? this.runtimeTuning.noiseCeiling,
+        RUNTIME_TUNING_BOUNDS.noiseCeiling
+      ),
+    };
+  }
+
+  /**
    * Mark an external transition as active.
    * Call this when the caller handles the transition directly (e.g., theme change from hook)
    * to prevent this engine from sending conflicting params during the transition.
@@ -268,6 +316,7 @@ export class MappingEngine {
     this.lastIntensityLevel = "low";
     this.energySpikeVariationIndex = 0;
     this.lastEnergySpikeTime = 0;
+    this.lastPrompts = [];
     this.lastPromptText = null;
     this.pendingThemeTransition = true; // Smooth transition, not cache reset
     if (process.env.NODE_ENV === "development") {
@@ -333,43 +382,90 @@ export class MappingEngine {
       noiseScale = Math.min(1.0, noiseScale + beatEffect.noiseBoost);
     }
 
+    noiseScale = Math.min(noiseScale, this.runtimeTuning.noiseCeiling);
+
     // Build prompts with intensity descriptors (NO beat modifiers - beats only affect noise)
-    const prompts = this.buildPrompts(derived, beat, beatEffect.promptOverride);
+    const nextPrompts = this.buildPrompts(derived, beat, beatEffect.promptOverride);
+    let prompts = nextPrompts;
+    let trackedPrompts = nextPrompts;
 
     // Determine if we need a smooth transition for prompt changes
     // Priority: theme transition > beat effect transition > regular prompt change transition
     let transition = beatEffect.transition;
-    const currentPromptText = prompts.map((p) => p.text).join("|");
+    const nextPromptText = nextPrompts.map((p) => p.text).join("|");
+    const previousPrompts = this.lastPrompts.length > 0 ? this.lastPrompts : nextPrompts;
 
     // Theme change gets priority - use longer transition for smooth crossfade
     // Theme changes ALWAYS proceed (user-initiated action)
     if (this.pendingThemeTransition) {
       this.pendingThemeTransition = false;
       transition = {
-        target_prompts: prompts,
+        target_prompts: nextPrompts,
         num_steps: THEME_CHANGE_TRANSITION_STEPS,
-        temporal_interpolation_method: "slerp" as const,
+        temporal_interpolation_method: this.resolvePromptInterpolationMethod(nextPrompts),
       };
       // Mark transition active to block other transitions until complete
       this.markTransitionActive(THEME_CHANGE_TRANSITION_STEPS);
       if (process.env.NODE_ENV === "development") {
         console.log("[MappingEngine] Theme transition initiated:", THEME_CHANGE_TRANSITION_STEPS, "steps");
       }
-    } else if (!transition && this.lastPromptText && currentPromptText !== this.lastPromptText) {
+    } else if (!transition && this.lastPromptText && nextPromptText !== this.lastPromptText) {
       // Prompt changed without a beat effect - add smooth transition
       // BUT only if no transition is currently active (prevents mid-transition jumps)
       if (!this.isTransitionActive()) {
         transition = {
-          target_prompts: prompts,
+          target_prompts: nextPrompts,
           num_steps: DEFAULT_PROMPT_TRANSITION_STEPS,
-          temporal_interpolation_method: "slerp" as const,
+          temporal_interpolation_method: this.resolvePromptInterpolationMethod(nextPrompts),
         };
         this.markTransitionActive(DEFAULT_PROMPT_TRANSITION_STEPS);
-      } else if (process.env.NODE_ENV === "development") {
-        console.log("[MappingEngine] Blocked prompt transition - transition already active");
+      } else {
+        // We are already transitioning, or blocked. We hold the target state (nextPrompts)
+        // by letting trackedPrompts advance, but we will force the emitted prompts
+        // to be the source state below.
+        if (process.env.NODE_ENV === "development") {
+          console.log("[MappingEngine] Blocked prompt transition - transition already active.");
+        }
       }
     }
-    this.lastPromptText = currentPromptText;
+
+    // External transitions (triggered outside computeParameters) can clear
+    // lastPromptText. While that transition window is active, hold prompts at
+    // the previous state so we don't push a hard replacement mid-crossfade.
+    if (!transition && !this.lastPromptText && this.isTransitionActive()) {
+      prompts = previousPrompts;
+    }
+
+    // When a transition starts, capture the source and target prompts
+    if (transition) {
+      this.transitionSourcePrompts = previousPrompts;
+      this.transitionTargetPrompts = transition.target_prompts;
+      prompts = previousPrompts; // Output the source for the first frame of transition
+    } else if (this.isTransitionActive() && this.transitionSourcePrompts) {
+      // During active transition, keep outputting the source prompts
+      // Scope handles the crossfade visually to the target internally
+      prompts = this.transitionSourcePrompts;
+    } else if (!this.isTransitionActive() && this.transitionTargetPrompts) {
+      // Clean up when transition finishes
+      // The moment the transition finishes, our "current" visual state in Scope is the target!
+      // Output the target for one frame. This ensures lastPrompts becomes the target,
+      // which will trigger a smooth return transition back to the base prompt on the NEXT frame.
+      trackedPrompts = this.transitionTargetPrompts;
+      prompts = trackedPrompts;
+      this.transitionSourcePrompts = null;
+      this.transitionTargetPrompts = null;
+    } else if (!this.isTransitionActive()) {
+      // Clean up if we didn't have target prompts
+      this.transitionSourcePrompts = null;
+      this.transitionTargetPrompts = null;
+    }
+
+    // Update tracking variables.
+    // - During active-transition rollbacks we track previous prompts to ensure a
+    //   transition still occurs when the lock window expires.
+    // - Otherwise we track next prompts (the new target state).
+    this.lastPromptText = trackedPrompts.map((entry) => entry.text).join("|");
+    this.lastPrompts = trackedPrompts;
 
     // Build final parameters
     // Note: resetCache NEVER used - we always use smooth transitions to avoid hard cuts
@@ -485,6 +581,10 @@ export class MappingEngine {
     }
   }
 
+  private resolvePromptInterpolationMethod(prompts: PromptEntry[]): "linear" | "slerp" {
+    return prompts.length === 2 ? "slerp" : "linear";
+  }
+
   // ============================================================================
   // Private: Beat Effects
   // ============================================================================
@@ -512,7 +612,11 @@ export class MappingEngine {
     // Always apply a base noise boost on beats (regardless of configured action)
     // This makes beats universally more impactful
     if (beat.isBeat) {
-      result.noiseBoost = 0.08 * this.beatNoiseMultiplier; // Base beat response
+      result.noiseBoost =
+        0.05 *
+        this.beatNoiseMultiplier *
+        this.motionPaceSettings.beatBoostScale *
+        this.runtimeTuning.beatBoostScale; // Base beat response
     }
 
     if (!beatMapping.enabled || !beat.isBeat) {
@@ -522,7 +626,7 @@ export class MappingEngine {
 
     // Check cooldown
     const now = Date.now();
-    const cooldown = beatMapping.cooldownMs || 200;
+    const cooldown = Math.max(260, beatMapping.cooldownMs || 200);
 
     if (now - this.lastBeatTriggerTime < cooldown) {
       return this.handleEnergySpikeEffects(derived, result);
@@ -538,7 +642,11 @@ export class MappingEngine {
         // Standard noise pulse
         result.noiseBoost = Math.max(
           result.noiseBoost,
-          beatMapping.intensity * 0.25 * this.beatNoiseMultiplier
+          beatMapping.intensity *
+            0.18 *
+            this.beatNoiseMultiplier *
+            this.motionPaceSettings.beatBoostScale *
+            this.runtimeTuning.beatBoostScale
         );
         break;
 
@@ -547,7 +655,11 @@ export class MappingEngine {
         // Instead, treat as strong noise pulse
         result.noiseBoost = Math.max(
           result.noiseBoost,
-          beatMapping.intensity * 0.35 * this.beatNoiseMultiplier
+          beatMapping.intensity *
+            0.25 *
+            this.beatNoiseMultiplier *
+            this.motionPaceSettings.beatBoostScale *
+            this.runtimeTuning.beatBoostScale
         );
         break;
 
@@ -557,7 +669,11 @@ export class MappingEngine {
         // Instead, treat as moderate noise pulse
         result.noiseBoost = Math.max(
           result.noiseBoost,
-          beatMapping.intensity * 0.30 * this.beatNoiseMultiplier
+          beatMapping.intensity *
+            0.22 *
+            this.beatNoiseMultiplier *
+            this.motionPaceSettings.beatBoostScale *
+            this.runtimeTuning.beatBoostScale
         );
         break;
     }
@@ -618,7 +734,12 @@ export class MappingEngine {
       const spikeIntensity = Math.min(1, derived.energyDerivative / 0.20);
 
       // Moderate weight on variation (0.5-0.75) for noticeable but smooth shifts
-      const variationWeight = 0.5 + spikeIntensity * 0.25;
+      const variationWeight = Math.min(
+        0.75,
+        (0.4 + spikeIntensity * 0.2) *
+        this.motionPaceSettings.spikeVariationWeightScale *
+        this.runtimeTuning.spikeVariationWeightScale
+      );
       const baseWeight = 1 - variationWeight;
 
       // DEBUG: Log energy spikes
@@ -644,7 +765,14 @@ export class MappingEngine {
       this.markTransitionActive(blendDuration);
 
       // Also boost noise on energy spikes
-      result.noiseBoost = Math.max(result.noiseBoost, spikeIntensity * 0.15 * this.beatNoiseMultiplier);
+      result.noiseBoost = Math.max(
+        result.noiseBoost,
+        spikeIntensity *
+          0.1 *
+          this.beatNoiseMultiplier *
+          this.motionPaceSettings.spikeBoostScale *
+          this.runtimeTuning.spikeBoostScale
+      );
     }
 
     return result;
@@ -726,7 +854,7 @@ export class MappingEngine {
     const tempoDescriptor = this.getTempoDescriptor(beat);
 
     // Build the reactive prompt with controlled descriptor bands.
-    const reactivePrompt = `${basePrompt}, ${intensityDescriptor}, ${brightnessDescriptor}, ${textureDescriptor}, ${tempoDescriptor}`;
+    const reactivePrompt = `${basePrompt}, ${intensityDescriptor}, ${brightnessDescriptor}, ${textureDescriptor}, ${tempoDescriptor}, ${this.motionPaceSettings.motionDescriptor}`;
 
     if (promptOverride) {
       // Blend override with reactive base and optional accent layer.
@@ -752,14 +880,14 @@ export class MappingEngine {
 
     // Implement hysteresis to prevent flapping around boundaries
     if (band === "dark") {
-      if (brightness > 0.35) band = "balanced";
+      if (brightness > 0.3) band = "balanced";
     } else if (band === "balanced") {
-      if (brightness < 0.25) band = "dark";
+      if (brightness < 0.2) band = "dark";
       else if (brightness > 0.75) band = "radiant";
     } else if (band === "radiant") {
       if (brightness < 0.65) band = "balanced";
     } else {
-      if (brightness < 0.3) band = "dark";
+      if (brightness < 0.24) band = "dark";
       else if (brightness > 0.7) band = "radiant";
       else band = "balanced";
     }
@@ -790,19 +918,29 @@ export class MappingEngine {
   }
 
   private getTempoDescriptor(beat: AnalysisState["beat"]): string {
+    const tempoScale = this.runtimeTuning.tempoThresholdScale;
+    const tempoBands = this.motionPaceSettings.tempoBands;
+    const scaledTempoBands = {
+      driftToDriveEnter: tempoBands.driftToDriveEnter * tempoScale,
+      driveToDriftExit: tempoBands.driveToDriftExit * tempoScale,
+      driveToBlitzEnter: tempoBands.driveToBlitzEnter * tempoScale,
+      blitzToDriveExit: tempoBands.blitzToDriveExit * tempoScale,
+      fallbackDriftMax: tempoBands.fallbackDriftMax * tempoScale,
+      fallbackDriveMax: tempoBands.fallbackDriveMax * tempoScale,
+    } as const;
     let band: "drift" | "drive" | "blitz" = this.lastTempoBand;
     if (beat.bpm && beat.confidence > 0.45) {
       // Implement hysteresis for tempo bands
       if (band === "drift") {
-        if (beat.bpm > 96) band = "drive";
+        if (beat.bpm > scaledTempoBands.driftToDriveEnter) band = "drive";
       } else if (band === "drive") {
-        if (beat.bpm < 88) band = "drift";
-        else if (beat.bpm > 136) band = "blitz";
+        if (beat.bpm < scaledTempoBands.driveToDriftExit) band = "drift";
+        else if (beat.bpm > scaledTempoBands.driveToBlitzEnter) band = "blitz";
       } else if (band === "blitz") {
-        if (beat.bpm < 128) band = "drive";
+        if (beat.bpm < scaledTempoBands.blitzToDriveExit) band = "drive";
       } else {
-        if (beat.bpm < 92) band = "drift";
-        else if (beat.bpm < 132) band = "drive";
+        if (beat.bpm < scaledTempoBands.fallbackDriftMax) band = "drift";
+        else if (beat.bpm < scaledTempoBands.fallbackDriveMax) band = "drive";
         else band = "blitz";
       }
     }
@@ -835,6 +973,13 @@ export class MappingEngine {
 
   private lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
+  }
+
+  private clampWithBounds(value: number, bounds: { min: number; max: number }): number {
+    if (!Number.isFinite(value)) {
+      return bounds.min;
+    }
+    return Math.max(bounds.min, Math.min(bounds.max, value));
   }
 }
 
@@ -942,7 +1087,14 @@ export class ParameterSender {
       return;
     }
 
-    this.pendingParams = params;
+    const mergedParams = { ...params };
+
+    // Prevent transitions from being dropped if they were generated between rate-limit cycles
+    if (this.pendingParams && this.pendingParams.transition && !params.transition) {
+      mergedParams.transition = this.pendingParams.transition;
+    }
+
+    this.pendingParams = mergedParams;
 
     if (!this.sendScheduled) {
       this.scheduleNextSend();

@@ -23,9 +23,15 @@ import type {
 import {
   AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
   DEFAULT_DENOISING_PROFILE_ID,
+  DEFAULT_MOTION_PACE_PROFILE_ID,
   DEFAULT_REACTIVITY_PROFILE_ID,
+  DEFAULT_RUNTIME_TUNING_SETTINGS,
   DEFAULT_THEME_ID,
   DENOISING_PROFILES,
+  MOTION_PACE_PROFILES,
+  RUNTIME_TUNING_BOUNDS,
+  type MotionPaceProfileId,
+  type RuntimeTuningSettings,
 } from "./constants";
 
 // ============================================================================
@@ -39,6 +45,29 @@ const clampPromptAccentWeight = (weight: number): number => {
   if (!Number.isFinite(weight)) return 0.25;
   return Math.max(0.05, Math.min(1, weight));
 };
+
+const clampRuntimeTuningSettings = (settings: RuntimeTuningSettings): RuntimeTuningSettings => ({
+  beatBoostScale: Math.max(
+    RUNTIME_TUNING_BOUNDS.beatBoostScale.min,
+    Math.min(RUNTIME_TUNING_BOUNDS.beatBoostScale.max, settings.beatBoostScale)
+  ),
+  spikeBoostScale: Math.max(
+    RUNTIME_TUNING_BOUNDS.spikeBoostScale.min,
+    Math.min(RUNTIME_TUNING_BOUNDS.spikeBoostScale.max, settings.spikeBoostScale)
+  ),
+  spikeVariationWeightScale: Math.max(
+    RUNTIME_TUNING_BOUNDS.spikeVariationWeightScale.min,
+    Math.min(RUNTIME_TUNING_BOUNDS.spikeVariationWeightScale.max, settings.spikeVariationWeightScale)
+  ),
+  tempoThresholdScale: Math.max(
+    RUNTIME_TUNING_BOUNDS.tempoThresholdScale.min,
+    Math.min(RUNTIME_TUNING_BOUNDS.tempoThresholdScale.max, settings.tempoThresholdScale)
+  ),
+  noiseCeiling: Math.max(
+    RUNTIME_TUNING_BOUNDS.noiseCeiling.min,
+    Math.min(RUNTIME_TUNING_BOUNDS.noiseCeiling.max, settings.noiseCeiling)
+  ),
+});
 
 const composePromptEntriesWithAccent = (basePrompt: string, accent: PromptAccent): PromptEntry[] => {
   // Scope prompt weights are normalized floats (0..1), where 1.0 is full weight.
@@ -108,6 +137,8 @@ export interface UseSoundscapeReturn {
   denoisingProfileId: DenoisingProfileId;
   /** Active reactivity profile */
   reactivityProfileId: ReactivityProfileId;
+  /** Active motion pacing profile */
+  motionPaceProfileId: MotionPaceProfileId;
   /** Prompt accent layer */
   promptAccent: PromptAccent;
   /** Current denoising schedule */
@@ -116,8 +147,16 @@ export interface UseSoundscapeReturn {
   setDenoisingProfile: (profileId: DenoisingProfileId) => void;
   /** Apply reactivity profile */
   setReactivityProfile: (profileId: ReactivityProfileId) => void;
+  /** Apply motion pacing profile */
+  setMotionPaceProfile: (profileId: MotionPaceProfileId) => void;
   /** Set prompt accent layer */
   setPromptAccent: (text: string, weight?: number) => void;
+  /** Runtime mapping controls (live-tunable) */
+  runtimeTuning: RuntimeTuningSettings;
+  /** Update runtime mapping controls */
+  setRuntimeTuning: (settings: Partial<RuntimeTuningSettings>) => void;
+  /** Reset runtime mapping controls to defaults */
+  resetRuntimeTuning: () => void;
   /** Compose prompt entries with optional accent layer */
   composePromptEntries: (basePrompt: string) => PromptEntry[];
 }
@@ -165,6 +204,11 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     useState<DenoisingProfileId>(DEFAULT_DENOISING_PROFILE_ID);
   const [reactivityProfileId, setReactivityProfileId] =
     useState<ReactivityProfileId>(DEFAULT_REACTIVITY_PROFILE_ID);
+  const [motionPaceProfileId, setMotionPaceProfileId] =
+    useState<MotionPaceProfileId>(DEFAULT_MOTION_PACE_PROFILE_ID);
+  const [runtimeTuning, setRuntimeTuningState] = useState<RuntimeTuningSettings>(
+    () => ({ ...DEFAULT_RUNTIME_TUNING_SETTINGS })
+  );
   const [promptAccent, setPromptAccentState] = useState<PromptAccent>({
     text: "",
     weight: 0.25,
@@ -242,12 +286,19 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       }
 
       const basePrompt = `${theme.basePrompt}, ${theme.styleModifiers.join(", ")}, calm atmosphere, gentle flow`;
-      const prompts = composePromptEntriesWithAccent(basePrompt, accent);
+      const targetPrompts = composePromptEntriesWithAccent(basePrompt, accent);
+      const transitionInterpolationMethod =
+        targetPrompts.length === 2 ? "slerp" : "linear";
+      const sourcePrompts =
+        includeTransition && parametersRef.current?.prompts?.length
+          ? parametersRef.current.prompts
+          : targetPrompts;
       const safeDenoisingSteps = [...denoisingSteps];
 
+      // Keep input mode stable from connect-time initialParameters; runtime updates
+      // should not force text mode during video-input sessions.
       const params: Record<string, unknown> = {
-        input_mode: "text",
-        prompts,
+        prompts: sourcePrompts,
         denoising_step_list: safeDenoisingSteps,
         manage_cache: true,
         paused: false,
@@ -255,9 +306,9 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
 
       if (includeTransition) {
         params.transition = {
-          target_prompts: prompts,
+          target_prompts: targetPrompts,
           num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-          temporal_interpolation_method: "slerp",
+          temporal_interpolation_method: transitionInterpolationMethod,
         };
       }
 
@@ -273,15 +324,15 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
       }
 
       const scopeParams: ScopeParameters = {
-        prompts,
+        prompts: targetPrompts,
         denoisingSteps: safeDenoisingSteps,
         noiseScale: 0.5,
         ...(includeTransition
           ? {
             transition: {
-              target_prompts: prompts,
+              target_prompts: targetPrompts,
               num_steps: AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
-              temporal_interpolation_method: "slerp" as const,
+              temporal_interpolation_method: transitionInterpolationMethod,
             },
           }
           : {}),
@@ -333,13 +384,15 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     (engine: MappingEngine) => {
       engine.setDenoisingSteps(activeDenoisingSteps);
       engine.setReactivityProfile(reactivityProfileId);
+      engine.setMotionPaceProfile(motionPaceProfileId);
+      engine.setRuntimeTuning(runtimeTuning);
       engine.setPromptOverlay(
         promptAccent.text.trim()
           ? { text: promptAccent.text.trim(), weight: clampPromptAccentWeight(promptAccent.weight) }
           : null
       );
     },
-    [activeDenoisingSteps, reactivityProfileId, promptAccent]
+    [activeDenoisingSteps, reactivityProfileId, motionPaceProfileId, runtimeTuning, promptAccent]
   );
 
   // Debug logger
@@ -382,6 +435,26 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     mappingEngineRef.current?.setReactivityProfile(profileId);
   }, []);
 
+  const setMotionPaceProfile = useCallback(
+    (profileId: MotionPaceProfileId) => {
+      if (!MOTION_PACE_PROFILES[profileId]) {
+        return;
+      }
+
+      setMotionPaceProfileId(profileId);
+      mappingEngineRef.current?.setMotionPaceProfile(profileId);
+
+      // If ambient mode is active, push a lightweight refresh so prompt pacing constraints
+      // are reflected immediately without waiting for resumed audio analysis.
+      pushScopeParameters({
+        theme: currentThemeRef.current,
+        accent: promptAccentRef.current,
+        denoisingSteps: activeDenoisingStepsRef.current,
+      });
+    },
+    [pushScopeParameters]
+  );
+
   const setPromptAccent = useCallback(
     (text: string, weight = 0.25) => {
       const nextAccent: PromptAccent = {
@@ -401,6 +474,38 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     },
     [pushScopeParameters]
   );
+
+  const setRuntimeTuning = useCallback(
+    (settings: Partial<RuntimeTuningSettings>) => {
+      setRuntimeTuningState((previous) => {
+        const next = clampRuntimeTuningSettings({
+          ...previous,
+          ...settings,
+        });
+
+        mappingEngineRef.current?.setRuntimeTuning(next);
+        pushScopeParameters({
+          theme: currentThemeRef.current,
+          accent: promptAccentRef.current,
+          denoisingSteps: activeDenoisingStepsRef.current,
+        });
+
+        return next;
+      });
+    },
+    [pushScopeParameters]
+  );
+
+  const resetRuntimeTuning = useCallback(() => {
+    const defaults = { ...DEFAULT_RUNTIME_TUNING_SETTINGS };
+    setRuntimeTuningState(defaults);
+    mappingEngineRef.current?.setRuntimeTuning(defaults);
+    pushScopeParameters({
+      theme: currentThemeRef.current,
+      accent: promptAccentRef.current,
+      denoisingSteps: activeDenoisingStepsRef.current,
+    });
+  }, [pushScopeParameters]);
 
   // ============================================================================
   // Theme Management
@@ -793,11 +898,16 @@ export function useSoundscape(options: UseSoundscapeOptions = {}): UseSoundscape
     currentTheme,
     denoisingProfileId,
     reactivityProfileId,
+    motionPaceProfileId,
     promptAccent,
     activeDenoisingSteps,
     setDenoisingProfile,
     setReactivityProfile,
+    setMotionPaceProfile,
     setPromptAccent,
+    runtimeTuning,
+    setRuntimeTuning,
+    resetRuntimeTuning,
     composePromptEntries,
   };
 }

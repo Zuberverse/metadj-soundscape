@@ -12,16 +12,36 @@ export interface PipelineConfig {
   height: number;
 }
 
+export interface ScopeInputSourceConfig {
+  enabled: boolean;
+  source_type: string;
+  source_name: string;
+  reconnect?: boolean;
+}
+
+export interface ScopeOutputSinkConfig {
+  enabled: boolean;
+  name: string;
+}
+
 // Optional pipeline load parameters (Scope API)
 export interface PipelineLoadParams {
   width?: number;
   height?: number;
   seed?: number;
   vace_enabled?: boolean;
+  // Legacy pre-v0.1.4 fields kept for backward compatibility.
   output_ndi?: boolean;
   output_spout?: boolean;
   loras?: Array<{ path: string; scale?: number }>;
   lora_merge_mode?: "permanent_merge" | "runtime_peft";
+  [key: string]: unknown;
+}
+
+export interface ScopeInitialParameters {
+  input_mode?: "text" | "video";
+  input_source?: ScopeInputSourceConfig;
+  output_sinks?: Record<string, ScopeOutputSinkConfig>;
   [key: string]: unknown;
 }
 
@@ -103,7 +123,7 @@ export interface IceServersResponse {
 export interface WebRtcOfferRequest {
   sdp: string;
   type: RTCSdpType;
-  initialParameters?: Record<string, unknown>;
+  initialParameters?: ScopeInitialParameters;
 }
 
 export interface WebRtcOfferResponse {

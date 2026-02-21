@@ -9,6 +9,7 @@ import { useSoundscape } from "./use-soundscape";
 import { PRESET_THEMES } from "./themes";
 import {
   AMBIENT_THEME_CHANGE_TRANSITION_STEPS,
+  DEFAULT_RUNTIME_TUNING_SETTINGS,
   DEFAULT_THEME_ID,
   DENOISING_PROFILES,
 } from "./constants";
@@ -44,6 +45,8 @@ const mockMappingEngineInstance = {
   setTheme: vi.fn(),
   setDenoisingSteps: vi.fn(),
   setReactivityProfile: vi.fn(),
+  setMotionPaceProfile: vi.fn(),
+  setRuntimeTuning: vi.fn(),
   setPromptOverlay: vi.fn(),
   markExternalTransitionActive: vi.fn(),
 };
@@ -259,11 +262,13 @@ describe("useSoundscape", () => {
       expect(sendMock).toHaveBeenCalledTimes(1);
       const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as {
         prompts: Array<{ text: string; weight: number }>;
+        input_mode?: string;
         transition?: { num_steps: number; temporal_interpolation_method: string };
       };
       expect(payload.prompts[0]?.text).toContain(result.current.currentTheme.basePrompt);
+      expect(payload.input_mode).toBeUndefined();
       expect(payload.transition?.num_steps).toBe(AMBIENT_THEME_CHANGE_TRANSITION_STEPS);
-      expect(payload.transition?.temporal_interpolation_method).toBe("slerp");
+      expect(payload.transition?.temporal_interpolation_method).toBe("linear");
       expect(mockMappingEngineInstance.markExternalTransitionActive).toHaveBeenCalledWith(
         AMBIENT_THEME_CHANGE_TRANSITION_STEPS
       );
@@ -291,8 +296,10 @@ describe("useSoundscape", () => {
       expect(sendMock).toHaveBeenCalledTimes(1);
       const payload = JSON.parse(sendMock.mock.calls[0][0] as string) as {
         prompts: Array<{ text: string; weight: number }>;
+        input_mode?: string;
       };
       expect(payload.prompts[0]?.text).toContain(latestTheme?.basePrompt ?? "");
+      expect(payload.input_mode).toBeUndefined();
     });
   });
 
@@ -303,6 +310,11 @@ describe("useSoundscape", () => {
       act(() => {
         result.current.setDenoisingProfile("quality");
         result.current.setReactivityProfile("kinetic");
+        result.current.setRuntimeTuning({
+          beatBoostScale: 1.2,
+          tempoThresholdScale: 1.1,
+          noiseCeiling: 0.85,
+        });
         result.current.setPromptAccent("volumetric fog", 0.4);
       });
 
@@ -312,7 +324,26 @@ describe("useSoundscape", () => {
         text: "volumetric fog",
         weight: 0.4,
       });
+      expect(result.current.runtimeTuning).toMatchObject({
+        beatBoostScale: 1.2,
+        tempoThresholdScale: 1.1,
+        noiseCeiling: 0.85,
+      });
       expect(result.current.activeDenoisingSteps.length).toBeGreaterThan(0);
+    });
+
+    it("resets runtime tuning to defaults", () => {
+      const { result } = renderHook(() => useSoundscape());
+
+      act(() => {
+        result.current.setRuntimeTuning({ beatBoostScale: 1.3, spikeBoostScale: 0.8 });
+      });
+      expect(result.current.runtimeTuning.beatBoostScale).toBe(1.3);
+
+      act(() => {
+        result.current.resetRuntimeTuning();
+      });
+      expect(result.current.runtimeTuning).toEqual(DEFAULT_RUNTIME_TUNING_SETTINGS);
     });
 
     it("composes prompt entries with accent layer", () => {
